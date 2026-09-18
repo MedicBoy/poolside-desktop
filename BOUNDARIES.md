@@ -4,7 +4,7 @@
 | --- | --- |
 | **Purpose** | State, neutrally and in full, what can be executed natively, what needs a hand-off, and what is out of scope |
 | **Pairs with** | `ROADMAP.md` (v1.0) — milestone IDs match |
-| **Baseline** | commit `3907873` (M4: diagnostic timeline + telemetry layers + payload guard — M3 at `67c9931`, M2 at `252fe17`, M1 complete at `7f37aa1`) |
+| **Baseline** | commit `5054e82` (M5: schema-generated settings UI + per-field refusals — M4 at `3907873`, M3 at `67c9931`, M2 at `252fe17`, M1 complete at `7f37aa1`) |
 | **Status** | Reference document |
 
 ---
