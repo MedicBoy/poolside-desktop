@@ -4,7 +4,7 @@
 | --- | --- |
 | **Purpose** | State, neutrally and in full, what can be executed natively, what needs a hand-off, and what is out of scope |
 | **Pairs with** | `ROADMAP.md` (v1.0) — milestone IDs match |
-| **Baseline** | commit `d788e7b` (M1 remainder: identity, geometry, routes — M1 core at `9bf7263`) |
+| **Baseline** | commit `7f37aa1` (M1 complete: FSM and supervision at `9bf7263`, identity/geometry/routes at `d788e7b`, profile management at `7f37aa1`) |
 | **Status** | Reference document |
 
 ---
