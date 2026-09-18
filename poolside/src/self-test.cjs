@@ -77,6 +77,20 @@ async function runSelfTest(ctx) {
   })()`);
   assert.deepEqual(ipControls, { buttons: 2, disabled: true, rejected: true });
 
+  // --- The configuration schema boundary, through the real IPC bridge ---------------------------
+  const configBoundary = await dashboard.webContents.executeJavaScript(`(async () => {
+    const refused = await poolside.saveSettings({ table: 'Atlantis', limit: 10 });
+    const accepted = await poolside.saveSettings({ table: 'Rome', limit: 25, junk: 'drop me' });
+    const stored = (await poolside.get()).value.settings;
+    return { refused: refused.ok, message: String(refused.error || ''), accepted: accepted.ok, table: stored.table, limit: stored.limit, hasJunk: Object.prototype.hasOwnProperty.call(stored, 'junk') };
+  })()`);
+  assert.equal(configBoundary.refused, false, 'an unknown table must be refused before it is stored');
+  assert.match(configBoundary.message, /Preferred table must be one of/);
+  assert.equal(configBoundary.accepted, true, 'a usable setting is still saved');
+  assert.equal(configBoundary.table, 'Rome', 'the validated value is what is stored');
+  assert.equal(configBoundary.limit, 25);
+  assert.equal(configBoundary.hasJunk, false, 'an undeclared key must not reach the workspace document');
+
   // --- Navigation, shop recovery, screen inspection and rejection, against an HTTPS fixture -----
   await runFixtureScenarios(ctx, assert, receiver);
 
@@ -91,7 +105,7 @@ async function runSelfTest(ctx) {
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, and unavailable transfer control.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, unavailable transfer control, and the configuration schema boundary refusing an unknown table before it is stored.'
   );
   app.exit(0);
 }

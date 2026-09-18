@@ -1,8 +1,11 @@
 const { randomUUID } = require('node:crypto');
 const { IDENTITY_FIELDS } = require('./identity-fields.cjs');
 const { normaliseRemembered } = require('./geometry.cjs');
+// The venue list is declared in the schema, so "which tables exist" has one home. This module re-exports it.
+const { TABLES } = require('./config-schema.cjs');
 
-const TABLES = ['Bangkok', 'Rome', 'Seoul'];
+// The route field list, declared here because this module is what validates a stored route. The schema
+// declares the same list; test/config.test.cjs asserts the two agree rather than trusting that they do.
 const PROXY_FIELDS = ['enabled', 'spec', 'bypass'];
 
 function label(value) {

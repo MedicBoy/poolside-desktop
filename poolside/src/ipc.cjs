@@ -7,6 +7,7 @@
 
 const { checkPublicIP } = require('./network.cjs');
 const model = require('./model.cjs');
+const configValidator = require('./config-validator.cjs');
 const { log, snapshot, save, publish, getAccount } = require('./workspace.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const { messageOf } = require('./errors.cjs');
@@ -116,10 +117,16 @@ function createIpc(deps) {
     handle('sessions:close', () => windows.closeAll());
     handle('sessions:arrange', () => windows.arrange());
     handle('settings:save', input => {
+      // Schema-first (ADR-0014): an unusable value is refused here, before it can reach a session, rather than
+      // being coerced on the way in. Everything that *is* usable but was ignored is reported, not dropped in
+      // silence — that silence is what the schema layer exists to end.
+      const checked = configValidator.validateSettings(input);
+      if (!checked.ok) throw new Error(configValidator.describeProblems(checked) || 'Those settings are not usable.');
       // The dashboard's preference form knows about `table` and `limit` only. Merging over the stored
       // settings rather than replacing them means saving those can never silently discard a configured
       // identity or route default — the same class of loss as the D3 payload defect.
-      save({ ...workspace.data, settings: model.settings(/** @type {any} */ ({ ...workspace.data.settings, ...input })) });
+      save({ ...workspace.data, settings: model.settings(/** @type {any} */ ({ ...workspace.data.settings, ...checked.value })) });
+      if (checked.dropped.length) log(`Some settings were ignored: ${configValidator.describeProblems(checked)}.`, 'warning');
       log(PREFS_SAVED);
     });
   }

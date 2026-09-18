@@ -28,6 +28,10 @@ and a pooled OCR worker.
 │  profile-removal.cjs delete a profile: files, directory, record             │
 │  profile-diagnostics.cjs measure a profile, compare with its ceiling        │
 │  profile-sweep.cjs  remove profile storage no account claims                │
+│  config-schema.cjs  what config exists: fields, sections, defaults (pure)   │
+│  config-walk.cjs    walk a declaration, collect every problem (pure)        │
+│  config-validator.cjs the boundary: settings, account, whole profile (pure) │
+│  session-config.cjs the configuration-facing half of a session (pure)       │
 │  hardening.cjs    session, navigation and popup policy                      │
 │  session-fsm.cjs  the session state machine: transitions + deadlines        │
 │  supervision.cjs  crash/stall detection, bounded recovery, health record    │
@@ -70,7 +74,7 @@ and a pooled OCR worker.
 | `main.cjs` is wiring only            | review + the size ceiling    |
 
 The modules in `PURE_MODULES` (`test/architecture.test.cjs`) must not import `electron`, so every one of
-them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`.
+them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `config-schema`, `config-walk`, `config-validator`, `session-config`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`.
 
 Dependency direction is one-way. `state.cjs` is a leaf that others read. Feature modules receive what
 they need as an injected `deps` object, so `windows.cjs` can take `returnToGame` from itself without
@@ -410,7 +414,49 @@ renderer sees one object.
   distinguish _not used yet_ from _deleted_. That is why the persisted `established` flag exists; without
   it the generation counter incremented on every open.
 
-## 11. Known gaps
+## 11. Configuration: one declaration, one boundary
+
+`src/config-schema.cjs` declares what configuration exists — the settings fields, the two overridable sections,
+the identity grammar's seven fields, the route fields, which are required, what each defaults to, and a human
+label for every one (ADR-0008). It **declares only**: every individual rule is delegated to the module that
+already owns it, so each constraint has one implementation.
+
+| Module                 | Question it answers                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `config-schema.cjs`    | what exists: field lists, section nesting, required, defaults, labels                          |
+| `config-walk.cjs`      | how to walk a declaration: collect every problem, and the usable value                         |
+| `config-validator.cjs` | which declarations a session is made of: settings, account overrides, both together            |
+| `session-config.cjs`   | the configuration-facing half of a session: the boundary check, then the footprint application |
+
+Every check returns `{ok, value, errors, dropped}` (ADR-0014):
+
+- **`errors`** — the declared type is wrong: a required field missing, an enum value not in its list, an integer
+  out of range. `ok` is false. These are exactly the cases `model.settings` refuses, and
+  `test/config.test.cjs` asserts that the two agree verdict-for-verdict.
+- **`dropped`** — a grammar owned elsewhere refused the value, or nothing declares the key. `ok` stays true, the
+  field is left out of the validated value, and the problem is reported with its dotted path. Silent dropping was
+  the defect; being told what was ignored is the fix.
+
+The boundary runs at two moments, and neither is decorative:
+
+| Moment                            | Call                     | On an error                                                                                                              | On a drop                                             |
+| --------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Saving settings (`settings:save`) | `validateSettings`       | the write is refused; the message reaches the dashboard                                                                  | stored without it, and the activity feed says so      |
+| Opening a session                 | `validateSessionProfile` | the launch is refused — that state means the stored document is corrupt, since `decode` catches user error on the way in | the session opens, and the feed says what was ignored |
+
+**The drift guard.** `test/config.test.cjs` cross-references the declaration against the structures that are
+actually stored and executed: the field lists against `IDENTITY_FIELDS`, `model.PROXY_FIELDS` and
+`model.TABLES`; a document carrying every declared field through the real `decode` round trip; everything the
+validator emits back through `decode`; and a 21-value corpus asserted verdict-for-verdict against
+`model.settings`. Adding a stored field without declaring it — or declaring one the storage layer drops, which
+is the D3 defect class — fails the suite rather than losing a setting on the next save.
+
+Two things this layer deliberately does **not** do: it has no cross-field rules (the resolvers own those, and a
+second authority eventually disagrees with the first), and it never merges the two sections (precedence belongs to
+`identity.cjs` and `proxy.cjs`; merging silently discarded one of two configured identities until the parity
+suite caught it).
+
+## 12. Known gaps
 
 Carried deliberately, with the milestone that closes each:
 
@@ -423,7 +469,8 @@ Carried deliberately, with the milestone that closes each:
 | Per-session route as infrastructure, honestly reported         | M1 (closed — `proxy.cjs`)              |
 | No profile lifecycle (establish, check, delete)                | M1 (closed — `profile-manager.cjs`)    |
 | No corruption detection on stored session data                 | M1 (closed — `profile-integrity.cjs`)  |
-| Config is hand-validated in `model.cjs`; venues are hardcoded  | M2                                     |
+| Config is hand-validated in `model.cjs`; venues are hardcoded  | M2 (closed — `config-schema.cjs`)      |
+| The roadmap sketch's five-section config is not built          | M2 remainder                           |
 | Corpus is seven positive fixtures and no negatives             | M3                                     |
 | Region ranking unvalidated against the live site               | M3 (needs a live pass)                 |
 | No structured logging, metrics or diagnostics bundle           | M4                                     |

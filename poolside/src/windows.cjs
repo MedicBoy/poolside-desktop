@@ -17,7 +17,8 @@ const { arrangeSessions } = require('./window-arrange.cjs');
 const { createSessionWindow, captureGeometry, describeRestore } = require('./session-window.cjs');
 const { attachSessionEvents } = require('./session-events.cjs');
 const { applyTargetFootprint } = require('./target-identity.cjs');
-const { verifyRoute, reportFootprint, resolveAndApplyFootprint } = require('./footprint.cjs');
+const { verifyRoute, reportFootprint } = require('./footprint.cjs');
+const { createSessionConfig } = require('./session-config.cjs');
 const { messageOf } = require('./errors.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const store = require('./workspace.cjs');
@@ -30,11 +31,13 @@ const GAME_URL = 'https://8ballpool.com/game';
 function createSessionManager(deps) {
   const { log, publish, getAccount, selfTest, profileManager } = deps;
   const profiles = createProfileStore({ log });
-
-  /** The workspace-level defaults that an account's own configuration overrides. */
-  function currentSettings() {
-    return workspace.data && workspace.data.settings ? workspace.data.settings : {};
-  }
+  // The configuration-facing half of a session: the schema boundary and the footprint application.
+  const config = createSessionConfig({
+    log,
+    getSettings: () => workspace.data && workspace.data.settings,
+    sessionFor: id => session.fromPartition(savedSessions.partition(id)),
+    userAgent: () => app.userAgentFallback
+  });
 
   /**
    * Navigate an existing window back to the game without losing its session.
@@ -64,16 +67,6 @@ function createSessionManager(deps) {
   }
 
   /**
-   * Resolve a session's footprint and apply the half Electron requires before a window exists:
-   * `setUserAgent` does not affect existing WebContents, so it cannot wait until after creation.
-   * @param {string} id @param {import('./types.cjs').Account} account
-   */
-  async function applyAccountFootprint(id, account) {
-    const isolated = session.fromPartition(savedSessions.partition(id));
-    return resolveAndApplyFootprint(isolated, account, currentSettings(), { log, baseUserAgent: app.userAgentFallback });
-  }
-
-  /**
    * Open (or focus) one account's window on its own persisted session.
    * @param {string} id
    */
@@ -88,7 +81,7 @@ function createSessionManager(deps) {
     // Establish this account's storage and keep its generation counter current, before anything is
     // created that will write into it.
     profileManager.initialise(account);
-    const footprint = await applyAccountFootprint(id, account);
+    const footprint = await config.applyFootprint(account);
     const isolated = session.fromPartition(savedSessions.partition(id));
     applySessionPolicy(isolated, account.name, log);
 
