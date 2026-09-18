@@ -5,10 +5,14 @@ const { pathToFileURL } = require('node:url');
 const model = require('./model.cjs');
 const { checkPublicIP } = require('./network.cjs');
 const { SHOP_PROBE, ShopReturnGate, officialPage } = require('./shop-recovery.cjs');
-const { GAME_REGION_PROBE } = require('./game-region.cjs');
-let inspecting = false;
+const { GAME_REGION_PROBE, REGION_REASONS } = require('./game-region.cjs');
+const { tileGeometry, rectFor, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT } = require('./layout.cjs');
+const { createScreenReaderPool } = require('./screen-reader-pool.cjs');
 const savedSessions = require('./saved-session.cjs');
 const profileStores = new Map();
+// One warm pool for the whole app instead of a worker per inspection. Size 1 keeps memory
+// predictable; this is the knob to raise in M9 once per-session cost has been measured.
+const screenReaders = createScreenReaderPool({ size: 1, idleMs: 120000 });
 let quitting = false;
 let quitSaved = false;
 const GAME_URL = 'https://8ballpool.com/game';
@@ -69,7 +73,7 @@ async function openAccount(id) {
     isolated.on('will-download', event => { event.preventDefault(); log(`${a.name}: a download was blocked.`, 'warning'); });
     isolated.poolsideConfigured = true;
   }
-  const window = new BrowserWindow({ title: `Poolside · ${a.name}`, width: 1060, height: 800, minWidth: 660, minHeight: 560, autoHideMenuBar: true, backgroundColor: '#14171b', webPreferences: { session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, backgroundThrottling: false } });
+  const window = new BrowserWindow({ title: `Poolside · ${a.name}`, width: 1060, height: 800, minWidth: WINDOW_MIN_WIDTH, minHeight: WINDOW_MIN_HEIGHT, autoHideMenuBar: true, backgroundColor: '#14171b', webPreferences: { session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, backgroundThrottling: false } });
   const group = { window, session: isolated, children: new Set(), status: 'loading' };
   sessions.set(id, group);
   harden(window.webContents, group);
@@ -147,48 +151,60 @@ function attachRecovery(id, group) {
   group.window.once('closed', () => { clearInterval(poll); clearRepaints(); });
 }
 function closeAccount(id) { const g = sessions.get(id); if (g && !g.window.isDestroyed()) g.window.close(); }
+function describeRegionFailure(region) {
+  const reason = REGION_REASONS[region?.reason] || 'Could not isolate the game area.';
+  const seen = (region?.candidates || []).slice(0, 3)
+    .map(c => `${c.kind} ${c.width}×${c.height} (aspect ${c.aspect}, ${Math.round(c.coverage * 100)}% of view)`)
+    .join('; ');
+  return seen ? `${reason} Surfaces seen: ${seen}.` : reason;
+}
 async function inspectGame(id) {
   const account = getAccount(id);
   const group = sessions.get(id);
   if (!group || group.window.isDestroyed()) throw new Error('Open this account window first.');
-  if (inspecting) throw new Error('A screen inspection is already running. Try again shortly.');
+  // Per-account lock. This used to be a single module-level flag, so inspecting one account
+  // blocked every other account (was defect D6).
+  if (group.inspecting) throw new Error('A screen inspection is already running for this account. Try again shortly.');
   const wc = group.window.webContents;
   if (!officialPage(wc.getURL()) || wc.isLoadingMainFrame()) throw new Error('Wait for the official game page to finish loading.');
   const generation = group.observationGeneration;
   const stillCurrent = () => sessions.get(id) === group && !wc.isDestroyed() && group.observationGeneration === generation;
-  inspecting = true;
+  group.inspecting = true;
   group.gameScreen = { state: 'inspecting' };
   publish();
-  let reader;
   let timeout;
   let expired = false;
   try {
     const work = async () => {
       const region = await wc.executeJavaScriptInIsolatedWorld(999, [{ code: GAME_REGION_PROBE }]);
-      if (!region) throw new Error('Could not isolate the game. Bring the full game area into view and dismiss any login dialog.');
+      if (!region || !region.ok) throw new Error(describeRegionFailure(region));
       const zoom = wc.getZoomFactor();
-      const rect = Object.fromEntries(Object.entries(region).map(([key, value]) => [key, Math.floor(value * zoom)]));
+      const rect = { x: Math.floor(region.rect.x * zoom), y: Math.floor(region.rect.y * zoom), width: Math.floor(region.rect.width * zoom), height: Math.floor(region.rect.height * zoom) };
       const picture = await wc.capturePage(rect);
       if (picture.isEmpty()) throw new Error('No game image was available.');
-      const { createScreenReader } = require('./game-screen.cjs');
-      reader = await createScreenReader();
-      if (expired) { await reader.close(); throw new Error('Screen inspection timed out.'); }
-      return reader.inspect(picture.resize({ width: 1200 }).toPNG());
+      const entry = await screenReaders.acquire();
+      try {
+        if (expired) throw new Error('Screen inspection timed out.');
+        const reader = await entry.reader;
+        return await reader.inspect(picture.resize({ width: 1200 }).toPNG());
+      } finally {
+        screenReaders.release(entry);
+      }
     };
     const result = await Promise.race([work(), new Promise((_, reject) => {
       timeout = setTimeout(() => { expired = true; reject(new Error('Screen inspection timed out.')); }, 30000);
     })]);
     if (stillCurrent()) {
       group.gameScreen = result;
-      log(`${account.name}: screen observation: ${result.state}. This is a single image, not a responsiveness check.`);
+      const evidence = result.evidence.length ? result.evidence.join(', ') : 'no matching phrases';
+      log(`${account.name}: screen observation: ${result.state} (confidence ${result.score}) from ${evidence}. This is a single image, not a responsiveness check.`);
     }
   } catch (error) {
     if (stillCurrent()) { group.gameScreen = { state: 'unknown', observedAt: new Date().toISOString() }; publish(); }
     throw error;
   } finally {
     clearTimeout(timeout);
-    if (reader) await reader.close();
-    inspecting = false;
+    group.inspecting = false;
   }
 }
 async function returnToGame(id, focus = true) {
@@ -224,10 +240,14 @@ function arrange() {
   const windows = [...sessions.values()].map(g => g.window).filter(w => !w.isDestroyed());
   if (!windows.length) return;
   const area = screen.getPrimaryDisplay().workArea;
-  const cols = windows.length === 1 ? 1 : 2;
-  const rows = Math.ceil(windows.length / cols);
-  windows.forEach((w, i) => { w.setMinimumSize(420, 360); w.setBounds({ x: area.x + (i % cols) * Math.floor(area.width / cols), y: area.y + Math.floor(i / cols) * Math.floor(area.height / rows), width: Math.floor(area.width / cols), height: Math.floor(area.height / rows) }); });
-  log('Open game windows arranged on the main display.');
+  const geometry = tileGeometry(windows.length, area);
+  windows.forEach((w, i) => {
+    // The minimum tracks the tile rather than being permanently lowered (was defect D7).
+    w.setMinimumSize(geometry.minimumWidth, geometry.minimumHeight);
+    w.setBounds(rectFor(i, geometry, area));
+  });
+  log(`Open game windows arranged on the main display (${geometry.cols}×${geometry.rows}, tile ${geometry.tileWidth}×${geometry.tileHeight}).`);
+  if (geometry.cramped) log(`${windows.length} windows make each tile smaller than ${geometry.tileWidth < 420 ? '420 wide' : '360 tall'}; open fewer for a usable view.`, 'warning');
 }
 function trusted(event) { if (!dashboard || event.sender !== dashboard.webContents || event.senderFrame !== dashboard.webContents.mainFrame || event.senderFrame.url !== UI_URL) throw new Error('Request rejected.'); }
 function handle(name, fn) { ipcMain.handle(name, async (event, input) => { try { trusted(event); const result = await fn(input); return { ok: true, value: result ?? snapshot() }; } catch (error) { return { ok: false, error: error.message }; } }); }
@@ -321,9 +341,34 @@ async function runSelfTest() {
   const inspected = await dashboard.webContents.executeJavaScript(`poolside.inspect(${JSON.stringify(navigationId)})`);
   assert.equal(inspected.ok, true, inspected.error);
   assert.equal(sessions.get(navigationId).gameScreen.state, 'connecting');
+  assert.ok(sessions.get(navigationId).gameScreen.score > 0, 'a recognised screen reports a confidence');
+  assert.ok(sessions.get(navigationId).gameScreen.evidence.includes('connecting'), 'evidence names the matched phrase');
+  // Regression D4: the locator used to require exactly one visible canvas, so a second surface on
+  // the page (the lobby draws its background as a canvas too) made the whole inspection fail.
+  const crowded = await navigationWindow.webContents.executeJavaScript(`(() => {
+    document.body.insertAdjacentHTML('beforeend', '<canvas width="1200" height="675" style="position:absolute;left:700px;top:520px"></canvas>');
+    document.body.insertAdjacentHTML('beforeend', '<canvas width="40" height="30"></canvas>');
+    document.body.insertAdjacentHTML('beforeend', '<canvas width="800" height="450" style="display:none"></canvas>');
+    return document.querySelectorAll('canvas').length;
+  })()`);
+  assert.equal(crowded, 4, 'fixture has one game surface and three distractors');
+  const crowdedInspection = await dashboard.webContents.executeJavaScript(`poolside.inspect(${JSON.stringify(navigationId)})`);
+  assert.equal(crowdedInspection.ok, true, crowdedInspection.error);
+  assert.equal(sessions.get(navigationId).gameScreen.state, 'connecting');
+  console.log('PASS: the locator scores multiple surfaces instead of demanding exactly one (regression: D4).');
+  await navigationWindow.webContents.executeJavaScript(`document.querySelectorAll('canvas').forEach((canvas, index) => { if (index > 0) canvas.remove(); })`);
   await navigationWindow.webContents.executeJavaScript(`document.body.insertAdjacentHTML('beforeend', '<input type="password">')`);
   const blockedInspection = await dashboard.webContents.executeJavaScript(`poolside.inspect(${JSON.stringify(navigationId)})`);
   assert.equal(blockedInspection.ok, false);
+  assert.match(blockedInspection.error, /sign-in field or dialog/, 'the failure names the reason');
+  // Regression D4: an unusable surface must fail with a diagnostic that says what was seen.
+  await navigationWindow.webContents.executeJavaScript(`document.body.innerHTML = '<canvas width="120" height="60"></canvas>'`);
+  const unusable = await dashboard.webContents.executeJavaScript(`poolside.inspect(${JSON.stringify(navigationId)})`);
+  assert.equal(unusable.ok, false);
+  assert.match(unusable.error, /large enough/, 'the failure explains why nothing was usable');
+  assert.match(unusable.error, /120×60/, 'the failure reports the surfaces that were seen');
+  console.log('PASS: unusable or absent game surfaces fail with a diagnostic instead of a bare null.');
+  await navigationWindow.webContents.executeJavaScript(`document.body.innerHTML = '<canvas width="600" height="400"></canvas>'`);
   console.log('PASS: live canvas capture, local OCR through IPC, and exclusion of visible login fields.');
   sessions.delete(navigationId);
   navigationWindow.destroy();
@@ -365,7 +410,8 @@ app.on('before-quit', event => {
   event.preventDefault();
   if (quitting) return;
   quitting = true;
-  Promise.allSettled([...profileStores.values()].map(async store => { await store.ready; await store.flush(); })).then(results => {
+  Promise.allSettled([...profileStores.values()].map(async store => { await store.ready; await store.flush(); })).then(async results => {
+    await screenReaders.closeAll().catch(() => {});
     if (results.some(r => r.status === 'rejected')) dialog.showErrorBox('Session save incomplete', 'Some login state could not be saved. Existing profile files remain on this PC.');
     quitSaved = true;
     app.quit();

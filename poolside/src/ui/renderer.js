@@ -4,7 +4,7 @@ let toastTimer;
 function screenRow(a) {
   const screen = a.gameScreen;
   const names = { inspecting: 'Inspecting game…', unknown: 'Screen not recognized', loading: 'Loading screen', connecting: 'Connecting screen', lobby: 'Lobby visible', 'table-selection': 'Table selector visible', 'lucky-promotion': 'Lucky Shot promotion', 'lucky-shot': 'Lucky Shot' };
-  const label = screen ? `${names[screen.state] || names.unknown}${screen.observedAt ? ' · ' + new Date(screen.observedAt).toLocaleTimeString() : ''}` : 'Game screen not inspected';
+  const label = screen ? `${names[screen.state] || names.unknown}${typeof screen.score === 'number' && screen.score > 0 ? ' · ' + Math.round(screen.score * 100) + '%' : ''}${screen.observedAt ? ' · ' + new Date(screen.observedAt).toLocaleTimeString() : ''}` : 'Game screen not inspected';
   return `<div class="network-row"><span>${escapeHtml(label)}</span><button class="text-button" data-action="inspect" data-id="${a.id}" title="Read a single game image locally; this does not verify responsiveness" ${a.status === 'closed' || a.status === 'loading' || screen?.state === 'inspecting' ? 'disabled' : ''}>Inspect game ↗</button></div>`;
 }
 function networkRow(a) {

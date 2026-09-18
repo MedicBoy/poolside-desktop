@@ -103,23 +103,22 @@ secret duplication is worth removing, not extending. (Low-severity: `account.id`
 into the XML unescaped — it is UUID-validated upstream in `model.decode`/`fileFor`, so it is not
 currently exploitable.)
 
-**D4 — `game-region.cjs` is fragile on the live site.** It requires *exactly one* visible
+**D4 — [RESOLVED]** `game-region.cjs` was fragile on the live site. It requires *exactly one* visible
 canvas/iframe in 1.3–1.8 aspect inside the viewport, else `null`. The lobby renders its background
 as canvas too, so a second candidate is likely → "Could not isolate the game." This is the piece
 the README itself flags as unverified against the real game.
 
-**D5 — recognition rules are brittle by construction.** `lobby` needs `play` AND `special` AND
+**D5 — [RESOLVED]** recognition rules were brittle by construction. `lobby` needs `play` AND `special` AND
 `9 ball` AND (`box` OR `unlock`); `table-selection` needs `entry fee` AND `prize`; the shop probe
 needs three exact English headings. Any copy change, A/B variant, or non-English locale silently
 degrades to `unknown`. Confirmed against fixtures: the lobby fixture only classifies because
 "Box Slot" / "Unlock" happen to be on screen.
 
-**D6 — inspection cost and serialization.** A fresh Tesseract worker (plus language data) is
+**D6 — [RESOLVED]** inspection cost and serialization. A fresh Tesseract worker (plus language data) is
 created and torn down per `Inspect game` click, and `let inspecting` is a *global* flag, so one
 account's inspection blocks every other account.
 
-**D7 — `arrange()` permanently lowers window minimum size** from the intended 660×560 to 420×360
-(`setMinimumSize` is never restored).
+**D7 — [RESOLVED]** `arrange()` permanently lowered window minimum size from the intended 660×560 to 420×360 (`setMinimumSize` was never restored).
 
 **D8 — [RESOLVED] 2.1 GB of duplicated Electron runtimes** across four separate `release*` folders (now a single canonical `release/`).
 
@@ -183,3 +182,41 @@ state, and it's worth keeping it that way.
 
 Final state: `npm test` 8/8 · `npm run test:desktop` 4/4 · `npm run test:persistence` seed+verify ·
 packaged self-test 4/4. **Still open: D3–D7.** P2–P5 of the improvement list are not started.
+
+---
+
+## 9. Resolution log — 2026-09-17 (D4–D7 wave)
+
+Executed ahead of M1/M3 because all four were real defects with no milestone dependency.
+
+- **D7 — closed.** New pure module `src/layout.cjs` (`tileGeometry`, `rectFor`). The per-window
+  minimum now tracks the tile and is clamped so it can never exceed it (a minimum larger than the
+  tile made `setBounds` clamp and rows overlap), and arranging a single window restores the
+  660×560 default. Cramped grids log a warning instead of silently clamping. 7 unit tests,
+  including the explicit 8-windows-then-1-window restore regression.
+- **D4 — closed.** `game-region.cjs` rewritten to score every eligible surface (shape distance to
+  16:9 weighted 0.65, viewport coverage 0.35) and to return `{ok:false, reason, candidates[]}`.
+  `main.cjs` renders that into a message naming the surfaces it saw. Two new self-test assertions
+  cover four canvases (game surface + clipped + tiny + hidden) and an unusable-surface failure
+  that must report `120×60`. **The ranking is still unvalidated against the live site** — that
+  remains an M3 task, now with the diagnostics to settle it in one pass.
+- **D5 — closed.** `classify()` returns `{state, score, evidence, alternatives}`; `classifyText()`
+  is retained as a thin wrapper. Deliberately **behaviour-preserving**: the gates are the original
+  conditions unchanged, with `hints` contributing to evidence but never to the decision. The
+  regression test embeds the legacy regex chain and asserts agreement over a 30+ string corpus —
+  it caught the rewrite dropping `\b` semantics (`"Reconnecting to the server"` would otherwise
+  have matched `connecting`), which is now fixed with boundary-aware matching.
+- **D6 — closed.** New `src/screen-reader-pool.cjs`: warm worker pool with queueing, idle
+  retirement and injectable factory. `main.cjs` holds one pool; the global `inspecting` flag is
+  replaced by a per-account flag, so one account's inspection no longer blocks the others. 7 pool
+  tests, including "five inspections, one worker" and "queued work is served on release".
+
+**Verification after the wave:** `npm test` **33/33** (was 8) · `npm run test:desktop` **6 PASS**
+(was 4) · `npm run test:persistence` seed+verify. New modules: `layout.cjs` 51 lines,
+`screen-reader-pool.cjs` 100, `game-region.cjs` 80, `game-screen.cjs` 113.
+
+**Note:** `main.cjs` is now 419 lines and over the roadmap's 200-line cap. That is expected — the
+self-test grew and `describeRegionFailure` was added — and it is exactly what M0/M1's modularisation
+is for. It should not grow further before `inspection.cjs` and the self-test are extracted.
+
+**Still open: D3** (duplicate cookie stores) plus the whole of M0–M9.
