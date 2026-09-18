@@ -1,0 +1,24 @@
+{
+  "name": "poolside",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local desktop workspace for isolated 8 Ball Pool account sessions",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "test:desktop": "electron . --self-test",
+    "test:persistence": "node test/run-session-restart.cjs",
+    "test:game": "electron . --game-check",
+    "package": "electron-packager . Poolside --platform=win32 --arch=x64 --out=release --asar.unpackDir=node_modules --overwrite --ignore=^/release --ignore=^/test"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.4.1"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "sharp": "0.35.4",
+    "tesseract.js": "7.0.0"
+  }
+}
