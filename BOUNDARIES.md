@@ -4,7 +4,7 @@
 | --- | --- |
 | **Purpose** | State, neutrally and in full, what can be executed natively, what needs a hand-off, and what is out of scope |
 | **Pairs with** | `ROADMAP.md` (v1.0) — milestone IDs match |
-| **Baseline** | commit `252fe17` (M2: schema-first configuration validation — M1 complete at `7f37aa1`, core at `9bf7263`) |
+| **Baseline** | commit `67c9931` (M3 foundations: vision capture pipeline + corpus — M2 at `252fe17`, M1 complete at `7f37aa1`) |
 | **Status** | Reference document |
 
 ---
