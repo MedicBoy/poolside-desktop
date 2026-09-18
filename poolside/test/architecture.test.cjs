@@ -18,7 +18,10 @@ const PURE_MODULES = [
   'game-region.cjs',
   'saved-session.cjs',
   'session-cookies.cjs',
-  'plist.cjs'
+  'plist.cjs',
+  'session-fsm.cjs',
+  'supervision.cjs',
+  'recovery-policy.cjs'
 ];
 
 const ENTRY_POINTS = ['main.cjs', 'self-test.cjs'];

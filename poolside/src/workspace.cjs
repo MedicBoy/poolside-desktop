@@ -31,7 +31,10 @@ function snapshot() {
         const group = sessions.get(a.id);
         return {
           ...a,
-          status: group ? group.status : 'closed',
+          // A session with no group is closed: `closed` is a state, not a stored one.
+          status: group && group.fsm ? group.fsm.state : 'closed',
+          statusReason: group && group.fsm ? group.fsm.reason : null,
+          health: group && group.health ? group.health : null,
           network: group && group.network ? group.network : null,
           gameScreen: group && group.gameScreen ? group.gameScreen : null
         };

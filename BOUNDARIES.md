@@ -29,7 +29,7 @@ usually makes a boundary list useless: one is about *what I will not build*, the
 - **FULL** ESLint + Prettier + `.editorconfig`, `lint` script
 - **FULL** `tsc --checkJs` type checking over `src/` and `test/`, JSDoc typedefs for the `group` object
 - **FULL** `test:all` aggregate script; per-module dependency-boundary and 200-line size checks
-- **FULL** `CONTRIBUTING.md`, `docs/adr/` with ADR-001–010
+- **FULL** `CONTRIBUTING.md`, `docs/adr/` with ADR-001–011
 - **FULL** CI workflow files, and local verification that every command CI runs passes here
 - **HANDOFF** CI actually executing green — needs a GitHub remote to run the runner
 
@@ -130,6 +130,10 @@ one report is usually enough to fix it.
 
 ## 3. SCOPE — out of scope, listed precisely
 
+**Authoritative form: `poolside/docs/adr/0011-operational-scope-boundaries.md`.** This section is the
+statement of record for reading; the ADR is the decision of record, and it is where the rationale and
+the enforcement live. A change to any item below requires a new ADR superseding 0011.
+
 Each item states the technical element and the one-line reason. These are not ranked and not
 negotiable individually; they are one decision.
 
@@ -189,7 +193,11 @@ these sessions as different people so they can be matched together."
 
 ## 4. What this means for the next wave
 
-**Wave 1 = M0 + D3.** Nothing in Wave 1 touches §3.
+**Wave 1 = M0 + D3.** Closed at commit `ffabe68`. Nothing in Wave 1 touches §3.
+
+**Wave 2 = M1 core infrastructure.** Session FSM, crash/stall supervision, scope boundary to ADR-0011.
+Nothing in Wave 2 touches §3 either — the FSM and the supervisor make a session *observable and
+recoverable*, which is the part of M1 that §3 explicitly leaves in scope.
 
 | Order | Task | Status | First deliverable lands in |
 | --- | --- | --- | --- |
@@ -198,7 +206,13 @@ these sessions as different people so they can be matched together."
 | 3 | Extract `inspection.cjs` and the self-test out of `main.cjs` (419 lines, over cap) | FULL | one session |
 | 4 | D3 — single authority for session state | FULL | one session |
 | 5 | CI workflow + module-boundary and size checks | FULL (execution = H3) | one session |
-| 6 | ADR-001–010, `CONTRIBUTING.md`, `architecture.md` | FULL | one session |
+| 6 | ADR-001–011, `CONTRIBUTING.md`, `architecture.md` | FULL | one session |
+| 7 | Session FSM with FSM-owned deadlines and transition history | FULL | one session |
+| 8 | Crash/stall supervision with bounded recovery and a health record | FULL | one session |
+
+M1 remainder after Wave 2: the profile manager (create/delete/quota/corruption/repair), per-session
+identity configuration asserted by a fixture page, remembered window geometry and per-monitor
+awareness, and per-session proxy support as infrastructure.
 
 If **H1** and **H2** arrive during Wave 1, M3 can start in parallel — the vision work is
 FULL except for the corpus itself, so it is not blocked by anything in this document.

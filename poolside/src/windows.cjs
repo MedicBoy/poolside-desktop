@@ -1,13 +1,17 @@
 // Account session windows: creation, arrangement and lifecycle.
 //
 // The "group" shape is documented in src/types.cjs. Session policy lives in hardening.cjs, profile
-// persistence in profiles.cjs, recovery supervision in recovery.cjs.
+// persistence in profiles.cjs, recovery supervision in recovery.cjs. This module owns the *state*
+// of a session: it drives the FSM (session-fsm.cjs) from real Electron events and hands recovery
+// policy to supervision.cjs.
 
 const { BrowserWindow, screen, session } = require('electron');
 const savedSessions = require('./saved-session.cjs');
 const { applySessionPolicy, applyNavigationPolicy } = require('./hardening.cjs');
 const { createProfileStore } = require('./profiles.cjs');
 const { attachRecovery } = require('./recovery.cjs');
+const { createSessionFsm } = require('./session-fsm.cjs');
+const { attachSupervision } = require('./supervision.cjs');
 const { tileGeometry, rectFor, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT } = require('./layout.cjs');
 const { messageOf } = require('./errors.cjs');
 const { sessions } = require('./state.cjs');
@@ -34,13 +38,21 @@ function createSessionManager(deps) {
     const group = sessions.get(id);
     if (!group || group.window.isDestroyed()) throw new Error('Open this account window first.');
     if (group.shopGate) group.shopGate.used = true;
-    group.status = 'loading';
+    group.fsm.send('reload', 'returned to the game');
     log(`${account.name}: returning to the game using the existing session.`);
     if (!selfTest && focus) {
       group.window.show();
       group.window.focus();
     }
     await group.window.loadURL(GAME_URL);
+  }
+
+  /** The recovery mechanism handed to supervision.cjs, which owns the policy and the timing. */
+  function recoverWith(window) {
+    return () => {
+      if (window.isDestroyed()) return;
+      window.webContents.reload();
+    };
   }
 
   /**
@@ -74,11 +86,25 @@ function createSessionManager(deps) {
         backgroundThrottling: false
       }
     });
+    // Every state change republishes; only a degradation is worth an activity-feed entry, or the
+    // feed fills with launch/load/ready chatter.
+    const fsm = createSessionFsm({
+      id: account.name,
+      log,
+      onTransition: ({ to, reason }) => {
+        if (to === 'degraded' && reason) log(`${account.name}: session needs attention (${reason}).`, 'warning');
+        publish();
+      }
+    });
     /** @type {import('./types.cjs').SessionGroup} */
-    const group = { window, session: isolated, children: new Set(), status: 'loading' };
+    const group = { window, session: isolated, children: new Set(), fsm };
     sessions.set(id, group);
+    const supervision = attachSupervision({ label: account.name, group, fsm, log, publish, recover: recoverWith(window) });
+    group.supervision = supervision;
+    group.health = supervision.health;
     applyNavigationPolicy(window.webContents, group);
     attachRecovery(id, group, { log, publish, getAccount, returnToGame });
+    fsm.send('launch');
 
     window.on('page-title-updated', event => {
       event.preventDefault();
@@ -86,16 +112,20 @@ function createSessionManager(deps) {
     });
     window.webContents.on('did-finish-load', () => {
       if (window.isDestroyed()) return;
-      group.status = 'open';
+      fsm.send('loaded');
       log(`${account.name}: page loaded. Sign-in is managed in the game window.`);
     });
-    window.webContents.on('did-fail-load', (_event, code, _description, _url, mainFrame) => {
+    window.webContents.on('did-fail-load', (_event, code, description, _url, mainFrame) => {
       if (!mainFrame || code === -3) return;
-      group.status = 'error';
+      fsm.send('failed', `${description || 'load failed'} (code ${code})`);
       log(`${account.name}: page could not load (code ${code}). Reopen the session to retry.`, 'warning');
     });
+    window.on('close', () => fsm.send('close'));
     window.on('closed', () => {
       for (const child of group.children) if (!child.isDestroyed()) child.destroy();
+      supervision.dispose();
+      fsm.send('closed');
+      fsm.dispose();
       sessions.delete(id);
       log(`${account.name}: window closed.`);
     });
@@ -103,9 +133,11 @@ function createSessionManager(deps) {
     log(`${account.name}: opening a separate saved browser profile.`);
     try {
       await profiles.prepare(account, isolated);
-      if (!window.isDestroyed()) await window.loadURL(GAME_URL);
+      if (window.isDestroyed()) return;
+      fsm.send('load');
+      await window.loadURL(GAME_URL);
     } catch (error) {
-      if (!window.isDestroyed()) group.status = 'error';
+      fsm.send('failed', messageOf(error));
       log(`${account.name}: ${messageOf(error)}`, 'warning');
     }
   }

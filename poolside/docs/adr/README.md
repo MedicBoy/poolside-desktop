@@ -13,10 +13,11 @@ costs us. They are written for whoever reads this codebase in six months — pos
 | [0004](0004-session-storage-authority.md)      | One authority for session storage (defect D3)         | Accepted                |
 | [0005](0005-ipc-contract-versioning.md)        | IPC contract shape and versioning                     | Accepted                |
 | [0006](0006-electron-version-pinning.md)       | Exact Electron version pinning                        | Accepted                |
-| [0007](0007-game-facing-test-strategy.md)      | Game-facing test strategy and the scope boundary      | Accepted                |
+| [0007](0007-game-facing-test-strategy.md)      | Game-facing test strategy                             | Accepted                |
 | [0008](0008-config-schema-tooling.md)          | Config schema tooling                                 | Proposed (decide in M2) |
 | [0009](0009-error-taxonomy.md)                 | Error taxonomy and user-facing messages               | Accepted                |
 | [0010](0010-local-only-telemetry.md)           | Telemetry is local-only by default                    | Accepted                |
+| [0011](0011-operational-scope-boundaries.md)   | Operational scope boundaries                          | Accepted                |
 
 ## Template
 

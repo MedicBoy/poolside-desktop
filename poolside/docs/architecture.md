@@ -2,7 +2,8 @@
 
 Structure of the application: what the modules are, what may depend on what, how a session moves
 through its states, and where each kind of state lives. Decisions behind the structure are in
-[`docs/adr/`](adr/README.md); the scope boundary is in [`../BOUNDARIES.md`](../BOUNDARIES.md).
+[`docs/adr/`](adr/README.md); the scope boundary is [ADR-0011](adr/0011-operational-scope-boundaries.md)
+and [`../BOUNDARIES.md`](../BOUNDARIES.md).
 
 ## 1. Shape of the system
 
@@ -10,7 +11,7 @@ Electron 44, CommonJS main process (ADR-0001), one window per account, a separat
 and a pooled OCR worker.
 
 ```
-┌─────────────────────────────── MAIN (Node) ───────────────────────────────┐
+┌──────────────────────────────── MAIN (Node) ────────────────────────────────┐
 │  main.cjs         composition root — lifecycle, dashboard, wiring          │
 │  ipc.cjs          the dashboard contract + trust guard                     │
 │  workspace.cjs    data layer: log, snapshot, publish, save, load            │
@@ -21,6 +22,9 @@ and a pooled OCR worker.
 │  session-cookies.cjs  which cookies are carried (policy + payload shape)    │
 │  plist.cjs        the plist document format                                 │
 │  hardening.cjs    session, navigation and popup policy                      │
+│  session-fsm.cjs  the session state machine: transitions + deadlines        │
+│  supervision.cjs  crash/stall detection, bounded recovery, health record    │
+│  recovery-policy.cjs  backoff + health shape (pure, no timers of its own)   │
 │  recovery.cjs     shop auto-return + repaint supervision                    │
 │  inspection.cjs   capture → classify orchestration + failure text           │
 │  game-region.cjs  locate the game surface                                   │
@@ -42,13 +46,13 @@ and a pooled OCR worker.
 
 ### Dependency rules
 
-| Rule                                                                                                                      | Enforced by                  |
-| ------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| No module over 200 lines                                                                                                  | `test/architecture.test.cjs` |
-| No cycles in the local require graph                                                                                      | `test/architecture.test.cjs` |
-| `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist` must not import `electron` | `test/architecture.test.cjs` |
-| No unreferenced modules                                                                                                   | `test/architecture.test.cjs` |
-| `main.cjs` is wiring only                                                                                                 | review + the size ceiling    |
+| Rule                                                                                                                                                                       | Enforced by                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| No module over 200 lines                                                                                                                                                   | `test/architecture.test.cjs` |
+| No cycles in the local require graph                                                                                                                                       | `test/architecture.test.cjs` |
+| `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy` must not import `electron` | `test/architecture.test.cjs` |
+| No unreferenced modules                                                                                                                                                    | `test/architecture.test.cjs` |
+| `main.cjs` is wiring only                                                                                                                                                  | review + the size ceiling    |
 
 Dependency direction is one-way. `state.cjs` is a leaf that others read. Feature modules receive what
 they need as an injected `deps` object, so `windows.cjs` can take `returnToGame` from itself without
@@ -58,36 +62,82 @@ creating a cycle back through `recovery.cjs`:
 main ──▶ ipc ──▶ (windows, inspector)
  │      └─▶ workspace ──▶ state
  └──▶ windows ──▶ hardening, profiles, recovery, layout
+        │           └──▶ session-fsm, supervision ──▶ recovery-policy
         └──▶ profiles ──▶ saved-session ──▶ session-cookies, plist
 ```
 
-## 2. Session lifecycle — the state machine as it exists today
+## 2. Session lifecycle — the session FSM
 
-There are two layers. The **session** layer is per account and lives in `sessions` (`state.cjs`). The
-**observation** layer describes what has been seen inside that window.
+There are two layers. The **session** layer is per account and is a formal state machine
+(`session-fsm.cjs`); it lives in `sessions` (`state.cjs`). The **observation** layer describes what has
+been seen inside that window.
 
-### 2.1 Session status
+### 2.1 Session states
 
-`status` is `'loading' | 'open' | 'error'`. **`closed` is not a stored value** — a session is closed
-when it has no entry in `sessions`.
+```
+idle ──launch──▶ launching ──load──▶ loading ──loaded──▶ ready
+                     │                  │                 │
+                     └──── failed ──────┴───── failed ────┘──▶ degraded ──recover──▶ loading
+                                                                    │
+   any live state ──close──▶ closing ──closed──▶ closed ◀───────────┘
+```
 
-| From                         | To            | Trigger                                 | Where         | Also happens                                                                |
-| ---------------------------- | ------------- | --------------------------------------- | ------------- | --------------------------------------------------------------------------- |
-| _(absent)_                   | `loading`     | `openAccount` creates the group         | `windows.cjs` | session policy applied, window created, recovery attached, profile prepared |
-| `loading`                    | `open`        | `did-finish-load`                       | `windows.cjs` | logged; the renderer drops the _Loading game…_ label                        |
-| `loading` / `open`           | `loading`     | `returnToGame`                          | `windows.cjs` | shop gate marked used, then `loadURL`                                       |
-| `loading` / `open`           | `error`       | `did-fail-load` (main frame, code ≠ −3) | `windows.cjs` | logged with the code; user is told to reopen                                |
-| `loading`                    | `error`       | profile prepare or `loadURL` threw      | `windows.cjs` | logged with the reason                                                      |
-| any                          | _(absent)_    | window `closed`                         | `windows.cjs` | child popups destroyed, entry deleted                                       |
-| `loading` / `open` / `error` | _(unchanged)_ | `openAccount` on a live window          | `windows.cjs` | window is shown and focused, no transition                                  |
+`session-fsm.cjs` is the only writer of a session's state. Before M1 three modules assigned a `status`
+string directly, `closed` was implied by absence, and each call site owned its own timeouts.
+
+| From                    | Event     | To          | Raised by                                                                                    |
+| ----------------------- | --------- | ----------- | -------------------------------------------------------------------------------------------- |
+| `idle`                  | `launch`  | `launching` | `openAccount`, before the profile is prepared                                                |
+| `launching`             | `load`    | `loading`   | `openAccount`, after `profiles.prepare`, before `loadURL`                                    |
+| `launching` / `loading` | `loaded`  | `ready`     | `did-finish-load`                                                                            |
+| `degraded`              | `loaded`  | `ready`     | `responsive` after a stall — the session answered on its own                                 |
+| `ready`                 | `reload`  | `loading`   | `returnToGame`                                                                               |
+| `degraded`              | `recover` | `loading`   | supervision, at the moment a recovery attempt starts                                         |
+| any live state          | `failed`  | `degraded`  | `did-fail-load`, a throw from prepare/`loadURL`, `render-process-gone`, stall                |
+| any live state          | `stalled` | `degraded`  | the FSM's own deadline for the current state                                                 |
+| any state               | `close`   | `closing`   | window `close`                                                                               |
+| any state               | `closed`  | `closed`    | window `closed` — reachable from everywhere, because a window can be torn down at any moment |
+
+Rules the machine enforces:
+
+- **Deadlines belong to the machine, not to call sites.** `launching` has 30 s and `loading` 45 s
+  (`DEFAULT_TIMEOUTS`); a state with no deadline arms no timer. On expiry the machine raises `stalled`
+  itself and lands in `degraded` with a reason a user can read, so no caller has to remember a
+  watchdog.
+- **An event that does not apply is refused, not applied.** `send()` returns `false` and logs
+  (`'loaded' does not apply in state 'idle'`) rather than throwing or silently corrupting state. A
+  second `openAccount` on a live window therefore cannot restart the machine.
+- **Every transition is recorded** with its timestamp, event and reason, capped at the last 50
+  (`HISTORY_LIMIT`) — the input M4's timeline view will render, and what makes a support report
+  diagnosable.
+- `closed` is terminal: later events are ignored, and the machine is disposed with the window.
 
 Notes that matter:
 
 - Code `−3` (aborted) is ignored on purpose: it fires for ordinary in-app navigation.
-- `open` means **the page loaded**. It does not mean signed in, and the UI says so
+- `ready` means **the page loaded**. It does not mean signed in, and the UI says so
   (`● Window open · login unverified`).
 - A closed session is not lost work: the partition is persistent (ADR-0003), so reopening restores
   the profile.
+
+### 2.1.1 Crash and stall supervision (M1)
+
+`supervision.cjs` watches the window's `webContents` and owns the policy for failure; the FSM owns the
+state; `windows.cjs` supplies the mechanism (a reload). The policy is a pure module
+(`recovery-policy.cjs`), so it is readable and testable without a clock.
+
+| Event                       | Reaction                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| `render-process-gone`       | `failed` with the renderer's reason and exit code, then a bounded recovery       |
+| `unresponsive`              | degrades only after an 8 s grace period — a busy renderer is not a hung one      |
+| `responsive` while degraded | `loaded` back to `ready`, and the recovery budget is credited back               |
+| `did-finish-load`           | credits the recovery budget: a page that loaded is evidence the session is alive |
+
+Recovery is bounded: base 1.5 s, doubling (1.5 s → 3 s → 6 s → …), capped at 30 s, and **at most 3
+attempts** before the supervisor stops trying and says so. A recovery attempt that itself throws counts
+as a failure. The per-session health record — `failures`, `recoveries`, `attempts`,
+`lastFailureReason`, `nextAttemptAt`, `exhausted` — is published in the snapshot, so a degraded card
+explains itself rather than just changing colour.
 
 ### 2.2 Observation state (per session)
 
@@ -112,16 +162,26 @@ Notes that matter:
 The generation counter is what makes a stale result harmless: a result computed before a navigation
 is discarded rather than written over newer state.
 
-### 2.3 What this is not yet
+### 2.3 What M1 changed, and what remains
 
-The roadmap's M1 replaces this with an explicit FSM: `idle → launching → loading → ready → degraded →
-closing → closed`, with every transition evented and timeouts owned by the machine. Today:
+This section previously listed four gaps: transitions assigned across three modules rather than
+declared, no `degraded` state, timeouts owned by call sites, and no transition history. All four are
+closed — `session-fsm.cjs` declares the transitions, the state set includes `degraded`, deadlines are
+a property of the state (`DEFAULT_TIMEOUTS`), and the most recent 50 transitions are recorded for M4's
+timeline.
 
-- transitions are assignments scattered across three modules, not a transition table;
-- there is no `degraded` state — a session that loads but never renders is reported as `open`;
-- timeouts belong to call sites (`INSPECTION_TIMEOUT_MS` in `inspection.cjs`, 45 s in `runGameCheck`)
-  rather than to the machine;
-- nothing records a transition history, so M4's timeline will need it added.
+One deadline is deliberately still owned by its call site: `INSPECTION_TIMEOUT_MS` in `inspection.cjs`,
+because it bounds a single operation _inside_ a session rather than the session's state.
+
+Remaining in M1: the profile manager (create, delete, quota, corruption, repair), per-session identity
+configuration asserted by a fixture page reading `navigator`/`Intl` back, remembered geometry with
+per-monitor awareness, and per-session proxy support as infrastructure.
+
+The supervisor's failure paths are unit-tested against a fake `webContents`, and the dashboard contract
+for session state is asserted in the packaged self-test. Driving them against a genuinely crashed
+renderer is M6's fault-injection harness; `supervision.cjs` takes both the recovery mechanism and its
+timers as injected dependencies, so that harness can drive it deterministically rather than by killing
+processes.
 
 ## 3. Storage model
 
@@ -215,14 +275,14 @@ instrumentation and a redacted diagnostics bundle with a secret-scanner test.
 
 ## 9. Testing architecture
 
-| Layer         | Suite                                                                                                                        | What it proves                                                |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Pure unit     | `npm test` — `layout`, `model`, `network`, `shop-recovery`, `classification`, `saved-session`, `plist`, `screen-reader-pool` | logic, validation, payload invariants — no Electron needed    |
-| Recognition   | `npm test` — `game-screen.test.cjs`                                                                                          | real OCR against the fixture corpus                           |
-| Architectural | `npm test` — `architecture.test.cjs`                                                                                         | ceilings, cycles, purity, orphans                             |
-| Integration   | `npm run test:desktop`                                                                                                       | real sessions, real IPC, real dashboard, local HTTPS fixtures |
-| Process       | `npm run test:persistence`                                                                                                   | two real processes: state survives restart                    |
-| Packaged      | `release/…/Poolside.exe --self-test`                                                                                         | the shipped build, native deps included                       |
+| Layer         | Suite                                                                                                                                                                         | What it proves                                                                |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Pure unit     | `npm test` — `layout`, `model`, `network`, `shop-recovery`, `classification`, `saved-session`, `plist`, `screen-reader-pool`, `session-fsm`, `supervision`, `recovery-policy` | logic, validation, payload invariants, state transitions — no Electron needed |
+| Recognition   | `npm test` — `game-screen.test.cjs`                                                                                                                                           | real OCR against the fixture corpus                                           |
+| Architectural | `npm test` — `architecture.test.cjs`                                                                                                                                          | ceilings, cycles, purity, orphans                                             |
+| Integration   | `npm run test:desktop`                                                                                                                                                        | real sessions, real IPC, real dashboard, local HTTPS fixtures                 |
+| Process       | `npm run test:persistence`                                                                                                                                                    | two real processes: state survives restart                                    |
+| Packaged      | `release/…/Poolside.exe --self-test`                                                                                                                                          | the shipped build, native deps included                                       |
 
 Game-facing behaviour is proved offline via `protocol.handle` fixtures (ADR-0007). No test uses a
 real account.
@@ -231,17 +291,18 @@ real account.
 
 Carried deliberately, with the milestone that closes each:
 
-| Gap                                                           | Milestone              |
-| ------------------------------------------------------------- | ---------------------- |
-| No explicit session FSM, no transition history                | M1                     |
-| Identity configuration is not exposed per session             | M1                     |
-| Config is hand-validated in `model.cjs`; venues are hardcoded | M2                     |
-| Corpus is seven positive fixtures and no negatives            | M3                     |
-| Region ranking unvalidated against the live site              | M3 (needs a live pass) |
-| No structured logging, metrics or diagnostics bundle          | M4                     |
-| No design system, i18n or accessibility audit                 | M5                     |
-| No fault-injection harness, no soak results                   | M6                     |
-| No threat model, SBOM or secret scanning                      | M7                     |
-| No signing, no updater, no reproducible-build proof           | M8                     |
-| No performance budgets measured on a reference machine        | M9                     |
-| `main.cjs` wiring is reviewed, not enforced                   | M0 remainder           |
+| Gap                                                            | Milestone                       |
+| -------------------------------------------------------------- | ------------------------------- |
+| No transition history or deadline enforcement on session state | M1 (closed — `session-fsm.cjs`) |
+| No crash/stall handlers or per-session health record           | M1 (closed — `supervision.cjs`) |
+| Identity configuration is not exposed per session              | M1                              |
+| Config is hand-validated in `model.cjs`; venues are hardcoded  | M2                              |
+| Corpus is seven positive fixtures and no negatives             | M3                              |
+| Region ranking unvalidated against the live site               | M3 (needs a live pass)          |
+| No structured logging, metrics or diagnostics bundle           | M4                              |
+| No design system, i18n or accessibility audit                  | M5                              |
+| No fault-injection harness, no soak results                    | M6                              |
+| No threat model, SBOM or secret scanning                       | M7                              |
+| No signing, no updater, no reproducible-build proof            | M8                              |
+| No performance budgets measured on a reference machine         | M9                              |
+| `main.cjs` wiring is reviewed, not enforced                    | M0 remainder                    |

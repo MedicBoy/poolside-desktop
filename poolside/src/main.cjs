@@ -16,6 +16,7 @@ const { createScreenReaderPool } = require('./screen-reader-pool.cjs');
 const { log, save, load, publish, getAccount } = require('./workspace.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const { createSessionManager, GAME_URL } = require('./windows.cjs');
+const { createSessionFsm } = require('./session-fsm.cjs');
 const { createInspector } = require('./inspection.cjs');
 const { createIpc } = require('./ipc.cjs');
 const { messageOf } = require('./errors.cjs');
@@ -95,6 +96,7 @@ function selfTestContext() {
     fs,
     checkPublicIP,
     attachRecovery: (id, group) => windows.attachRecoveryFor(id, group),
+    createSessionFsm,
     workspace,
     sessions,
     GAME_URL,

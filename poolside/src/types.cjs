@@ -5,12 +5,26 @@
 // knowable only by reading hundreds of lines of main.cjs.
 
 /**
+ * @typedef {object} Health
+ * @property {number} failures
+ * @property {number} recoveries
+ * @property {number} consecutive
+ * @property {number} attempts
+ * @property {boolean} exhausted
+ * @property {string|null} lastFailureAt
+ * @property {string|null} lastFailureReason
+ * @property {string|null} nextAttemptAt
+ */
+
+/**
  * One account's open browser session and everything observed about it.
  * @typedef {object} SessionGroup
  * @property {import('electron').BrowserWindow} window
  * @property {import('electron').Session} session
  * @property {Set<import('electron').BrowserWindow>} children
- * @property {'loading'|'open'|'error'} status
+ * @property {import('./session-fsm.cjs').SessionFsm} fsm
+ * @property {{dispose: () => void}} [supervision]
+ * @property {Health} [health]
  * @property {{used: boolean, reset: () => void, observe: (url: string, shop: boolean, now: number) => boolean}} [shopGate]
  * @property {number} [observationGeneration]
  * @property {{state: string, score?: number, evidence?: string[], observedAt?: string}|null} [gameScreen]

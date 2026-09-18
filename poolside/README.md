@@ -48,12 +48,12 @@ persistence `profiles.cjs` + `saved-session.cjs`, session/navigation policy `har
 supervision `recovery.cjs`, screen inspection `inspection.cjs`, the dashboard contract `ipc.cjs`, and
 the test suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
 
-| Document               | Covers                                                                  |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `docs/architecture.md` | Modules, dependency rules, the session state machine, storage and IPC   |
-| `docs/adr/`            | Ten architectural decisions, each with its costs and how it is enforced |
-| `CONTRIBUTING.md`      | The gate, branching, commit format, module rules, definition of done    |
-| `../BOUNDARIES.md`     | What is in scope, what needs a hand-off, what is out of scope           |
+| Document               | Covers                                                                     |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `docs/architecture.md` | Modules, dependency rules, the session state machine, storage and IPC      |
+| `docs/adr/`            | Eleven architectural decisions, each with its costs and how it is enforced |
+| `CONTRIBUTING.md`      | The gate, branching, commit format, module rules, definition of done       |
+| `../BOUNDARIES.md`     | What is in scope, what needs a hand-off, what is out of scope              |
 
 | Command                           | What it does                                                                        |
 | --------------------------------- | ----------------------------------------------------------------------------------- |

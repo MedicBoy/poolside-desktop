@@ -1,6 +1,32 @@
 const $ = selector => document.querySelector(selector);
 let state = { accounts: [], events: [], settings: { table: 'Bangkok', limit: 10 } };
 let toastTimer;
+// Session states come from the FSM (src/session-fsm.cjs). `closed` is what a session with no open
+// window reports, so it appears here even though nothing stores it as a state.
+const CLOSED_STATUSES = ['idle', 'closed'];
+const BUSY_STATUSES = ['launching', 'loading', 'closing'];
+const STATUS_LABELS = {
+  idle: '○ Not started',
+  closed: '○ Window closed',
+  launching: '◌ Starting session…',
+  loading: '◌ Loading game…',
+  ready: '● Window open · login unverified',
+  degraded: '△ Needs attention',
+  closing: '○ Closing…'
+};
+const isClosed = account => CLOSED_STATUSES.includes(account.status);
+const isBusy = account => BUSY_STATUSES.includes(account.status);
+const statusLabel = account => STATUS_LABELS[account.status] || STATUS_LABELS.closed;
+// A degraded session explains itself: what went wrong, how many recoveries were tried, and whether
+// the automatic budget is spent (supervision.cjs owns that policy).
+function healthRow(a) {
+  if (a.status !== 'degraded') return '';
+  const health = a.health || {};
+  const attempts = health.attempts ? ` · ${health.attempts} recovery attempt${health.attempts === 1 ? '' : 's'}` : '';
+  const next = health.nextAttemptAt ? ` · retrying ${new Date(health.nextAttemptAt).toLocaleTimeString()}` : '';
+  const spent = health.exhausted ? ' · automatic recovery stopped; reopen the window to retry' : '';
+  return `<div class="network-row"><span>${escapeHtml(`${a.statusReason || 'Session needs attention'}${attempts}${next}${spent}`)}</span></div>`;
+}
 function screenRow(a) {
   const screen = a.gameScreen;
   const names = {
@@ -16,7 +42,7 @@ function screenRow(a) {
   const label = screen
     ? `${names[screen.state] || names.unknown}${typeof screen.score === 'number' && screen.score > 0 ? ' · ' + Math.round(screen.score * 100) + '%' : ''}${screen.observedAt ? ' · ' + new Date(screen.observedAt).toLocaleTimeString() : ''}`
     : 'Game screen not inspected';
-  return `<div class="network-row"><span>${escapeHtml(label)}</span><button class="text-button" data-action="inspect" data-id="${a.id}" title="Read a single game image locally; this does not verify responsiveness" ${a.status === 'closed' || a.status === 'loading' || screen?.state === 'inspecting' ? 'disabled' : ''}>Inspect game ↗</button></div>`;
+  return `<div class="network-row"><span>${escapeHtml(label)}</span><button class="text-button" data-action="inspect" data-id="${a.id}" title="Read a single game image locally; this does not verify responsiveness" ${isClosed(a) || isBusy(a) || screen?.state === 'inspecting' ? 'disabled' : ''}>Inspect game ↗</button></div>`;
 }
 function networkRow(a) {
   const n = a.network;
@@ -28,7 +54,7 @@ function networkRow(a) {
         : n?.status === 'error'
           ? 'IP check failed · retry available'
           : 'Public IPv4 not checked';
-  return `<div class="network-row"><span>${escapeHtml(label)}</span><button class="text-button" data-action="check-ip" data-id="${a.id}" title="Contact api.ipify.org using this account session" ${a.status === 'closed' || n?.status === 'checking' ? 'disabled' : ''}>Check IP ↗</button></div>`;
+  return `<div class="network-row"><span>${escapeHtml(label)}</span><button class="text-button" data-action="check-ip" data-id="${a.id}" title="Contact api.ipify.org using this account session" ${isClosed(a) || n?.status === 'checking' ? 'disabled' : ''}>Check IP ↗</button></div>`;
 }
 const escapeHtml = value =>
   String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -79,7 +105,7 @@ function renderAccounts() {
   $('#accounts').innerHTML = accounts
     .map(
       a =>
-        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${a.status === 'closed' ? 'open' : 'focus'}" data-id="${a.id}">${a.status === 'closed' ? 'Open ↗' : 'Focus ↗'}</button>${a.status !== 'closed' ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${{ closed: '○ Window closed', loading: '◌ Loading game…', open: '● Window open · login unverified', error: '△ Page failed to load' }[a.status]}</span><button class="archive" data-action="archive" data-id="${a.id}" ${a.status !== 'closed' ? 'disabled' : ''}>Archive</button></div>${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Shop opened after sign-in?</span><button class="text-button" data-action="return-game" data-id="${a.id}" ${a.status === 'closed' || a.status === 'loading' ? 'disabled' : ''}>Return to game ↗</button></div></article>`
+        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(statusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Shop opened after sign-in?</span><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></div></article>`
     )
     .join('');
 }
@@ -95,7 +121,7 @@ function eventRows(events) {
 }
 function render(next) {
   state = next;
-  const open = state.accounts.filter(a => a.status !== 'closed').length;
+  const open = state.accounts.filter(a => !isClosed(a)).length;
   $('#account-count').textContent = state.accounts.length;
   $('#open-count').textContent = open;
   $('#nav-count').textContent = state.accounts.length;

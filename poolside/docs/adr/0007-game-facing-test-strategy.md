@@ -1,29 +1,25 @@
-# ADR-0007 — Game-facing test strategy and the scope boundary
+# ADR-0007 — Game-facing test strategy
 
 - **Status:** Accepted
 - **Date:** 2026-09-18
-- **Related:** `test/fixtures/`, `test/classification.test.cjs`, `test/saved-session.test.cjs`, `BOUNDARIES.md`, roadmap M3
+- **Related:** ADR-0011 (operational scope boundaries — split out of this record), `test/fixtures/`,
+  `test/classification.test.cjs`, `test/saved-session.test.cjs`, roadmap M3
 
 ## Context
 
-Two problems sit together, because the same answer addresses both.
+The parts of this application that matter most are the parts touching a live third-party website: does
+the game page load, is the sign-in screen recognised, is the shop detected, is the capture region
+correct. None of that can be verified from a test run. The existing suite handles this with local
+HTTPS protocol fixtures (`protocol.handle`) instead of real accounts, which works well — but it has a
+blind spot: every screen-recognition fixture is a _positive_ example, so a classifier that answers too
+eagerly would still pass.
 
-**Testing.** The parts of this application that matter most are the parts touching a live third-party
-website: does the game page load, is the sign-in screen recognised, is the shop detected, is the
-capture region correct. None of that can be verified from a test run. The existing suite handles this
-with local HTTPS protocol fixtures (`protocol.handle`) instead of real accounts, which works well —
-but it has a blind spot: every screen-recognition fixture is a _positive_ example, so a classifier
-that answers too eagerly would still pass.
-
-**Scope.** The project's stated goal includes automating a game client: synthetic input at the game's
-controls, coordinating several accounts so they are matched together, and spoofing device identity so
-the game treats them as different machines. This is recorded here as an architectural decision
-because it determines what the system is allowed to do, which modules may exist, and what the test
-suite is allowed to simulate.
+The scope boundary that this record originally carried alongside the test strategy is now **ADR-0011**.
+The two were split because they are independent decisions, and because a future reader looking for an
+operational scope decision should not have to look inside a test-strategy record for it. Neither
+decision changed in the split.
 
 ## Decision
-
-**Test strategy.**
 
 1. Offline fixtures are the primary evidence. Any game-facing behaviour must be exercised by a local
    fixture before it is exercised against the live site.
@@ -37,54 +33,40 @@ suite is allowed to simulate.
 5. Synthetic input and synthetic device values are used **only** against fixtures and the
    application's own UI. That is how the current tests work.
 
-**Scope boundary.** The following are out of scope permanently, as a decision rather than a
-limitation:
-
-- Emitting synthetic input at the game's own controls (`sendInputEvent`, CDP input dispatch,
-  OS-level input injection, or JS-injected synthetic pointer/keyboard events).
-- Coordinating multiple accounts — synchronised queueing, shared matchmaking state, any scheduler
-  whose purpose is getting N accounts into one match.
-- Manipulating match outcomes (forfeit automation, win/loss accounting used to route value).
-- Spoofing device identity to defeat the game's own account or device detection (HWID, install date,
-  canvas/WebGL/audio fingerprints).
-- Importing tokens or session cookies from files or any external source.
-- Choosing network routes so a matchmaking pool shrinks or a specific opponent is likelier.
-- Building balance read-back as the feedback loop of a transfer process.
-
-The full statement, including the distinctions that keep it precise (per-session proxy configuration
-is in scope as infrastructure; routing used to steer matching is not), is in `BOUNDARIES.md`.
+Constraint 5 is the test-strategy face of ADR-0011: the boundary applies to what the suite is allowed
+to simulate, not only to what the product is allowed to ship.
 
 ## Consequences
 
 ### Positive
 
 - The suite runs offline, deterministically, with no game account, no credentials and no live site.
-- The boundary is a recorded decision with a stated rationale, so it does not get re-argued at every
-  milestone and no work item is ambiguous.
-- The platform this decision leaves in place — multi-session orchestration, offline vision, session
-  diagnostics — is a coherent product on its own.
+- Rule 2 gives every regression a permanent, reviewable artefact, so a fixed bug cannot quietly
+  return.
+- Rule 3 makes the failure mode that matters most — a confident wrong answer — a test failure rather
+  than a field report.
 
 ### Negative / costs
 
 - Accuracy on the real site cannot be proven in CI; the corpus is a proxy that must be kept honest.
 - Fixtures become stale when the site changes, so someone must re-capture and re-label. That cost is
   real and recurring, and it is why labelling tooling is an M3 deliverable.
-- The boundary means the originally stated version-one goal is not reachable in this repository. Any
-  reader should know that before planning work from the older documents.
+- Mandatory negative fixtures slow down recognition work: a new positive case is not finished until
+  something has been shown to stay negative against it.
 
 ## Alternatives considered
 
-- **No boundary; build what is asked.** Rejected. The excluded items are not hard engineering
-  problems, they are a bot that farms a live multiplayer game's monetised currency against its
-  terms, and they put the user's accounts at ban risk.
-- **Boundary with no test-strategy consequence.** Rejected: leaving negative fixtures optional is
-  exactly how a recogniser becomes confidently wrong.
 - **Test only against the live site.** Rejected: non-deterministic, requires credentials, and would
   make the suite fail whenever the site or the network misbehaves.
+- **Positive fixtures only.** Rejected: it cannot detect over-eager recognition, which is the failure
+  the user actually experiences (a wrong state label is worse than no label).
+- **Boundary with no test-strategy consequence.** Rejected: leaving negative fixtures optional is
+  exactly how a recogniser becomes confidently wrong, and it would let the excluded elements back in
+  through the test suite.
 
 ## Enforcement
 
-Partly test-backed, partly recorded. `test/architecture.test.cjs` keeps modules inside their size
-and dependency rules, and `npm test` runs the offline corpus. The boundary itself is enforced by
-review against `BOUNDARIES.md`; the reason it is not a lint rule is that it constrains intent, not
-syntax — no pattern match reliably distinguishes "capture the screen" from "click the screen".
+Test-backed. `npm test` runs the offline corpus; `test/classification.test.cjs` holds the recogniser to
+the legacy chain's behaviour across a labelled corpus, including the negative cases; and
+`test/architecture.test.cjs` keeps the modules that do this work inside their size and dependency
+rules. A game-facing change with no fixture is rejected in review regardless of test status.
