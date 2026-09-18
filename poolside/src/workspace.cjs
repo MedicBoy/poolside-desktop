@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const model = require('./model.cjs');
+const { messageOf } = require('./errors.cjs');
 const { events, sessions, workspace } = require('./state.cjs');
 
 const MAX_EVENTS = 100;
@@ -35,6 +36,7 @@ function snapshot() {
           status: group && group.fsm ? group.fsm.state : 'closed',
           statusReason: group && group.fsm ? group.fsm.reason : null,
           health: group && group.health ? group.health : null,
+          footprint: group && group.footprint ? group.footprint : null,
           network: group && group.network ? group.network : null,
           gameScreen: group && group.gameScreen ? group.gameScreen : null
         };
@@ -78,6 +80,35 @@ function getAccount(id) {
 }
 
 /**
+ * Where this account's window was last left, or null.
+ * @param {string} id
+ */
+function savedWindowGeometry(id) {
+  const windows = workspace.data.windows;
+  return windows && windows[id] ? windows[id] : null;
+}
+
+/**
+ * Remember where a session window was left.
+ *
+ * Never throws: window geometry is disposable, and losing a rectangle must not be able to fail an
+ * operation the user actually asked for. A read-only workspace or a failed write is logged and
+ * otherwise ignored.
+ * @param {string} id
+ * @param {object} record
+ */
+function rememberWindowGeometry(id, record) {
+  if (workspace.readOnly) return false;
+  try {
+    save({ ...workspace.data, windows: { ...(workspace.data.windows || {}), [id]: record } });
+    return true;
+  } catch (error) {
+    log(`Window position could not be saved: ${messageOf(error)}`, 'warning');
+    return false;
+  }
+}
+
+/**
  * Load the workspace document. A malformed file flips the app to read-only rather than
  * overwriting data the user may still want.
  * @param {string} file
@@ -93,4 +124,14 @@ function load(file) {
   }
 }
 
-module.exports = { log, snapshot, publish, save, getAccount, load, MAX_EVENTS };
+module.exports = {
+  log,
+  snapshot,
+  publish,
+  save,
+  getAccount,
+  load,
+  savedWindowGeometry,
+  rememberWindowGeometry,
+  MAX_EVENTS
+};

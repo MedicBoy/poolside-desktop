@@ -12,8 +12,8 @@ and a pooled OCR worker.
 
 ```
 ┌──────────────────────────────── MAIN (Node) ────────────────────────────────┐
-│  main.cjs         composition root — lifecycle, dashboard, wiring          │
-│  ipc.cjs          the dashboard contract + trust guard                     │
+│  main.cjs         composition root — lifecycle, dashboard, wiring           │
+│  ipc.cjs          the dashboard contract + trust guard                      │
 │  workspace.cjs    data layer: log, snapshot, publish, save, load            │
 │  state.cjs        shared singletons: sessions, sessionStores, events, ws    │
 │  windows.cjs      session windows: open / close / arrange / return          │
@@ -25,6 +25,15 @@ and a pooled OCR worker.
 │  session-fsm.cjs  the session state machine: transitions + deadlines        │
 │  supervision.cjs  crash/stall detection, bounded recovery, health record    │
 │  recovery-policy.cjs  backoff + health shape (pure, no timers of its own)   │
+│  identity.cjs     resolve + describe a session identity (pure)              │
+│  identity-fields.cjsthe identity field grammar (pure)                       │
+│  proxy.cjs        route parsing + the honesty comparison (pure)             │
+│  footprint.cjs    apply identity/route, report what took effect             │
+│  session-window.cjscreate a window at its remembered geometry               │
+│  session-events.cjswindow events -> FSM events                              │
+│  window-arrange.cjstile the open session windows                            │
+│  geometry.cjs     remembered-geometry restore (pure)                        │
+│  display-geometry.cjsrectangle vs monitor layout (pure)                     │
 │  recovery.cjs     shop auto-return + repaint supervision                    │
 │  inspection.cjs   capture → classify orchestration + failure text           │
 │  game-region.cjs  locate the game surface                                   │
@@ -36,7 +45,7 @@ and a pooled OCR worker.
 │  errors.cjs       messageOf — normalises unknown catch values               │
 │  types.cjs        JSDoc typedefs (SessionGroup, ProfileStore, LogFn, …)     │
 │  self-test.cjs    the --self-test suite, loaded only when flagged           │
-└────────────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────────────┘
         ▲ IPC (envelope + trust guard)              ▲ utilityProcess
 ┌───────┴──────────────┐                  ┌─────────┴────────────────┐
 │ DASHBOARD (renderer) │                  │ GAME WINDOWS (sandboxed) │
@@ -46,13 +55,13 @@ and a pooled OCR worker.
 
 ### Dependency rules
 
-| Rule                                                                                                                                                                       | Enforced by                  |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| No module over 200 lines                                                                                                                                                   | `test/architecture.test.cjs` |
-| No cycles in the local require graph                                                                                                                                       | `test/architecture.test.cjs` |
-| `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy` must not import `electron` | `test/architecture.test.cjs` |
-| No unreferenced modules                                                                                                                                                    | `test/architecture.test.cjs` |
-| `main.cjs` is wiring only                                                                                                                                                  | review + the size ceiling    |
+| Rule                                                                                                                                                                                                                                               | Enforced by                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| No module over 200 lines                                                                                                                                                                                                                           | `test/architecture.test.cjs` |
+| No cycles in the local require graph                                                                                                                                                                                                               | `test/architecture.test.cjs` |
+| `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry` must not import `electron` | `test/architecture.test.cjs` |
+| No unreferenced modules                                                                                                                                                                                                                            | `test/architecture.test.cjs` |
+| `main.cjs` is wiring only                                                                                                                                                                                                                          | review + the size ceiling    |
 
 Dependency direction is one-way. `state.cjs` is a leaf that others read. Feature modules receive what
 they need as an injected `deps` object, so `windows.cjs` can take `returnToGame` from itself without
@@ -63,6 +72,9 @@ main ──▶ ipc ──▶ (windows, inspector)
  │      └─▶ workspace ──▶ state
  └──▶ windows ──▶ hardening, profiles, recovery, layout
         │           └──▶ session-fsm, supervision ──▶ recovery-policy
+        │           └──▶ session-window ──▶ geometry ──▶ display-geometry
+        │           └──▶ session-events, window-arrange
+        │           └──▶ footprint ──▶ identity, proxy
         └──▶ profiles ──▶ saved-session ──▶ session-cookies, plist
 ```
 
@@ -173,15 +185,62 @@ timeline.
 One deadline is deliberately still owned by its call site: `INSPECTION_TIMEOUT_MS` in `inspection.cjs`,
 because it bounds a single operation _inside_ a session rather than the session's state.
 
-Remaining in M1: the profile manager (create, delete, quota, corruption, repair), per-session identity
-configuration asserted by a fixture page reading `navigator`/`Intl` back, remembered geometry with
-per-monitor awareness, and per-session proxy support as infrastructure.
+M1's identity, geometry and route work landed in this milestone: per-session identity configuration
+(§2.4), remembered window geometry with per-monitor clamping (§2.5), and per-session proxy support as
+infrastructure (§2.4). What remains of M1 is the profile manager: create, delete, quota reporting,
+corruption detection and repair.
 
 The supervisor's failure paths are unit-tested against a fake `webContents`, and the dashboard contract
 for session state is asserted in the packaged self-test. Driving them against a genuinely crashed
 renderer is M6's fault-injection harness; `supervision.cjs` takes both the recovery mechanism and its
 timers as injected dependencies, so that harness can drive it deterministically rather than by killing
 processes.
+
+### 2.4 The session footprint: identity, route, and what actually took effect
+
+A session's _footprint_ is what it presents to the site: its identity and the route its traffic takes.
+`footprint.cjs` applies it and reports back what happened; `identity.cjs`/`identity-fields.cjs` and
+`proxy.cjs` decide what the configuration means. The decisions are in ADR-0012 and the boundary in
+ADR-0011 §11.5.
+
+| Part                                      | Mechanism                                                       | Where                                      |
+| ----------------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
+| User agent                                | `session.setUserAgent` **and** `Emulation.setUserAgentOverride` | before the window exists; on a live target |
+| Accepted languages                        | `Emulation.setUserAgentOverride` only                           | on a live target                           |
+| Locale, timezone, viewport, colour scheme | CDP `Emulation.*`                                               | on a live target                           |
+| Route                                     | `session.setProxy`                                              | before the window loads                    |
+| Storage ceiling                           | measured against the session's HTTP cache                       | reported, never enforced                   |
+
+Three of those rows are consequences of measurement rather than preference, and ADR-0012 records the
+evidence:
+
+- The session-level `acceptLanguages` argument does not reach the renderer or the wire in Electron
+  44.4.1, so the user agent is also set over CDP. The fixture check prints what each session reads back.
+- A CDP command sent to a window that has never navigated is applied but never answered, so
+  `applyTargetFootprint` gives the target a renderer by loading `about:blank` first — which also places
+  the overrides before the real page's first script runs. Every command is raced against a deadline, so a
+  stuck debugger is reported instead of holding a session open.
+- Electron exposes no per-session storage quota, so `quotaBytes` is a _reported_ ceiling. A page can read
+  Chromium's own allowance with `navigator.storage.estimate()`; that is a measurement too.
+
+Target overrides are **opt-in per account**, because they require an attached debugger and DevTools can
+no longer be opened on that window. A session with no identity configured attaches nothing.
+
+The route is verified rather than assumed: `session.resolveProxy()` reports what Chromium will actually
+use, and `routeMatches` compares it with what was configured. A route that is configured but not in use
+is worse than none, because the user would believe something false about that session's footprint.
+
+### 2.5 Remembered window geometry
+
+Opening a session reads its remembered rectangle (`geometry.cjs`), clamps it to the displays that exist
+_now_, and applies the standard minimum from `layout.cjs`. The arithmetic is pure and unit-tested against
+invented monitor layouts, including the case that matters most — a position on a display that is no
+longer attached, which centres the window on the primary instead of losing it.
+
+Geometry is stored in the workspace document under `windows`, keyed by account id, and is deliberately
+**disposable**: a corrupt entry is dropped by `model.cjs` rather than being allowed to make the workspace
+unreadable, because a damaged rectangle must never cost anyone their account list. It is captured from
+`getNormalBounds` on window close, so a maximized window remembers the size it un-maximizes to.
 
 ## 3. Storage model
 
@@ -192,6 +251,20 @@ Three kinds of state, deliberately separate.
 | Chromium profile   | **every cookie** and all site storage   | `%APPDATA%/Poolside/Partitions/poolside-<id>` (Chromium-managed) | until the profile is deleted                          |
 | Workspace document | account labels, roles, preferences      | `%APPDATA%/Poolside/workspace.json`                              | user data                                             |
 | Carry-over file    | **only** session cookies Chromium drops | `%APPDATA%/Poolside/accounts/<id>.plist`                         | until deleted; survives corruption by being preserved |
+
+The workspace document also carries, in the same file:
+
+| Key                                   | Holds                             | Validation                                           |
+| ------------------------------------- | --------------------------------- | ---------------------------------------------------- |
+| `settings.identity`, `settings.proxy` | defaults every account inherits   | known keys only; semantic validity checked when used |
+| `account.identity`, `account.proxy`   | one account's overrides           | as above                                             |
+| `windows[accountId]`                  | that window's remembered geometry | a damaged entry is dropped, never fatal              |
+
+Identity and route values are validated **when they are used**, not when the file is read, and an invalid
+value is dropped with a warning. That is deliberate: `decode` rejects the whole document on bad account
+data, which is right for an account list and wrong for a mistyped time zone, which must never be able to
+lock a workspace or stop a session opening. The stored file keeps only known keys, so a hand-edited
+workspace cannot smuggle unrelated data into the config.
 
 **Authority (ADR-0004):** the profile owns cookie data. The `.plist` is a narrow exception, not a
 second copy. It holds session cookies only, encrypted with `safeStorage` (DPAPI), and a restore never
@@ -275,14 +348,14 @@ instrumentation and a redacted diagnostics bundle with a secret-scanner test.
 
 ## 9. Testing architecture
 
-| Layer         | Suite                                                                                                                                                                         | What it proves                                                                |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Pure unit     | `npm test` — `layout`, `model`, `network`, `shop-recovery`, `classification`, `saved-session`, `plist`, `screen-reader-pool`, `session-fsm`, `supervision`, `recovery-policy` | logic, validation, payload invariants, state transitions — no Electron needed |
-| Recognition   | `npm test` — `game-screen.test.cjs`                                                                                                                                           | real OCR against the fixture corpus                                           |
-| Architectural | `npm test` — `architecture.test.cjs`                                                                                                                                          | ceilings, cycles, purity, orphans                                             |
-| Integration   | `npm run test:desktop`                                                                                                                                                        | real sessions, real IPC, real dashboard, local HTTPS fixtures                 |
-| Process       | `npm run test:persistence`                                                                                                                                                    | two real processes: state survives restart                                    |
-| Packaged      | `release/…/Poolside.exe --self-test`                                                                                                                                          | the shipped build, native deps included                                       |
+| Layer         | Suite                                                                                                                                                                                                          | What it proves                                                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Pure unit     | `npm test` — `layout`, `model`, `network`, `shop-recovery`, `classification`, `saved-session`, `plist`, `screen-reader-pool`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `proxy`, `geometry` | logic, validation, payload invariants, state transitions, identity grammar, route comparison, restore arithmetic — no Electron needed |
+| Recognition   | `npm test` — `game-screen.test.cjs`                                                                                                                                                                            | real OCR against the fixture corpus                                                                                                   |
+| Architectural | `npm test` — `architecture.test.cjs`                                                                                                                                                                           | ceilings, cycles, purity, orphans                                                                                                     |
+| Integration   | `npm run test:desktop`                                                                                                                                                                                         | real sessions, real IPC, real dashboard, local HTTPS fixtures                                                                         |
+| Process       | `npm run test:persistence`                                                                                                                                                                                     | two real processes: state survives restart                                                                                            |
+| Packaged      | `release/…/Poolside.exe --self-test`                                                                                                                                                                           | the shipped build, native deps included                                                                                               |
 
 Game-facing behaviour is proved offline via `protocol.handle` fixtures (ADR-0007). No test uses a
 real account.
@@ -291,18 +364,20 @@ real account.
 
 Carried deliberately, with the milestone that closes each:
 
-| Gap                                                            | Milestone                       |
-| -------------------------------------------------------------- | ------------------------------- |
-| No transition history or deadline enforcement on session state | M1 (closed — `session-fsm.cjs`) |
-| No crash/stall handlers or per-session health record           | M1 (closed — `supervision.cjs`) |
-| Identity configuration is not exposed per session              | M1                              |
-| Config is hand-validated in `model.cjs`; venues are hardcoded  | M2                              |
-| Corpus is seven positive fixtures and no negatives             | M3                              |
-| Region ranking unvalidated against the live site               | M3 (needs a live pass)          |
-| No structured logging, metrics or diagnostics bundle           | M4                              |
-| No design system, i18n or accessibility audit                  | M5                              |
-| No fault-injection harness, no soak results                    | M6                              |
-| No threat model, SBOM or secret scanning                       | M7                              |
-| No signing, no updater, no reproducible-build proof            | M8                              |
-| No performance budgets measured on a reference machine         | M9                              |
-| `main.cjs` wiring is reviewed, not enforced                    | M0 remainder                    |
+| Gap                                                            | Milestone                              |
+| -------------------------------------------------------------- | -------------------------------------- |
+| No transition history or deadline enforcement on session state | M1 (closed — `session-fsm.cjs`)        |
+| No crash/stall handlers or per-session health record           | M1 (closed — `supervision.cjs`)        |
+| Identity configuration, per session                            | M1 (closed — `identity.cjs`, ADR-0012) |
+| Remembered geometry and per-monitor bounds                     | M1 (closed — `geometry.cjs`)           |
+| Per-session route as infrastructure, honestly reported         | M1 (closed — `proxy.cjs`)              |
+| Config is hand-validated in `model.cjs`; venues are hardcoded  | M2                                     |
+| Corpus is seven positive fixtures and no negatives             | M3                                     |
+| Region ranking unvalidated against the live site               | M3 (needs a live pass)                 |
+| No structured logging, metrics or diagnostics bundle           | M4                                     |
+| No design system, i18n or accessibility audit                  | M5                                     |
+| No fault-injection harness, no soak results                    | M6                                     |
+| No threat model, SBOM or secret scanning                       | M7                                     |
+| No signing, no updater, no reproducible-build proof            | M8                                     |
+| No performance budgets measured on a reference machine         | M9                                     |
+| `main.cjs` wiring is reviewed, not enforced                    | M0 remainder                           |

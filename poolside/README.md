@@ -51,7 +51,7 @@ the test suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
 | Document               | Covers                                                                     |
 | ---------------------- | -------------------------------------------------------------------------- |
 | `docs/architecture.md` | Modules, dependency rules, the session state machine, storage and IPC      |
-| `docs/adr/`            | Eleven architectural decisions, each with its costs and how it is enforced |
+| `docs/adr/`            | Twelve architectural decisions, each with its costs and how it is enforced |
 | `CONTRIBUTING.md`      | The gate, branching, commit format, module rules, definition of done       |
 | `../BOUNDARIES.md`     | What is in scope, what needs a hand-off, what is out of scope              |
 
@@ -65,6 +65,56 @@ the test suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
 `test/architecture.test.cjs` enforces the rules that matter as tests rather than conventions: no
 module over 200 lines, no cycles in the local require graph, no Electron import in the modules that
 claim to be unit testable, and no module left unreferenced.
+
+## Session identity and route
+
+Each session can present its own identity and use its own network route. There is no settings UI for this
+yet (M5), so it is configured in the workspace document at `%APPDATA%/Poolside/workspace.json`. Set a
+default every account inherits under `settings`, and override it per account:
+
+```jsonc
+{
+  "settings": {
+    "table": "Bangkok",
+    "limit": 10,
+    "identity": { "locale": "en-GB", "colorScheme": "light" },
+    "proxy": { "spec": "socks5://10.0.0.9:1080", "bypass": ["example.com"] }
+  },
+  "accounts": [
+    {
+      "id": "…",
+      "name": "Main",
+      "role": "receiver",
+      "identity": { "timezone": "Europe/London", "viewport": { "width": 1280, "height": 720 } },
+      "proxy": { "enabled": true, "spec": "10.0.0.1:8080" }
+    }
+  ]
+}
+```
+
+| Field                      | Accepts                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| `identity.userAgent`       | any string without a line break                                                |
+| `identity.acceptLanguages` | an ordered comma-separated list, e.g. `"en-GB,en"`                             |
+| `identity.locale`          | a language tag, e.g. `"en-GB"`                                                 |
+| `identity.timezone`        | an IANA zone, e.g. `"Europe/London"`                                           |
+| `identity.viewport`        | `{ "width": 320–7680, "height": 240–4320 }`                                    |
+| `identity.colorScheme`     | `"light"` or `"dark"`                                                          |
+| `identity.quotaBytes`      | a positive whole number of bytes — a **reported** ceiling, not an enforced one |
+| `proxy.spec`               | `DIRECT`, `host:port`, or `scheme://host:port` for http/https/socks4/socks5    |
+| `proxy.bypass`             | hostnames, `*.wildcards`, CIDR blocks, or `<local>`                            |
+
+A value that is not usable is dropped with a warning in the activity feed and the session still opens —
+a mistyped time zone cannot lock the workspace or block a session. Identity target overrides require an
+attached debugger, so DevTools cannot be opened on a session that has them, and an account with no
+identity configured attaches nothing. `Check route ↗` on a card asks Chromium which route the session
+will actually use and compares it with what was configured; the two are shown separately, because a route
+that is configured but not in use is worse than no route at all. The reasoning, the measurements behind
+it, and what is deliberately _not_ claimed are in
+[ADR-0012](docs/adr/0012-session-identity-surface.md).
+
+Window positions and sizes are remembered per account under `windows` in the same file and restored on
+the next open, clamped to whichever displays are attached at the time.
 
 ## Session IP checks
 

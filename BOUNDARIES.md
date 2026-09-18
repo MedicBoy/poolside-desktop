@@ -38,9 +38,12 @@ usually makes a boundary list useless: one is about *what I will not build*, the
 - **FULL** Profile manager: create, delete, quota, corruption detection, repair
 - **FULL** **D3** — collapse the two cookie stores to one authority
 - **FULL** Identity config through Electron's supported surface (user agent, locale, timezone, viewport, color scheme, storage quota), asserted by a fixture page reading `navigator`/`Intl` back
+  - Landed as ADR-0012. Two corrections against the original promise, both measured: the accepted-languages half of `session.setUserAgent` does not reach the renderer or the wire in Electron 44.4.1 (the user agent is applied over CDP as well), and Electron exposes **no** per-session storage quota — `quotaBytes` is therefore a reported ceiling, not an enforced one. The claim was weakened rather than faked.
 - **FULL** Window/layout manager: presets, remembered geometry, correct minimum restore (D7 already done), per-monitor awareness
+  - Remembered geometry and per-monitor clamping landed; presets are still M5.
 - **FULL** Crash and stall supervision: `render-process-gone`, unresponsive handling, bounded recovery with backoff, per-session health record
 - **FULL** Per-session proxy as *infrastructure* (see §3 for the distinction)
+  - Landed with applied-and-verified routes: the configured route is compared against what `resolveProxy` says the session will actually use, and a mismatch is reported rather than assumed away.
 
 ### M2 — Configuration system
 - **FULL** Schema-first config layer, generated validation, migrations with per-version fixtures
@@ -209,10 +212,13 @@ recoverable*, which is the part of M1 that §3 explicitly leaves in scope.
 | 6 | ADR-001–011, `CONTRIBUTING.md`, `architecture.md` | FULL | one session |
 | 7 | Session FSM with FSM-owned deadlines and transition history | FULL | one session |
 | 8 | Crash/stall supervision with bounded recovery and a health record | FULL | one session |
+| 9 | Profile identity configuration, asserted by a fixture page reading `navigator`/`Intl` back | FULL | one session |
+| 10 | Remembered window geometry with per-monitor bounds and minimum restoration | FULL | one session |
+| 11 | Per-session route storage, applied and honestly verified (§3.5) | FULL | one session |
 
-M1 remainder after Wave 2: the profile manager (create/delete/quota/corruption/repair), per-session
-identity configuration asserted by a fixture page, remembered window geometry and per-monitor
-awareness, and per-session proxy support as infrastructure.
+**Wave 3 = the rest of M1.** Items 9–11 above closed with the identity, geometry and route work
+(ADR-0012). What remains of M1 is the profile manager: create, delete, quota reporting, corruption
+detection and repair.
 
 If **H1** and **H2** arrive during Wave 1, M3 can start in parallel — the vision work is
 FULL except for the corpus itself, so it is not blocked by anything in this document.

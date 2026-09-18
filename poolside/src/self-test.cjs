@@ -19,8 +19,10 @@
  * @property {typeof import('./model.cjs')} model
  * @property {typeof import('node:fs')} fs
  * @property {Function} checkPublicIP
+ * @property {import('./types.cjs').LogFn} log
  * @property {Function} attachRecovery
  * @property {Function} createSessionFsm
+ * @property {Function} rememberWindowGeometry
  * @property {any} workspace
  * @property {Map<string, any>} sessions
  * @property {string} GAME_URL
@@ -33,7 +35,8 @@
 async function runSelfTest(ctx) {
   const assert = require('node:assert/strict');
   const { runFixtureScenarios } = require('./self-test-fixtures.cjs');
-  const { app, BrowserWindow, session, model, fs, checkPublicIP, workspace } = ctx;
+  const { runFootprintChecks } = require('./self-test-footprint.cjs');
+  const { app, BrowserWindow, session, model, fs, checkPublicIP, log, workspace } = ctx;
   const dashboard = workspace.dashboard;
 
   // --- Cookie isolation between two account sessions -------------------------------------------
@@ -72,6 +75,9 @@ async function runSelfTest(ctx) {
 
   // --- Navigation, shop recovery, screen inspection and rejection, against an HTTPS fixture -----
   await runFixtureScenarios(ctx, assert, receiver);
+
+  // --- Per-session footprint: identity, route, storage ceiling ----------------------------------
+  await runFootprintChecks(ctx, assert, log);
 
   if (process.argv.includes('--live-ip-check')) {
     await checkPublicIP(receiver);

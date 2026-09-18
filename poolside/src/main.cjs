@@ -13,7 +13,7 @@ const model = require('./model.cjs');
 const { checkPublicIP } = require('./network.cjs');
 const { SHOP_PROBE } = require('./shop-recovery.cjs');
 const { createScreenReaderPool } = require('./screen-reader-pool.cjs');
-const { log, save, load, publish, getAccount } = require('./workspace.cjs');
+const { log, save, load, publish, getAccount, rememberWindowGeometry } = require('./workspace.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const { createSessionManager, GAME_URL } = require('./windows.cjs');
 const { createSessionFsm } = require('./session-fsm.cjs');
@@ -95,8 +95,10 @@ function selfTestContext() {
     model,
     fs,
     checkPublicIP,
+    log,
     attachRecovery: (id, group) => windows.attachRecoveryFor(id, group),
     createSessionFsm,
+    rememberWindowGeometry,
     workspace,
     sessions,
     GAME_URL,

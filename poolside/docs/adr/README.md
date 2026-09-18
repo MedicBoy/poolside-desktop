@@ -18,6 +18,7 @@ costs us. They are written for whoever reads this codebase in six months — pos
 | [0009](0009-error-taxonomy.md)                 | Error taxonomy and user-facing messages               | Accepted                |
 | [0010](0010-local-only-telemetry.md)           | Telemetry is local-only by default                    | Accepted                |
 | [0011](0011-operational-scope-boundaries.md)   | Operational scope boundaries                          | Accepted                |
+| [0012](0012-session-identity-surface.md)       | Session identity surface, and the limits of it        | Accepted                |
 
 ## Template
 

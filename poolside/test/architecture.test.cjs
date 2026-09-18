@@ -21,7 +21,12 @@ const PURE_MODULES = [
   'plist.cjs',
   'session-fsm.cjs',
   'supervision.cjs',
-  'recovery-policy.cjs'
+  'recovery-policy.cjs',
+  'identity.cjs',
+  'identity-fields.cjs',
+  'proxy.cjs',
+  'geometry.cjs',
+  'display-geometry.cjs'
 ];
 
 const ENTRY_POINTS = ['main.cjs', 'self-test.cjs'];

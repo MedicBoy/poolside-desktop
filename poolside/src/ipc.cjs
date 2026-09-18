@@ -81,6 +81,7 @@ function createIpc(deps) {
       windows.closeAccount(id);
     });
     handle('account:check-ip', checkAccountIP);
+    handle('account:check-route', id => windows.checkRoute(id));
     handle('account:return-game', id => windows.returnToGame(id));
     handle('account:inspect', id => inspector.inspectGame(id));
     handle('account:archive', id => {
@@ -95,7 +96,10 @@ function createIpc(deps) {
     handle('sessions:close', () => windows.closeAll());
     handle('sessions:arrange', () => windows.arrange());
     handle('settings:save', input => {
-      save({ ...workspace.data, settings: model.settings(input) });
+      // The dashboard's preference form knows about `table` and `limit` only. Merging over the stored
+      // settings rather than replacing them means saving those can never silently discard a configured
+      // identity or route default — the same class of loss as the D3 payload defect.
+      save({ ...workspace.data, settings: model.settings(/** @type {any} */ ({ ...workspace.data.settings, ...input })) });
       log(PREFS_SAVED);
     });
   }

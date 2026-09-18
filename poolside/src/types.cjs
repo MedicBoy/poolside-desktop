@@ -25,11 +25,25 @@
  * @property {import('./session-fsm.cjs').SessionFsm} fsm
  * @property {{dispose: () => void}} [supervision]
  * @property {Health} [health]
+ * @property {Footprint} footprint
  * @property {{used: boolean, reset: () => void, observe: (url: string, shop: boolean, now: number) => boolean}} [shopGate]
  * @property {number} [observationGeneration]
  * @property {{state: string, score?: number, evidence?: string[], observedAt?: string}|null} [gameScreen]
  * @property {{status: 'checking'|'checked'|'error', ip?: string, checkedAt?: string}} [network]
  * @property {boolean} [inspecting]
+ */
+
+/**
+ * The configured footprint of a live session and what was reported back about it. `summary` is computed
+ * in the main process because the dashboard is a sandboxed page with no access to identity.cjs.
+ * @typedef {object} Footprint
+ * @property {object} identity
+ * @property {string} [summary]
+ * @property {any} route
+ * @property {{applied: boolean, mode: string, error?: string}} [routeStatus]
+ * @property {{applied: string[], attached: boolean, error?: string, skipped?: string}|null} [target]
+ * @property {{cacheBytes: number|null, quotaBytes: number|null, overQuota: boolean, at: string}|null} [storage]
+ * @property {{ok: boolean, resolved?: string, route?: any, matches?: boolean, error?: string, at: string}|null} [verified]
  */
 
 /**
@@ -58,6 +72,8 @@
  * @typedef {object} WorkspaceSettings
  * @property {string} table
  * @property {number} limit
+ * @property {object} [identity] identity defaults for every account, overridden per account
+ * @property {object} [proxy] route defaults for every account, overridden per account
  */
 
 /**
@@ -65,6 +81,7 @@
  * @property {number} version
  * @property {Account[]} accounts
  * @property {WorkspaceSettings} settings
+ * @property {Record<string, object>} [windows] remembered window geometry, keyed by account id
  */
 
 /**

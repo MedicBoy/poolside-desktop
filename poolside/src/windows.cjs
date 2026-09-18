@@ -1,25 +1,28 @@
 // Account session windows: creation, arrangement and lifecycle.
 //
 // The "group" shape is documented in src/types.cjs. Session policy lives in hardening.cjs, profile
-// persistence in profiles.cjs, recovery supervision in recovery.cjs. This module owns the *state*
-// of a session: it drives the FSM (session-fsm.cjs) from real Electron events and hands recovery
-// policy to supervision.cjs.
+// persistence in profiles.cjs, recovery supervision in recovery.cjs. This module owns the *state* of a
+// session: it drives the FSM (session-fsm.cjs) from real Electron events, hands recovery policy to
+// supervision.cjs, and applies the configured footprint through footprint.cjs at the two moments
+// Electron allows. Geometry lives in session-window.cjs and geometry.cjs.
 
-const { BrowserWindow, screen, session } = require('electron');
+const { app, session } = require('electron');
 const savedSessions = require('./saved-session.cjs');
 const { applySessionPolicy, applyNavigationPolicy } = require('./hardening.cjs');
 const { createProfileStore } = require('./profiles.cjs');
 const { attachRecovery } = require('./recovery.cjs');
 const { createSessionFsm } = require('./session-fsm.cjs');
 const { attachSupervision } = require('./supervision.cjs');
-const { tileGeometry, rectFor, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT } = require('./layout.cjs');
+const { arrangeSessions } = require('./window-arrange.cjs');
+const { createSessionWindow, captureGeometry, describeRestore } = require('./session-window.cjs');
+const { attachSessionEvents } = require('./session-events.cjs');
+const { applyTargetFootprint } = require('./target-identity.cjs');
+const { verifyRoute, reportFootprint, resolveAndApplyFootprint } = require('./footprint.cjs');
 const { messageOf } = require('./errors.cjs');
-const { sessions } = require('./state.cjs');
+const { sessions, workspace } = require('./state.cjs');
+const store = require('./workspace.cjs');
 
 const GAME_URL = 'https://8ballpool.com/game';
-const GAME_WINDOW_WIDTH = 1060;
-const GAME_WINDOW_HEIGHT = 800;
-const CRAMPED_WIDTH = 420;
 
 /**
  * @param {{log: import('./types.cjs').LogFn, publish: () => void, getAccount: (id: string) => import('./types.cjs').Account, selfTest: boolean}} deps
@@ -27,6 +30,11 @@ const CRAMPED_WIDTH = 420;
 function createSessionManager(deps) {
   const { log, publish, getAccount, selfTest } = deps;
   const profiles = createProfileStore({ log });
+
+  /** The workspace-level defaults that an account's own configuration overrides. */
+  function currentSettings() {
+    return workspace.data && workspace.data.settings ? workspace.data.settings : {};
+  }
 
   /**
    * Navigate an existing window back to the game without losing its session.
@@ -56,6 +64,16 @@ function createSessionManager(deps) {
   }
 
   /**
+   * Resolve a session's footprint and apply the half Electron requires before a window exists:
+   * `setUserAgent` does not affect existing WebContents, so it cannot wait until after creation.
+   * @param {string} id @param {import('./types.cjs').Account} account
+   */
+  async function applyAccountFootprint(id, account) {
+    const isolated = session.fromPartition(savedSessions.partition(id));
+    return resolveAndApplyFootprint(isolated, account, currentSettings(), { log, baseUserAgent: app.userAgentFallback });
+  }
+
+  /**
    * Open (or focus) one account's window on its own persisted session.
    * @param {string} id
    */
@@ -67,25 +85,16 @@ function createSessionManager(deps) {
       existing.window.focus();
       return;
     }
+    const footprint = await applyAccountFootprint(id, account);
     const isolated = session.fromPartition(savedSessions.partition(id));
     applySessionPolicy(isolated, account.name, log);
-    const window = new BrowserWindow({
+
+    const { window, restore } = createSessionWindow({
       title: `Poolside · ${account.name}`,
-      width: GAME_WINDOW_WIDTH,
-      height: GAME_WINDOW_HEIGHT,
-      minWidth: WINDOW_MIN_WIDTH,
-      minHeight: WINDOW_MIN_HEIGHT,
-      autoHideMenuBar: true,
-      backgroundColor: '#14171b',
-      webPreferences: {
-        session: isolated,
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-        webSecurity: true,
-        backgroundThrottling: false
-      }
+      session: isolated,
+      remembered: store.savedWindowGeometry(id)
     });
+    if (restore.adjusted) log(`${account.name}: window ${describeRestore(restore)}.`);
     // Every state change republishes; only a degradation is worth an activity-feed entry, or the
     // feed fills with launch/load/ready chatter.
     const fsm = createSessionFsm({
@@ -97,7 +106,7 @@ function createSessionManager(deps) {
       }
     });
     /** @type {import('./types.cjs').SessionGroup} */
-    const group = { window, session: isolated, children: new Set(), fsm };
+    const group = { window, session: isolated, children: new Set(), fsm, footprint };
     sessions.set(id, group);
     const supervision = attachSupervision({ label: account.name, group, fsm, log, publish, recover: recoverWith(window) });
     group.supervision = supervision;
@@ -106,29 +115,23 @@ function createSessionManager(deps) {
     attachRecovery(id, group, { log, publish, getAccount, returnToGame });
     fsm.send('launch');
 
-    window.on('page-title-updated', event => {
-      event.preventDefault();
-      window.setTitle(`Poolside · ${account.name}`);
+    attachSessionEvents({
+      window,
+      group,
+      fsm,
+      supervision,
+      accountName: account.name,
+      log,
+      beforeClose: () => {
+        // Geometry is captured while the window still exists; by `closed` the bounds are already gone.
+        const geometry = captureGeometry(window);
+        if (geometry) store.rememberWindowGeometry(id, geometry);
+      },
+      onClosed: () => sessions.delete(id)
     });
-    window.webContents.on('did-finish-load', () => {
-      if (window.isDestroyed()) return;
-      fsm.send('loaded');
-      log(`${account.name}: page loaded. Sign-in is managed in the game window.`);
-    });
-    window.webContents.on('did-fail-load', (_event, code, description, _url, mainFrame) => {
-      if (!mainFrame || code === -3) return;
-      fsm.send('failed', `${description || 'load failed'} (code ${code})`);
-      log(`${account.name}: page could not load (code ${code}). Reopen the session to retry.`, 'warning');
-    });
-    window.on('close', () => fsm.send('close'));
-    window.on('closed', () => {
-      for (const child of group.children) if (!child.isDestroyed()) child.destroy();
-      supervision.dispose();
-      fsm.send('closed');
-      fsm.dispose();
-      sessions.delete(id);
-      log(`${account.name}: window closed.`);
-    });
+
+    // Target-level overrides need a live target, so they run here rather than with the rest.
+    group.footprint.target = await applyTargetFootprint(window.webContents, footprint, log);
 
     log(`${account.name}: opening a separate saved browser profile.`);
     try {
@@ -139,7 +142,23 @@ function createSessionManager(deps) {
     } catch (error) {
       fsm.send('failed', messageOf(error));
       log(`${account.name}: ${messageOf(error)}`, 'warning');
+      return;
     }
+    await reportFootprint(group, isolated, { log, accountName: account.name, gameUrl: GAME_URL, publish });
+  }
+
+  /**
+   * Ask Chromium what a live session will really use, on demand.
+   * @param {string} id
+   */
+  async function checkRoute(id) {
+    getAccount(id);
+    const group = sessions.get(id);
+    if (!group || group.window.isDestroyed()) throw new Error('Open this account window first.');
+    const verified = await verifyRoute(group.session, group.footprint.route, GAME_URL);
+    group.footprint.verified = verified;
+    publish();
+    return verified;
   }
 
   /** @param {string} id */
@@ -153,22 +172,7 @@ function createSessionManager(deps) {
   }
 
   function arrange() {
-    const windows = [...sessions.values()].map(group => group.window).filter(window => !window.isDestroyed());
-    if (!windows.length) return;
-    const area = screen.getPrimaryDisplay().workArea;
-    const geometry = tileGeometry(windows.length, area);
-    windows.forEach((window, index) => {
-      // The minimum tracks the tile rather than being permanently lowered (was defect D7).
-      window.setMinimumSize(geometry.minimumWidth, geometry.minimumHeight);
-      window.setBounds(rectFor(index, geometry, area));
-    });
-    log(
-      `Open game windows arranged on the main display (${geometry.cols}×${geometry.rows}, tile ${geometry.tileWidth}×${geometry.tileHeight}).`
-    );
-    if (geometry.cramped) {
-      const limit = geometry.tileWidth < CRAMPED_WIDTH ? `${CRAMPED_WIDTH} wide` : '360 tall';
-      log(`${windows.length} windows make each tile smaller than ${limit}; open fewer for a usable view.`, 'warning');
-    }
+    arrangeSessions({ log, sessions });
   }
 
   return {
@@ -176,6 +180,7 @@ function createSessionManager(deps) {
     closeAccount,
     closeAll,
     returnToGame,
+    checkRoute,
     arrange,
     flushAll: profiles.flushAll,
     hasProfiles: profiles.hasProfiles,

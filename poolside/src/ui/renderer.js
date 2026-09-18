@@ -56,6 +56,21 @@ function networkRow(a) {
           : 'Public IPv4 not checked';
   return `<div class="network-row"><span>${escapeHtml(label)}</span><button class="text-button" data-action="check-ip" data-id="${a.id}" title="Contact api.ipify.org using this account session" ${isClosed(a) || n?.status === 'checking' ? 'disabled' : ''}>Check IP ↗</button></div>`;
 }
+// The configured footprint, and — separately — what Chromium says it will actually use. They are shown
+// apart on purpose: a configured route that is not in use is the failure this row exists to surface.
+function footprintRow(a) {
+  const f = a.footprint;
+  if (!f) return '';
+  const parts = [];
+  if (f.summary && f.summary !== 'not configured') parts.push(f.summary);
+  if (f.route && f.route.configured) parts.push(`route: ${f.route.label}`);
+  if (f.verified && f.verified.ok)
+    parts.push(f.verified.matches ? `using ${f.verified.route.label}` : `NOT using the configured route (${f.verified.route.label})`);
+  if (f.storage && f.storage.cacheBytes !== null)
+    parts.push(`${Math.round(f.storage.cacheBytes / 1024)} KB cached${f.storage.overQuota ? ', over the configured ceiling' : ''}`);
+  const text = parts.length ? parts.join(' · ') : 'default footprint — no identity or route configured';
+  return `<div class="network-row"><span>${escapeHtml(text)}</span><button class="text-button" data-action="check-route" data-id="${a.id}" title="Ask Chromium which route this session will actually use" ${isClosed(a) ? 'disabled' : ''}>Check route ↗</button></div>`;
+}
 const escapeHtml = value =>
   String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function toast(message, error = false) {
@@ -105,7 +120,7 @@ function renderAccounts() {
   $('#accounts').innerHTML = accounts
     .map(
       a =>
-        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(statusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Shop opened after sign-in?</span><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></div></article>`
+        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(statusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${footprintRow(a)}${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Shop opened after sign-in?</span><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></div></article>`
     )
     .join('');
 }
@@ -152,11 +167,13 @@ document.addEventListener('click', async event => {
           ? poolside.returnGame(id)
           : action === 'check-ip'
             ? poolside.checkIP(id)
-            : action === 'archive'
-              ? poolside.archive(id)
-              : action === 'close'
-                ? poolside.close(id)
-                : poolside.open(id)
+            : action === 'check-route'
+              ? poolside.checkRoute(id)
+              : action === 'archive'
+                ? poolside.archive(id)
+                : action === 'close'
+                  ? poolside.close(id)
+                  : poolside.open(id)
     );
   }
 });
