@@ -106,6 +106,17 @@ async function runSelfTest(ctx) {
   }
   assert.equal(/[A-Za-z]:\\\\/.test(diagnostics.serialised), false, 'and neither must a filesystem path');
 
+  // --- The Activity view renders the merged timeline, not just the payload -----------------------
+  // The payload being correct and the panel showing it are different claims; this asserts the second one.
+  const timelinePanel = await dashboard.webContents.executeJavaScript(`(() => {
+    const panel = document.querySelector('#timeline');
+    const rows = panel ? panel.querySelectorAll('.event').length : -1;
+    const marks = panel ? Array.from(panel.querySelectorAll('.event-mark')).map(mark => mark.className) : [];
+    return { exists: Boolean(panel), rows, warningMarks: marks.filter(name => name.includes('warning')).length };
+  })()`);
+  assert.equal(timelinePanel.exists, true, 'the Activity view has a timeline panel');
+  assert.ok(timelinePanel.rows > 0, `the timeline panel rendered rows (saw ${timelinePanel.rows})`);
+
   // --- Navigation, shop recovery, screen inspection and rejection, against an HTTPS fixture -----
   await runFixtureScenarios(ctx, assert, receiver);
 
@@ -120,7 +131,7 @@ async function runSelfTest(ctx) {
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, unavailable transfer control, the configuration schema boundary refusing an unknown table before it is stored, and a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, unavailable transfer control, the configuration schema boundary refusing an unknown table before it is stored, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
   );
   app.exit(0);
 }
