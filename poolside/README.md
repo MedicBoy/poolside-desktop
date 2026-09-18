@@ -23,8 +23,8 @@ Game windows now disable background timer/animation throttling and request sever
 
 - Account names, roles, and preferred table/limit are stored locally in `%APPDATA%/Poolside/workspace.json` (Electron's user-data folder).
 - Every account has its own persistent Chromium profile (`persist:poolside-<account id>`), so cookies and site storage survive closing a window, closing the app, and restarting the PC. Closing a game window keeps that session available until the entire app exits.
-- Alongside the profile, each account gets an encrypted snapshot at `%APPDATA%/Poolside/accounts/<account id>.plist`. The file is a property list whose only payload is a cookie blob encrypted with Electron `safeStorage` (Windows DPAPI); nothing in it is readable without the Windows user account that wrote it. It is rewritten when cookies change and again on exit. Restore only reinstates **session** cookies that are missing after a restart — persistent cookies belong to the Chromium profile and are never restored from an older snapshot.
-- The profile is the authoritative store. If the two ever disagree, the profile wins; the plist exists to carry session cookies that a browser restart would otherwise drop.
+- Alongside the profile, each account gets an encrypted carry-over file at `%APPDATA%/Poolside/accounts/<account id>.plist`. It exists for one reason: Chromium drops **session** cookies when it closes. The file therefore holds _only_ session cookies — never the persistent ones the profile already stores, so no secret is written twice. Its payload is a blob encrypted with Electron `safeStorage` (Windows DPAPI); nothing in it is readable without the Windows user account that wrote it. It is rewritten when cookies change and again on exit.
+- The profile is the authoritative store, and it wins wherever the two could disagree: restore never overwrites a cookie the profile already has, so a value the game has rotated is never replaced by an older snapshot. See `docs/adr/0004-session-storage-authority.md`.
 - Game windows have no Node.js access or Poolside preload bridge. HTTPS login popups use the same isolated session as their account. HTTP/custom-protocol navigation and downloads are blocked in the game windows.
 - The dashboard renderer makes no external requests. Its Check IP action asks the main process to contact ipify through the selected game session. Game windows load the official website, its providers, and its third-party content.
 - Activity shown in the dashboard is in-memory only. It records session actions, not credentials or complete navigation URLs.
@@ -44,9 +44,16 @@ Read `../video-review.md` for the reference evidence and remaining uncertainties
 ## Development
 
 Layout: `main.cjs` is a composition root only. Session windows are `windows.cjs`, saved-session
-persistence `profiles.cjs`, session/navigation policy `hardening.cjs`, recovery supervision
-`recovery.cjs`, screen inspection `inspection.cjs`, the dashboard contract `ipc.cjs`, and the test
-suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
+persistence `profiles.cjs` + `saved-session.cjs`, session/navigation policy `hardening.cjs`, recovery
+supervision `recovery.cjs`, screen inspection `inspection.cjs`, the dashboard contract `ipc.cjs`, and
+the test suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
+
+| Document               | Covers                                                                  |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `docs/architecture.md` | Modules, dependency rules, the session state machine, storage and IPC   |
+| `docs/adr/`            | Ten architectural decisions, each with its costs and how it is enforced |
+| `CONTRIBUTING.md`      | The gate, branching, commit format, module rules, definition of done    |
+| `../BOUNDARIES.md`     | What is in scope, what needs a hand-off, what is out of scope           |
 
 | Command                           | What it does                                                                        |
 | --------------------------------- | ----------------------------------------------------------------------------------- |
@@ -56,8 +63,8 @@ suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
 | `npm run format` / `format:check` | Prettier, with `.editorconfig` for editors                                          |
 
 `test/architecture.test.cjs` enforces the rules that matter as tests rather than conventions: no
-module over 200 lines, no cycles in the local require graph, no Electron import in the modules
-that claim to be unit testable, and no module left unreferenced.
+module over 200 lines, no cycles in the local require graph, no Electron import in the modules that
+claim to be unit testable, and no module left unreferenced.
 
 ## Session IP checks
 

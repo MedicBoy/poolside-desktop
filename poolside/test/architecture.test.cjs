@@ -11,7 +11,15 @@ const SRC = path.join(__dirname, '..', 'src');
 const MAX_MODULE_LINES = 200;
 
 // Modules that claim to be testable without an Electron runtime. They must not require electron.
-const PURE_MODULES = ['layout.cjs', 'model.cjs', 'shop-recovery.cjs', 'game-region.cjs'];
+const PURE_MODULES = [
+  'layout.cjs',
+  'model.cjs',
+  'shop-recovery.cjs',
+  'game-region.cjs',
+  'saved-session.cjs',
+  'session-cookies.cjs',
+  'plist.cjs'
+];
 
 const ENTRY_POINTS = ['main.cjs', 'self-test.cjs'];
 

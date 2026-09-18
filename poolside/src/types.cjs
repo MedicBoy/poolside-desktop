@@ -23,6 +23,15 @@
  */
 
 /**
+ * One account's saved-session queue. Outlives its window so a debounced save still flushes on quit.
+ * @typedef {object} ProfileStore
+ * @property {Promise<unknown>} queue
+ * @property {NodeJS.Timeout|undefined} timer
+ * @property {Promise<void>} ready
+ * @property {() => Promise<unknown>} flush
+ */
+
+/**
  * @typedef {object} Account
  * @property {string} id
  * @property {string} name

@@ -13,9 +13,16 @@ app
     // iteration. Keep one window alive for the duration of the run.
     const keepAlive = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
     await keepAlive.loadURL('data:text/html,<title>keep-alive</title>');
+    /** @type {import('../src/types.cjs').Account[]} */
     const accounts = [
-      { id: '11111111-1111-4111-8111-111111111111', name: 'A & <test>', role: 'receiver' },
-      { id: '22222222-2222-4222-8222-222222222222', name: 'B', role: 'sender' }
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'A & <test>',
+        role: 'receiver',
+        archived: false,
+        createdAt: new Date(0).toISOString()
+      },
+      { id: '22222222-2222-4222-8222-222222222222', name: 'B', role: 'sender', archived: false, createdAt: new Date(0).toISOString() }
     ];
     for (let i = 0; i < accounts.length; i++) {
       const account = accounts[i];
@@ -43,8 +50,23 @@ app
         await saved.saveSession(root, account, store, safeStorage);
         const xml = fs.readFileSync(saved.fileFor(root, account.id), 'utf8');
         assert.ok(xml.includes('<plist version="1.0">'));
+        assert.ok(xml.includes('<key>Scope</key><string>session-cookies</string>'));
         assert.ok(!xml.includes(`test-session-${i}`));
         assert.ok(!xml.includes(`test-persistent-${i}`));
+        // D3 / ADR-004: the file carries only what Chromium will not keep. The persistent cookie must
+        // exist exactly once on disk — in the profile — and never be duplicated into this file.
+        const match = xml.match(/<data>([\s\S]*?)<\/data>/);
+        assert.ok(match, 'the plist carries an encrypted payload');
+        const payload = JSON.parse(safeStorage.decryptString(Buffer.from(match[1], 'base64')));
+        assert.equal(payload.version, saved.PAYLOAD_VERSION);
+        assert.equal(payload.scope, saved.SCOPE);
+        assert.equal(payload.accountId, account.id);
+        assert.deepEqual(
+          payload.cookies.map(c => c.name),
+          ['session'],
+          'only the session cookie is carried over'
+        );
+        assert.ok(!JSON.stringify(payload).includes(`test-persistent-${i}`), 'persistent cookie must not be duplicated into the plist');
       } else {
         await saved.restoreSession(root, account, store, safeStorage);
         assert.equal((await store.cookies.get({ name: 'session' }))[0].value, `test-session-${i}`);
