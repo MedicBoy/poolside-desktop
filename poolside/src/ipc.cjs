@@ -7,7 +7,7 @@
 
 const { checkPublicIP } = require('./network.cjs');
 const model = require('./model.cjs');
-const configValidator = require('./config-validator.cjs');
+const settingsController = require('./settings-ui-controller.cjs');
 const timelineTransfer = require('./timeline-transfer.cjs');
 const telemetryRedaction = require('./telemetry-redaction.cjs');
 const { log, snapshot, save, publish, getAccount } = require('./workspace.cjs');
@@ -140,18 +140,28 @@ function createIpc(deps) {
     });
     handle('sessions:close', () => windows.closeAll());
     handle('sessions:arrange', () => windows.arrange());
+    handle('settings:form', () => {
+      // The form is generated from the schema, so the renderer never holds a hardcoded field list that can
+      // disagree with what the app can execute (ADR-0017).
+      return settingsController.form('settings', workspace.data.settings);
+    });
     handle('settings:save', input => {
-      // Schema-first (ADR-0014): an unusable value is refused here, before it can reach a session, rather than
-      // being coerced on the way in. Everything that *is* usable but was ignored is reported, not dropped in
-      // silence — that silence is what the schema layer exists to end.
-      const checked = configValidator.validateSettings(input);
-      if (!checked.ok) throw new Error(configValidator.describeProblems(checked) || 'Those settings are not usable.');
-      // The dashboard's preference form knows about `table` and `limit` only. Merging over the stored
-      // settings rather than replacing them means saving those can never silently discard a configured
-      // identity or route default — the same class of loss as the D3 payload defect.
-      save({ ...workspace.data, settings: model.settings(/** @type {any} */ ({ ...workspace.data.settings, ...checked.value })) });
-      if (checked.dropped.length) log(`Some settings were ignored: ${configValidator.describeProblems(checked)}.`, 'warning');
+      // One pipeline for a form edit: the controller types the submitted strings, merges them over the stored
+      // settings, and validates the whole candidate. Schema-first (ADR-0014) still holds — an unusable value is
+      // refused before it can reach a session rather than coerced on the way in — with one difference that only
+      // applies to a form: a grammar refusal of a field the user just edited is an *error* the form shows,
+      // because "saved, but your value was ignored" is not true enough to ship.
+      const outcome = settingsController.route({ .../** @type {any} */ (input), section: 'settings', current: workspace.data.settings });
+      // A refused edit is **data, not an exception**: the call succeeded in judging it, and the form needs to
+      // know *which* control is wrong rather than one sentence about the whole panel. A thrown error here would
+      // collapse that to a string on the way through the IPC envelope.
+      if (!outcome.ok) return { saved: false, errors: outcome.errors, ignored: outcome.ignored, form: outcome.form };
+      save({ ...workspace.data, settings: model.settings(/** @type {any} */ (outcome.value)) });
+      // A field the user did not touch may still be unusable in the stored document; that stays a drop and is
+      // reported, not silently discarded.
+      if (outcome.ignored.length) log(`Some settings were ignored: ${settingsController.describe(outcome)}.`, 'warning');
       log(PREFS_SAVED);
+      return { saved: true, errors: [], ignored: outcome.ignored, form: outcome.form };
     });
   }
 

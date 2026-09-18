@@ -56,6 +56,9 @@ and a pooled OCR worker.
 │  timeline-transfer.cjs redaction: what may leave the machine (pure)         │
 │  dashboard-telemetry.cjs collate metrics into layers (pure)                 │
 │  telemetry-redaction.cjs the export projection and secret scanner (pure)    │
+│  settings-form-mapper.cjs  the form, generated from the schema (pure)       │
+│  settings-form-values.cjs  submitted strings into typed values (pure)       │
+│  settings-ui-controller.cjs one edit in, a safe state or a refusal out      │
 │  game-screen.cjs  Tesseract + Sharp pipeline, classify()                    │
 │  screen-reader-pool.cjs  warm OCR workers, queue, idle retirement           │
 │  network.cjs      ipify check through a given session                       │
@@ -82,7 +85,7 @@ and a pooled OCR worker.
 | `main.cjs` is wiring only            | review + the size ceiling    |
 
 The modules in `PURE_MODULES` (`test/architecture.test.cjs`) must not import `electron`, so every one of
-them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `config-schema`, `config-walk`, `config-validator`, `session-config`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`, `vision-frame`, `vision-grid`, `vision-pipeline`, `timeline-engine`, `timeline-query`, `timeline-transfer`, `dashboard-telemetry`, `telemetry-redaction`.
+them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `config-schema`, `config-walk`, `config-validator`, `session-config`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`, `vision-frame`, `vision-grid`, `vision-pipeline`, `timeline-engine`, `timeline-query`, `timeline-transfer`, `dashboard-telemetry`, `telemetry-redaction`, `settings-form-mapper`, `settings-form-values`, `settings-ui-controller`.
 
 Dependency direction is one-way. `state.cjs` is a leaf that others read. Feature modules receive what
 they need as an injected `deps` object, so `windows.cjs` can take `returnToGame` from itself without
@@ -472,6 +475,35 @@ second authority eventually disagrees with the first), and it never merges the t
 `identity.cjs` and `proxy.cjs`; merging silently discarded one of two configured identities until the parity
 suite caught it).
 
+### 11.1 The form is generated from the declaration (ADR-0017)
+
+The settings panel holds no field list. `settings-form-mapper.cjs` builds controls from the declarations —
+label, bounds, option list and required flag all from the schema — so a field added to `config-schema.cjs`
+appears in the form without an edit to any UI file, and a field the app cannot execute cannot be edited into
+existence.
+
+The edit pipeline is four questions, one module each:
+
+| Question                                                           | Module                       |
+| ------------------------------------------------------------------ | ---------------------------- |
+| What does the form show?                                           | `settings-form-mapper.cjs`   |
+| What is a submitted string?                                        | `settings-form-values.cjs`   |
+| Is that value acceptable?                                          | `config-validator.cjs`       |
+| What does the whole document become, and what does a refusal mean? | `settings-ui-controller.cjs` |
+
+The binding contract is the **dotted path**, used three ways: a control carries it as `data-path` and gets a
+derived DOM id, a page sends its values keyed by it, and an error comes back keyed by it so it can mark the
+control that caused it. A blank control means _untouched_, never _cleared_; removing a value is an explicit
+`clear` list. A route spec carrying a credential is presented masked, with no value sent to the page at all.
+
+**Where a form diverges from ADR-0014.** The validator reports a grammar refusal as `dropped` so that a
+corrupt document cannot lock anybody out. In a form, a drop on a field the user just edited is promoted to an
+error and the save is refused; a drop on a field they did not touch keeps its ADR-0014 meaning. The difference
+is intent: nobody typed the value on the corruption boundary, and "saved, but your value was ignored" is not
+true enough for a screen somebody is looking at. A refused edit is returned as **data**
+(`{saved: false, errors: [{path, message}], …}`), not as a thrown error, because the IPC envelope collapses a
+failure to a single string and a form needs a path per problem.
+
 ## 12. Vision: one capture, four coordinate systems
 
 Four coordinate systems meet in a single capture, and `vision-frame.cjs` owns every conversion between them
@@ -525,7 +557,10 @@ Carried deliberately, with the milestone that closes each:
 | No rule for what a diagnostics payload may contain                    | M4 (closed — `telemetry-redaction.cjs`: redaction + a refusing scan) |
 | No durable logs, no bundle file, no frame timings, no crash file      | M4 remainder                                                         |
 | The (future) bundle is validated against no scripted failure scenario | M4 remainder                                                         |
-| No design system, i18n or accessibility audit                         | M5                                                                   |
+| No settings UI bound to the configuration schema                      | M5 (closed — `settings-form-mapper.cjs`, ADR-0017)                   |
+| No per-session detail view; account overrides have no UI              | M5 remainder                                                         |
+| No design tokens, component kit, i18n or accessibility audit          | M5 remainder                                                         |
+| No command palette or hotkeys                                         | M5 remainder                                                         |
 | No fault-injection harness, no soak results                           | M6                                                                   |
 | No threat model, SBOM or secret scanning                              | M7                                                                   |
 | No signing, no updater, no reproducible-build proof                   | M8                                                                   |

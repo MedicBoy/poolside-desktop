@@ -164,6 +164,72 @@ function timelineRows(entries) {
       .join('') || '<p class="muted">Session transitions and activity will be merged here as sessions run.</p>'
   );
 }
+// --- The settings form, drawn from the schema (ADR-0017) ---------------------------------------
+// The renderer holds no field list. It draws whatever descriptors the main process sends and sends back only the
+// controls' values, keyed by the same dotted path an error comes back with — so a field added to
+// `config-schema.cjs` appears here without an edit to this file, and an error marks the control that caused it.
+let settingsForm = null;
+
+/** One control, in whatever shape its descriptor asked for. */
+function settingsControl(field, message) {
+  const id = escapeHtml(field.id);
+  const described = `data-path="${escapeHtml(field.path)}" id="${id}" name="${id}"`;
+  const invalid = message ? ` aria-invalid="true" aria-describedby="${id}-error"` : '';
+  const value = field.value === undefined || field.value === null ? '' : String(field.value);
+  if (field.control === 'select') {
+    const options = (field.options || [])
+      .map(
+        option => `<option value="${escapeHtml(option.value)}"${option.selected ? ' selected' : ''}>${escapeHtml(option.value)}</option>`
+      )
+      .join('');
+    return `<select ${described}${invalid}>${options}</select>`;
+  }
+  if (field.control === 'checkbox') {
+    return `<input type="checkbox" ${described}${invalid}${field.value === true ? ' checked' : ''} />`;
+  }
+  if (field.control === 'number') {
+    const min = field.min === null || field.min === undefined ? '' : ` min="${field.min}"`;
+    const max = field.max === null || field.max === undefined ? '' : ` max="${field.max}"`;
+    return `<input type="number" ${described}${invalid} step="1"${min}${max} value="${escapeHtml(value)}" />`;
+  }
+  // A masked field is shown as set and given no value: it is left alone unless somebody types into it, and
+  // because a save sends only what was edited, leaving it alone cannot wipe it.
+  const placeholder = field.masked ? 'Set — type to replace' : '';
+  return `<input type="text" ${described}${invalid} placeholder="${escapeHtml(placeholder)}" value="${field.masked ? '' : escapeHtml(value)}" />`;
+}
+
+/** The whole form: one fieldset per declared group, one label per control. */
+function settingsFields(form, errors = {}) {
+  return (form.groups || [])
+    .map(
+      group =>
+        `<fieldset class="settings-group"><legend>${escapeHtml(group.label)}</legend>${(group.fields || [])
+          .map(field => {
+            const message = errors[field.path];
+            const required = field.required ? ' <span class="muted">(required)</span>' : '';
+            const problem = message
+              ? `<span class="field-error" id="${escapeHtml(field.id)}-error" role="alert">${escapeHtml(message)}</span>`
+              : '';
+            return `<label class="settings-field" for="${escapeHtml(field.id)}"><span>${escapeHtml(field.label)}${required}</span>${settingsControl(field, message)}${problem}</label>`;
+          })
+          .join('')}</fieldset>`
+    )
+    .join('');
+}
+
+/** Paint the form, marking the named paths. */
+function paintSettingsForm(errors = {}) {
+  if (!settingsForm) return;
+  $('#settings-fields').innerHTML = settingsFields(settingsForm, errors);
+}
+
+async function loadSettingsForm() {
+  const result = await call(() => poolside.settingsForm());
+  if (!result.ok) return;
+  settingsForm = result.value;
+  paintSettingsForm();
+}
+
 function eventRows(events) {
   return (
     events
@@ -254,8 +320,38 @@ $('#account-form').addEventListener('submit', async event => {
 });
 $('#settings-form').addEventListener('submit', async event => {
   event.preventDefault();
-  const result = await call(() => poolside.saveSettings({ table: $('#table').value, limit: Number($('#limit').value) }));
-  if (result.ok) $('#settings-status').textContent = 'Preferences saved on this device.';
+  // Only the controls are sent, keyed by their declared path; a blank control is omitted by the mapper, so this
+  // cannot clear a field nobody touched.
+  const values = {};
+  for (const control of $('#settings-fields').querySelectorAll('[data-path]')) {
+    values[control.dataset.path] = control.type === 'checkbox' ? String(control.checked) : control.value;
+  }
+  const result = await call(() => poolside.saveSettings({ values }));
+  if (!result.ok) {
+    $('#settings-status').textContent = 'Not saved.';
+    return;
+  }
+  const verdict = result.value;
+  if (verdict.form) settingsForm = verdict.form;
+  // A refusal comes back per field, so the control that caused it is marked. Anything without a field of its own
+  // belongs to the form as a whole and goes in the status line.
+  const byPath = {};
+  for (const problem of verdict.errors || []) if (problem.path) byPath[problem.path] = problem.message;
+  paintSettingsForm(byPath);
+  const unplaced = (verdict.errors || []).filter(problem => !problem.path).map(problem => problem.message);
+  if (!verdict.saved) {
+    // The form is rebuilt to mark the field, and rebuilding drops focus with it. Put it back on the control that
+    // needs correcting, because that is where the person who just typed has to be.
+    const invalid = $('#settings-fields').querySelector('[aria-invalid="true"]');
+    if (invalid) invalid.focus();
+    $('#settings-status').textContent = unplaced.length
+      ? `Not saved: ${unplaced.join('; ')}`
+      : 'Not saved. Correct the field marked above.';
+    return;
+  }
+  $('#settings-status').textContent = verdict.ignored?.length
+    ? 'Saved. A stored value this form does not own was unusable and has been left out.'
+    : 'Preferences saved on this device.';
 });
 $('#open-all').addEventListener('click', () => call(() => poolside.openAll()));
 $('#close-all').addEventListener('click', () => call(() => poolside.closeAll()));
@@ -263,8 +359,5 @@ $('#arrange').addEventListener('click', () => call(() => poolside.arrange()));
 $('#search').addEventListener('input', renderAccounts);
 poolside.subscribe(render);
 call(() => poolside.get()).then(result => {
-  if (result.ok) {
-    $('#table').value = state.settings.table;
-    $('#limit').value = state.settings.limit;
-  }
+  if (result.ok) loadSettingsForm();
 });

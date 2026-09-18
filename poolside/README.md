@@ -62,6 +62,17 @@ The dashboard's **Activity** view shows two things the app already recorded but 
 
 Only the `export` layer may leave the machine (ADR-0010). **Diagnostics preview** in the Activity view asks the main process for that layer: `src/telemetry-redaction.cjs` rewrites every string — account names become `account 1`, addresses and paths become `[redacted:ipv4]` — and the handler then scans its own payload and **refuses** to return one that still carries a name, an address, a path or a token-shaped string. The scan is a floor, not a proof: it catches the shapes it knows and says so. Nothing is written to disk by this path; the bundle file, durable logs, frame timings and crash reporting remain M4's remainder.
 
+## Settings
+
+The **Settings** view is generated from `src/config-schema.cjs`, not written by hand: every field the app can execute gets a control, with its label, bounds and option list taken from the schema. Adding a field to the schema adds it to the form, and a field the app cannot execute cannot be edited into existence. The renderer holds no field list.
+
+An edit goes through four questions, one module each — `settings-form-mapper.cjs` builds the controls, `settings-form-values.cjs` turns submitted text into the declared type, `config-validator.cjs` applies the field's own grammar, and `settings-ui-controller.cjs` assembles the document and decides what a refusal means (ADR-0017).
+
+Two behaviours are worth knowing when using it:
+
+- **A refusal lands on the field that caused it.** `settings:save` returns `{saved: false, errors: [{path, message}]}` inside a successful call, so the control is marked, focused, and named — rather than the panel reporting one sentence about itself. A value that a field's grammar refuses is an error when you typed it, even though the same value is only _ignored_ when it was already stored by something else.
+- **A blank field means "leave it alone", not "clear it".** Clearing is explicit, and a route carrying a username and password is shown masked with no value handed to the page at all — so saving a different field can never wipe it.
+
 ## Development
 
 Layout: `main.cjs` is a composition root only. Session windows are `windows.cjs`, saved-session

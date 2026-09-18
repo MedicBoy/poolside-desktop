@@ -79,17 +79,35 @@ async function runSelfTest(ctx) {
 
   // --- The configuration schema boundary, through the real IPC bridge ---------------------------
   const configBoundary = await dashboard.webContents.executeJavaScript(`(async () => {
-    const refused = await poolside.saveSettings({ table: 'Atlantis', limit: 10 });
-    const accepted = await poolside.saveSettings({ table: 'Rome', limit: 25, junk: 'drop me' });
+    const refused = await poolside.saveSettings({ values: { table: 'Atlantis', limit: '10' } });
+    const accepted = await poolside.saveSettings({ values: { table: 'Rome', limit: '25', junk: 'drop me' } });
     const stored = (await poolside.get()).value.settings;
-    return { refused: refused.ok, message: String(refused.error || ''), accepted: accepted.ok, table: stored.table, limit: stored.limit, hasJunk: Object.prototype.hasOwnProperty.call(stored, 'junk') };
+    const form = await poolside.settingsForm();
+    return {
+      saved: refused.ok ? refused.value.saved : null,
+      paths: refused.ok ? refused.value.errors.map(problem => problem.path) : [],
+      messages: refused.ok ? refused.value.errors.map(problem => problem.message) : [],
+      accepted: accepted.ok ? accepted.value.saved : false,
+      table: stored.table,
+      limit: stored.limit,
+      hasJunk: Object.prototype.hasOwnProperty.call(stored, 'junk'),
+      formPaths: form.ok ? form.value.paths : [],
+      rendered: document.querySelectorAll('#settings-fields [data-path]').length
+    };
   })()`);
-  assert.equal(configBoundary.refused, false, 'an unknown table must be refused before it is stored');
-  assert.match(configBoundary.message, /Preferred table must be one of/);
+  assert.equal(configBoundary.saved, false, 'an unknown table must be refused before it is stored');
+  assert.deepEqual(configBoundary.paths, ['table'], 'the refusal names the control it belongs to, not the panel');
+  assert.match(configBoundary.messages.join(' '), /Preferred table must be one of/);
   assert.equal(configBoundary.accepted, true, 'a usable setting is still saved');
   assert.equal(configBoundary.table, 'Rome', 'the validated value is what is stored');
-  assert.equal(configBoundary.limit, 25);
+  assert.equal(configBoundary.limit, 25, 'a number typed as text arrives as a number');
   assert.equal(configBoundary.hasJunk, false, 'an undeclared key must not reach the workspace document');
+  // The form is generated from the schema (ADR-0017): every declared field has a control, and the controls are
+  // in the page rather than in a hardcoded list in the renderer.
+  for (const path of ['table', 'limit', 'identity.userAgent', 'identity.timezone', 'proxy.enabled', 'proxy.spec']) {
+    assert.ok(configBoundary.formPaths.includes(path), `${path} must have a generated control`);
+  }
+  assert.equal(configBoundary.rendered, configBoundary.formPaths.length, 'every declared control is in the DOM');
 
   // --- The diagnostics payload: anonymised, then scanned, through the real bridge ----------------
   // ADR-0010 commits this to a payload that carries no account names, and the handler refuses to hand one over
@@ -131,7 +149,7 @@ async function runSelfTest(ctx) {
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, unavailable transfer control, the configuration schema boundary refusing an unknown table before it is stored, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, unavailable transfer control, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
   );
   app.exit(0);
 }

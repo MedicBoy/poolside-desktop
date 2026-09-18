@@ -128,21 +128,18 @@
           <div>
             <div class="eyebrow">MAKE IT YOUR WORKSPACE</div>
             <h1>Settings</h1>
-            <p>Local preferences for your first transfer workflow.</p>
+            <p>Local preferences for this workspace. Nothing here starts a match.</p>
           </div>
         </div>
         <div class="settings-grid">
           <form id="settings-form" class="panel settings-panel">
-            <h2>Transfer preferences</h2>
-            <p class="muted">Saved for later. These settings do not start matches.</p>
-            <label
-              >Preferred table<select id="table">
-                <option>Bangkok</option>
-                <option>Rome</option>
-                <option>Seoul</option>
-              </select></label
-            ><label>Match limit<input type="number" id="limit" value="10" min="1" max="100" required /></label
-            ><button class="primary" type="submit">Save preferences</button>
+            <h2>Workspace preferences</h2>
+            <p class="muted">
+              Generated from the configuration schema: every field the app can execute is editable here, and a value the schema refuses is
+              refused here too rather than ignored.
+            </p>
+            <div id="settings-fields"></div>
+            <button class="primary" type="submit">Save preferences</button>
             <p class="form-status" id="settings-status" role="status"></p>
           </form>
           <div class="panel settings-panel">
@@ -154,10 +151,10 @@
               <dd>Separate saved profiles</dd>
               <dt>Session lifetime</dt>
               <dd>Saved across restarts</dd>
-              <dt>VPN / proxy</dt>
-              <dd>Not configured by Poolside</dd>
+              <dt>Route</dt>
+              <dd>Per session, applied and read back from the running session</dd>
               <dt>Identity overrides</dt>
-              <dd>Not implemented or verified</dd>
+              <dd>Per session: user agent, languages, locale, time zone, viewport, colour scheme</dd>
             </dl>
             <p class="muted">Poolside does not change your Opera profile. Login happens directly on the game’s website.</p>
           </div>

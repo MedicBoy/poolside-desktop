@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('poolside', {
   checkRoute: id => ipcRenderer.invoke('account:check-route', id),
   deleteProfile: id => ipcRenderer.invoke('account:delete-profile', id),
   refreshProfiles: () => ipcRenderer.invoke('profiles:refresh'),
+  settingsForm: () => ipcRenderer.invoke('settings:form'),
   diagnosticsPreview: () => ipcRenderer.invoke('diagnostics:preview'),
   returnGame: id => ipcRenderer.invoke('account:return-game', id),
   inspect: id => ipcRenderer.invoke('account:inspect', id),
