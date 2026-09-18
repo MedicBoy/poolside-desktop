@@ -9,9 +9,19 @@ test('unrecognized or incomplete labels cannot establish a usable game screen', 
 test('local OCR recognizes reference and held-out recorded screens; unreadable loading stays unknown', { timeout: 60000 }, async () => {
   const reader = await createScreenReader();
   try {
-    for (const [file, expected] of [['loading','unknown'], ['connecting','connecting'], ['lobby','lobby'], ['lucky','lucky-promotion'], ['table','table-selection'], ['recorded-lobby','lobby'], ['recorded-table','table-selection']]) {
+    for (const [file, expected] of [
+      ['loading', 'unknown'],
+      ['connecting', 'connecting'],
+      ['lobby', 'lobby'],
+      ['lucky', 'lucky-promotion'],
+      ['table', 'table-selection'],
+      ['recorded-lobby', 'lobby'],
+      ['recorded-table', 'table-selection']
+    ]) {
       const result = await reader.inspect(path.join(__dirname, 'fixtures', `${file}.png`));
       assert.equal(result.state, expected, file);
     }
-  } finally { await reader.close(); }
+  } finally {
+    await reader.close();
+  }
 });

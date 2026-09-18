@@ -26,7 +26,10 @@ const RULES = [
 
 function normalise(text) {
   if (Array.isArray(text)) text = text.filter(Boolean).join('\n');
-  const flat = String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const flat = String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
   return ` ${flat} `;
 }
 
@@ -71,8 +74,11 @@ function classifyText(text) {
 
 async function createScreenReader() {
   const worker = await createWorker('eng', 1, {
-    langPath: language.langPath, gzip: true, cacheMethod: 'none',
-    logger: () => {}, errorHandler: () => {}
+    langPath: language.langPath,
+    gzip: true,
+    cacheMethod: 'none',
+    logger: () => {},
+    errorHandler: () => {}
   });
   await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, user_defined_dpi: '150' });
   return {
@@ -82,19 +88,31 @@ async function createScreenReader() {
       const { width, height, channels } = pixels.info;
       const mask = Buffer.alloc(width * height);
       for (let i = 0; i < mask.length; i++) {
-        const r = pixels.data[i * channels], g = pixels.data[i * channels + 1], b = pixels.data[i * channels + 2];
-        const low = Math.min(r, g, b), high = Math.max(r, g, b);
+        const r = pixels.data[i * channels],
+          g = pixels.data[i * channels + 1],
+          b = pixels.data[i * channels + 2];
+        const low = Math.min(r, g, b),
+          high = Math.max(r, g, b);
         mask[i] = low > 165 && high - low < 70 ? 0 : 255;
       }
-      const filtered = await sharp(mask, { raw: { width, height, channels: 1 } }).png().toBuffer();
+      const filtered = await sharp(mask, { raw: { width, height, channels: 1 } })
+        .png()
+        .toBuffer();
       const contrast = await worker.recognize(filtered);
       let result = classify(data.text + '\n' + contrast.data.text);
       let source = 'full-frame';
       if (result.state === 'unknown') {
-        const bottom = await sharp(image).extract({ left: 0, top: Math.floor(height * .8), width, height: height - Math.floor(height * .8) }).resize({ width: width * 2 }).png().toBuffer();
+        const bottom = await sharp(image)
+          .extract({ left: 0, top: Math.floor(height * 0.8), width, height: height - Math.floor(height * 0.8) })
+          .resize({ width: width * 2 })
+          .png()
+          .toBuffer();
         const details = await worker.recognize(bottom);
         const detailResult = classify(details.data.text);
-        if (['loading', 'connecting'].includes(detailResult.state)) { result = detailResult; source = 'bottom-band'; }
+        if (['loading', 'connecting'].includes(detailResult.state)) {
+          result = detailResult;
+          source = 'bottom-band';
+        }
       }
       // Return a state, a confidence score and the phrases that matched. Recognized account names
       // and balances are still discarded: only rule terms ever leave this function.

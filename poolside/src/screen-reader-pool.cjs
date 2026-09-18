@@ -21,7 +21,10 @@ function createScreenReaderPool(options = {}) {
   let closed = false;
 
   function clearEntryTimer(entry) {
-    if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+    if (entry.timer) {
+      clearTimeout(entry.timer);
+      entry.timer = null;
+    }
   }
 
   function retire(entry) {
@@ -29,7 +32,9 @@ function createScreenReaderPool(options = {}) {
     if (index === -1) return Promise.resolve();
     entries.splice(index, 1);
     clearEntryTimer(entry);
-    return Promise.resolve(entry.reader).then(reader => reader.close()).catch(() => {});
+    return Promise.resolve(entry.reader)
+      .then(reader => reader.close())
+      .catch(() => {});
   }
 
   function armIdle(entry) {
@@ -44,7 +49,10 @@ function createScreenReaderPool(options = {}) {
 
   function handOff(entry) {
     const next = waiting.shift();
-    if (!next) { armIdle(entry); return; }
+    if (!next) {
+      armIdle(entry);
+      return;
+    }
     entry.busy = true;
     entry.uses++;
     clearEntryTimer(entry);
@@ -84,10 +92,14 @@ function createScreenReaderPool(options = {}) {
   async function closeAll() {
     closed = true;
     for (const waiter of waiting.splice(0)) waiter.reject(new Error('The screen reader pool is closed.'));
-    await Promise.all(entries.splice(0).map(entry => {
-      clearEntryTimer(entry);
-      return Promise.resolve(entry.reader).then(reader => reader.close()).catch(() => {});
-    }));
+    await Promise.all(
+      entries.splice(0).map(entry => {
+        clearEntryTimer(entry);
+        return Promise.resolve(entry.reader)
+          .then(reader => reader.close())
+          .catch(() => {});
+      })
+    );
   }
 
   function stats() {

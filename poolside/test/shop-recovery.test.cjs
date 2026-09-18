@@ -10,7 +10,11 @@ test('shop return requires five stable seconds and fires only once', () => {
   assert.equal(gate.observe('https://8ballpool.com/game', true, 20000), false);
 });
 test('leaving shop, changing URL or navigating outside official origin cancels pending return', () => {
-  for (const [url, shop] of [['https://8ballpool.com/game', false], ['https://8ballpool.com/shop', true], ['https://example.test', true]]) {
+  for (const [url, shop] of [
+    ['https://8ballpool.com/game', false],
+    ['https://8ballpool.com/shop', true],
+    ['https://example.test', true]
+  ]) {
     const gate = new ShopReturnGate();
     gate.observe('https://8ballpool.com/game', true, 0);
     assert.equal(gate.observe(url, shop, 4000), false);

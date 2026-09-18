@@ -1,62 +1,198 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>Poolside</title><link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <aside class="sidebar">
-    <a class="brand" href="#sessions" aria-label="Poolside home"><span class="brand-icon">8</span><span>poolside<span class="brand-dot">.</span></span></a>
-    <div class="workspace-label">YOUR WORKSPACE</div>
-    <nav aria-label="Main navigation">
-      <button class="nav-item active" data-view="sessions"><span class="nav-symbol">▦</span> Sessions <span class="nav-count" id="nav-count">0</span></button>
-      <button class="nav-item" data-view="activity"><span class="nav-symbol">≋</span> Activity</button>
-      <button class="nav-item" data-view="settings"><span class="nav-symbol">⚙</span> Settings</button>
-    </nav>
-    <div class="sidebar-note"><span class="tiny-dot"></span> Local workspace<p>Account labels stay on this PC.<br>Sign in inside each game window.</p></div>
-    <div class="sidebar-footer"><span class="avatar">P</span><div>Personal workspace<small>Session preview · v0.1</small></div></div>
-  </aside>
-  <main>
-    <header class="topbar"><span>Workspace <span class="slash">/</span> <strong id="breadcrumb">Sessions</strong></span><span class="private-badge"><span class="tiny-dot"></span> Dedicated browser sessions</span></header>
-    <section class="view" id="view-sessions">
-      <div class="page-heading"><div><div class="eyebrow">A CLEARER VIEW OF YOUR GAME</div><h1>Your session workspace</h1><p>One place for your accounts. A separate browser for each.</p></div><button class="primary add-account"><span>＋</span> Add account</button></div>
-      <div class="stats">
-        <div class="stat"><span>Account slots</span><strong id="account-count">0</strong><small>Configured on this device</small></div>
-        <div class="stat"><span>Open windows</span><strong id="open-count">0<span class="stat-dot"></span></strong><small id="window-hint">Ready when you are</small></div>
-        <div class="stat"><span>Transfer engine</span><strong class="stat-word">Not connected</strong><small>Game workflow needs verification</small></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Poolside</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#sessions" aria-label="Poolside home"
+        ><span class="brand-icon">8</span><span>poolside<span class="brand-dot">.</span></span></a
+      >
+      <div class="workspace-label">YOUR WORKSPACE</div>
+      <nav aria-label="Main navigation">
+        <button class="nav-item active" data-view="sessions">
+          <span class="nav-symbol">▦</span> Sessions <span class="nav-count" id="nav-count">0</span>
+        </button>
+        <button class="nav-item" data-view="activity"><span class="nav-symbol">≋</span> Activity</button>
+        <button class="nav-item" data-view="settings"><span class="nav-symbol">⚙</span> Settings</button>
+      </nav>
+      <div class="sidebar-note">
+        <span class="tiny-dot"></span> Local workspace
+        <p>Account labels stay on this PC.<br />Sign in inside each game window.</p>
       </div>
-      <div class="content-grid">
-        <div class="accounts-panel">
-          <div class="section-heading"><div><h2>Accounts <span id="section-count" class="count-pill">0</span></h2><p>Choose a receiving account and add your other accounts.</p></div><button class="text-button" id="arrange">▦ Arrange windows</button></div>
-          <div class="toolbar"><label class="search"><span>⌕</span><input id="search" type="search" placeholder="Find an account…" aria-label="Find an account"></label><button class="secondary" id="open-all">Open all <span>↗</span></button></div>
-          <div id="accounts" class="account-list"></div>
-          <div class="session-footnote"><span>◈</span><p>Each account has its own cookies and storage. Login sessions are saved on this PC across restarts. Check IP contacts api.ipify.org through that session; it does not verify location or the game’s network route.</p></div>
+      <div class="sidebar-footer">
+        <span class="avatar">P</span>
+        <div>Personal workspace<small>Session preview · v0.1</small></div>
+      </div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <span>Workspace <span class="slash">/</span> <strong id="breadcrumb">Sessions</strong></span
+        ><span class="private-badge"><span class="tiny-dot"></span> Dedicated browser sessions</span>
+      </header>
+      <section class="view" id="view-sessions">
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">A CLEARER VIEW OF YOUR GAME</div>
+            <h1>Your session workspace</h1>
+            <p>One place for your accounts. A separate browser for each.</p>
+          </div>
+          <button class="primary add-account"><span>＋</span> Add account</button>
         </div>
-        <aside class="run-panel">
-          <div class="run-heading"><span class="eyebrow">VERSION ONE</span><span class="outline-badge">Setup</span></div>
-          <h2>Transfer workspace</h2><p class="muted">Prepare your accounts and preferences.</p>
-          <div class="table-art" aria-hidden="true"><div class="table-rail"><i class="pocket p1"></i><i class="pocket p2"></i><i class="pocket p3"></i><i class="pocket p4"></i><i class="cue-ball"></i><i class="eight-ball">8</i><i class="trajectory"></i></div><span>MAKE ROOM FOR A BETTER SESSION</span></div>
-          <div class="run-row"><span>Receiving account</span><strong id="receiver-name">Not selected</strong></div>
-          <div class="run-row"><span>Sending accounts</span><strong id="sender-count">0</strong></div>
-          <div class="run-row"><span>Preferred table</span><strong id="table-value">Bangkok</strong></div>
-          <div class="run-row"><span>Match limit</span><strong id="limit-value">10</strong></div>
-          <button class="text-button preferences-link" data-view="settings">Edit preferences <span>↗</span></button>
-          <div class="integration-note"><strong><span class="amber-dot"></span> Connection pending</strong><p>Account sign-in and opponent detection must be verified before transfers can run.</p></div>
-          <button class="primary full" id="start-transfer" disabled>Start transfer <span>→</span></button>
-          <button class="secondary full" id="close-all">Close all game windows</button>
-        </aside>
-      </div>
-      <section class="recent"><div class="section-heading"><h2>Recent activity</h2><button class="text-button" data-view="activity">View all <span>↗</span></button></div><div id="recent-events"></div></section>
-    </section>
-    <section class="view hidden" id="view-activity"><div class="page-heading"><div><div class="eyebrow">YOUR SESSION HISTORY</div><h1>Activity</h1><p>What happened in this app session. No passwords or tokens are recorded.</p></div></div><div class="panel" id="all-events"></div></section>
-    <section class="view hidden" id="view-settings"><div class="page-heading"><div><div class="eyebrow">MAKE IT YOUR WORKSPACE</div><h1>Settings</h1><p>Local preferences for your first transfer workflow.</p></div></div>
-      <div class="settings-grid"><form id="settings-form" class="panel settings-panel"><h2>Transfer preferences</h2><p class="muted">Saved for later. These settings do not start matches.</p><label>Preferred table<select id="table"><option>Bangkok</option><option>Rome</option><option>Seoul</option></select></label><label>Match limit<input type="number" id="limit" value="10" min="1" max="100" required></label><button class="primary" type="submit">Save preferences</button><p class="form-status" id="settings-status" role="status"></p></form>
-      <div class="panel settings-panel"><h2>Browser sessions</h2><dl><dt>Browser</dt><dd>Dedicated Chromium windows</dd><dt>Account isolation</dt><dd>Separate saved profiles</dd><dt>Session lifetime</dt><dd>Saved across restarts</dd><dt>VPN / proxy</dt><dd>Not configured by Poolside</dd><dt>Identity overrides</dt><dd>Not implemented or verified</dd></dl><p class="muted">Poolside does not change your Opera profile. Login happens directly on the game’s website.</p></div></div>
-    </section>
-    <footer class="main-footer"><span>POOLSIDE <span class="separator">·</span> Built for a clearer session</span><span>Session preview <span class="separator">·</span> Transfers unavailable</span></footer>
-  </main>
-  <dialog id="account-dialog"><form id="account-form"><div class="dialog-heading"><span class="eyebrow">NEW ACCOUNT SLOT</span><button type="button" class="icon-button" id="cancel-dialog" aria-label="Close dialog">×</button></div><h2>A place for your account</h2><p>Give it a label. You’ll sign in securely on the game’s website.</p><label>Account label<input id="account-name" name="name" maxlength="40" placeholder="e.g. My main account" required autocomplete="off"></label><label>Role<select id="account-role"><option value="receiver">Receiving account</option><option value="sender">Sending account</option></select></label><p class="form-status error" id="account-error" role="alert"></p><button class="primary full" type="submit">Create account slot <span>→</span></button></form></dialog>
-  <div id="toast" role="status" class="toast hidden"></div>
-  <script src="renderer.js"></script>
-</body></html>
+        <div class="stats">
+          <div class="stat"><span>Account slots</span><strong id="account-count">0</strong><small>Configured on this device</small></div>
+          <div class="stat">
+            <span>Open windows</span><strong id="open-count">0<span class="stat-dot"></span></strong
+            ><small id="window-hint">Ready when you are</small>
+          </div>
+          <div class="stat">
+            <span>Transfer engine</span><strong class="stat-word">Not connected</strong><small>Game workflow needs verification</small>
+          </div>
+        </div>
+        <div class="content-grid">
+          <div class="accounts-panel">
+            <div class="section-heading">
+              <div>
+                <h2>Accounts <span id="section-count" class="count-pill">0</span></h2>
+                <p>Choose a receiving account and add your other accounts.</p>
+              </div>
+              <button class="text-button" id="arrange">▦ Arrange windows</button>
+            </div>
+            <div class="toolbar">
+              <label class="search"
+                ><span>⌕</span><input id="search" type="search" placeholder="Find an account…" aria-label="Find an account" /></label
+              ><button class="secondary" id="open-all">Open all <span>↗</span></button>
+            </div>
+            <div id="accounts" class="account-list"></div>
+            <div class="session-footnote">
+              <span>◈</span>
+              <p>
+                Each account has its own cookies and storage. Login sessions are saved on this PC across restarts. Check IP contacts
+                api.ipify.org through that session; it does not verify location or the game’s network route.
+              </p>
+            </div>
+          </div>
+          <aside class="run-panel">
+            <div class="run-heading"><span class="eyebrow">VERSION ONE</span><span class="outline-badge">Setup</span></div>
+            <h2>Transfer workspace</h2>
+            <p class="muted">Prepare your accounts and preferences.</p>
+            <div class="table-art" aria-hidden="true">
+              <div class="table-rail">
+                <i class="pocket p1"></i><i class="pocket p2"></i><i class="pocket p3"></i><i class="pocket p4"></i><i class="cue-ball"></i
+                ><i class="eight-ball">8</i><i class="trajectory"></i>
+              </div>
+              <span>MAKE ROOM FOR A BETTER SESSION</span>
+            </div>
+            <div class="run-row"><span>Receiving account</span><strong id="receiver-name">Not selected</strong></div>
+            <div class="run-row"><span>Sending accounts</span><strong id="sender-count">0</strong></div>
+            <div class="run-row"><span>Preferred table</span><strong id="table-value">Bangkok</strong></div>
+            <div class="run-row"><span>Match limit</span><strong id="limit-value">10</strong></div>
+            <button class="text-button preferences-link" data-view="settings">Edit preferences <span>↗</span></button>
+            <div class="integration-note">
+              <strong><span class="amber-dot"></span> Connection pending</strong>
+              <p>Account sign-in and opponent detection must be verified before transfers can run.</p>
+            </div>
+            <button class="primary full" id="start-transfer" disabled>Start transfer <span>→</span></button>
+            <button class="secondary full" id="close-all">Close all game windows</button>
+          </aside>
+        </div>
+        <section class="recent">
+          <div class="section-heading">
+            <h2>Recent activity</h2>
+            <button class="text-button" data-view="activity">View all <span>↗</span></button>
+          </div>
+          <div id="recent-events"></div>
+        </section>
+      </section>
+      <section class="view hidden" id="view-activity">
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">YOUR SESSION HISTORY</div>
+            <h1>Activity</h1>
+            <p>What happened in this app session. No passwords or tokens are recorded.</p>
+          </div>
+        </div>
+        <div class="panel" id="all-events"></div>
+      </section>
+      <section class="view hidden" id="view-settings">
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">MAKE IT YOUR WORKSPACE</div>
+            <h1>Settings</h1>
+            <p>Local preferences for your first transfer workflow.</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <form id="settings-form" class="panel settings-panel">
+            <h2>Transfer preferences</h2>
+            <p class="muted">Saved for later. These settings do not start matches.</p>
+            <label
+              >Preferred table<select id="table">
+                <option>Bangkok</option>
+                <option>Rome</option>
+                <option>Seoul</option>
+              </select></label
+            ><label>Match limit<input type="number" id="limit" value="10" min="1" max="100" required /></label
+            ><button class="primary" type="submit">Save preferences</button>
+            <p class="form-status" id="settings-status" role="status"></p>
+          </form>
+          <div class="panel settings-panel">
+            <h2>Browser sessions</h2>
+            <dl>
+              <dt>Browser</dt>
+              <dd>Dedicated Chromium windows</dd>
+              <dt>Account isolation</dt>
+              <dd>Separate saved profiles</dd>
+              <dt>Session lifetime</dt>
+              <dd>Saved across restarts</dd>
+              <dt>VPN / proxy</dt>
+              <dd>Not configured by Poolside</dd>
+              <dt>Identity overrides</dt>
+              <dd>Not implemented or verified</dd>
+            </dl>
+            <p class="muted">Poolside does not change your Opera profile. Login happens directly on the game’s website.</p>
+          </div>
+        </div>
+      </section>
+      <footer class="main-footer">
+        <span>POOLSIDE <span class="separator">·</span> Built for a clearer session</span
+        ><span>Session preview <span class="separator">·</span> Transfers unavailable</span>
+      </footer>
+    </main>
+    <dialog id="account-dialog">
+      <form id="account-form">
+        <div class="dialog-heading">
+          <span class="eyebrow">NEW ACCOUNT SLOT</span
+          ><button type="button" class="icon-button" id="cancel-dialog" aria-label="Close dialog">×</button>
+        </div>
+        <h2>A place for your account</h2>
+        <p>Give it a label. You’ll sign in securely on the game’s website.</p>
+        <label
+          >Account label<input
+            id="account-name"
+            name="name"
+            maxlength="40"
+            placeholder="e.g. My main account"
+            required
+            autocomplete="off" /></label
+        ><label
+          >Role<select id="account-role">
+            <option value="receiver">Receiving account</option>
+            <option value="sender">Sending account</option>
+          </select></label
+        >
+        <p class="form-status error" id="account-error" role="alert"></p>
+        <button class="primary full" type="submit">Create account slot <span>→</span></button>
+      </form>
+    </dialog>
+    <div id="toast" role="status" class="toast hidden"></div>
+    <script src="renderer.js"></script>
+  </body>
+</html>

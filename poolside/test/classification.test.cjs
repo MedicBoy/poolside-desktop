@@ -29,13 +29,27 @@ test('table selection wins over lobby wording, because the lobby renders behind 
   assert.ok(LOBBY.split(/\s+/).length > 0);
   const result = classify(TABLE_SELECTION);
   assert.equal(result.state, 'table-selection');
-  assert.ok(result.alternatives.some(alternative => alternative.state === 'lobby'), 'lobby is reported as an alternative');
+  assert.ok(
+    result.alternatives.some(alternative => alternative.state === 'lobby'),
+    'lobby is reported as an alternative'
+  );
 });
 
 test('incomplete or unrelated text stays unknown instead of guessing', () => {
-  for (const text of ['', '8 Ball Pool', 'Play', 'Account logged in', 'Prize', 'Play 1 on 1',
-    'Enter your password', 'Sign in with Miniclip ID', 'Weekly Deals',
-    'Play Special', 'Entry fee', '9 Ball']) {
+  for (const text of [
+    '',
+    '8 Ball Pool',
+    'Play',
+    'Account logged in',
+    'Prize',
+    'Play 1 on 1',
+    'Enter your password',
+    'Sign in with Miniclip ID',
+    'Weekly Deals',
+    'Play Special',
+    'Entry fee',
+    '9 Ball'
+  ]) {
     assert.equal(classifyText(text), 'unknown', text);
   }
 });
@@ -97,7 +111,10 @@ test('every rule declares a gate and no rule can match on hints alone', () => {
 // deliberate. It already earned its place: it caught the rewrite dropping \b semantics, which made
 // "Reconnecting to the server" satisfy the "connecting" gate.
 function legacyClassify(text) {
-  const s = String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const s = String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
   if (/come back every day/.test(s) && /play free/.test(s)) return 'lucky-promotion';
   if (/lucky/.test(s) && /play free|gold ball/.test(s)) return 'lucky-shot';
   if (/entry fee/.test(s) && /prize/.test(s)) return 'table-selection';
@@ -109,18 +126,43 @@ function legacyClassify(text) {
 
 test('the rewrite is behaviour-preserving against the embedded legacy classifier', () => {
   const corpus = [
-    LOBBY, TABLE_SELECTION, LUCKY_PROMOTION,
-    'Connecting', 'Connecting...', 'Reconnecting to the server', 'Loading', 'Loading your profile',
-    'Unloading assets', 'Loaded',
-    '', ' ', '8 Ball Pool', 'BY MINICLIP', 'Play', 'Prize', 'Play 1 on 1', 'Account logged in',
-    'Enter your password', 'Sign in with Miniclip ID', 'Weekly Deals', 'FEATURED',
-    'WEB SHOP EXCLUSIVE', 'Play Special', 'Play 9 Ball', 'Play Special 9 Ball Box Slot',
-    'Entry fee', '9 Ball', 'Box Slot', 'Lucky Shot Play Free', 'Come back every day',
-    'Come back every day Play Free', 'Jugar 1 contra 1 Tarifa de entrada Premio', 'Game Over',
+    LOBBY,
+    TABLE_SELECTION,
+    LUCKY_PROMOTION,
+    'Connecting',
+    'Connecting...',
+    'Reconnecting to the server',
+    'Loading',
+    'Loading your profile',
+    'Unloading assets',
+    'Loaded',
+    '',
+    ' ',
+    '8 Ball Pool',
+    'BY MINICLIP',
+    'Play',
+    'Prize',
+    'Play 1 on 1',
+    'Account logged in',
+    'Enter your password',
+    'Sign in with Miniclip ID',
+    'Weekly Deals',
+    'FEATURED',
+    'WEB SHOP EXCLUSIVE',
+    'Play Special',
+    'Play 9 Ball',
+    'Play Special 9 Ball Box Slot',
+    'Entry fee',
+    '9 Ball',
+    'Box Slot',
+    'Lucky Shot Play Free',
+    'Come back every day',
+    'Come back every day Play Free',
+    'Jugar 1 contra 1 Tarifa de entrada Premio',
+    'Game Over',
     'PLAY 1 ON 1 PLAY SPECIAL PLAY 9 BALL BOX SLOT'
   ];
   const disagreements = corpus.filter(text => classifyText(text) !== legacyClassify(text));
   assert.deepEqual(disagreements, [], 'classifier disagrees with the legacy regex chain');
   assert.ok(corpus.length >= 30, 'corpus stays broad');
 });
-

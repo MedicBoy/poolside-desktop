@@ -8,7 +8,13 @@ function fakeFactory() {
   const created = [];
   const closed = [];
   const create = () => {
-    const reader = { id: created.length + 1, inspect: async () => ({ state: 'lobby' }), close: async () => { closed.push(reader.id); } };
+    const reader = {
+      id: created.length + 1,
+      inspect: async () => ({ state: 'lobby' }),
+      close: async () => {
+        closed.push(reader.id);
+      }
+    };
     created.push(reader);
     return Promise.resolve(reader);
   };
@@ -46,7 +52,10 @@ test('work beyond the pool size queues and is served on release, not rejected', 
   const pool = createScreenReaderPool({ size: 1, idleMs: 0, create });
   const held = await pool.acquire();
   let served = false;
-  const queued = pool.acquire().then(entry => { served = true; return entry; });
+  const queued = pool.acquire().then(entry => {
+    served = true;
+    return entry;
+  });
   await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(served, false, 'queued work waits');
   assert.equal(created.length, 1, 'queueing does not spawn another worker');
@@ -90,7 +99,14 @@ test('a queued waiter is not starved by idle retirement', async () => {
 
 test('a failing factory does not poison the pool', async () => {
   let attempts = 0;
-  const pool = createScreenReaderPool({ size: 1, idleMs: 0, create: () => { attempts++; return attempts === 1 ? Promise.reject(new Error('no language data')) : Promise.resolve({ close: async () => {} }); } });
+  const pool = createScreenReaderPool({
+    size: 1,
+    idleMs: 0,
+    create: () => {
+      attempts++;
+      return attempts === 1 ? Promise.reject(new Error('no language data')) : Promise.resolve({ close: async () => {} });
+    }
+  });
   await assert.rejects(pool.acquire(), /no language data/);
   assert.equal(pool.stats().created, 0, 'the failed entry is not retained');
   const entry = await pool.acquire();

@@ -39,7 +39,25 @@ Read `../video-review.md` for the reference evidence and remaining uncertainties
 
 ## Screen recognition development
 
-**Inspect game** on an open account card captures a single visible game surface and runs `src/game-screen.cjs` locally. It identifies a single fully visible canvas/iframe with the expected landscape proportions; missing, clipped, or ambiguous surfaces produce an error. This locator still needs real-game verification. Results are timestamped observations, not proof of responsiveness or permission to start a match. No image or OCR transcript is saved, and no gameplay input is sent. It runs bundled English Tesseract OCR locally, with a second contrast pass using Sharp, and returns only a screen category and timestamp. Tests use cropped user-provided screenshots plus separate lobby/table frames from the recording. Connecting, Lucky Shot promotion, lobby, and table selection are recognized in those samples. The small loading label in the first recording frame is not reliably recognized and deliberately returns unknown. This is not general accuracy validation, account authentication, opponent recognition, or a freeze detector. Dependencies and language data are pinned in package-lock.json; recognition uses local language files without downloading them at runtime.
+**Inspect game** on an open account card captures a single visible game surface and runs `src/game-screen.cjs` locally. The locator (`src/game-region.cjs`) scores every visible canvas/iframe by how closely it matches the game's aspect ratio and by how much of the viewport it covers, then picks the best candidate; a page with several surfaces no longer fails just for having several. When nothing is usable it reports why and lists the surfaces it saw, so a wrong choice is diagnosable. That ranking still needs verification against the real game. Results are timestamped observations, not proof of responsiveness or permission to start a match. No image or OCR transcript is saved, and no gameplay input is sent. It runs bundled English Tesseract OCR locally, with a second contrast pass using Sharp, and returns a screen category, a confidence score, the phrases that matched, and a timestamp. Tests use cropped user-provided screenshots plus separate lobby/table frames from the recording. Connecting, Lucky Shot promotion, lobby, and table selection are recognized in those samples. The small loading label in the first recording frame is not reliably recognized and deliberately returns unknown. This is not general accuracy validation, account authentication, opponent recognition, or a freeze detector. Dependencies and language data are pinned in package-lock.json; recognition uses local language files without downloading them at runtime.
+
+## Development
+
+Layout: `main.cjs` is a composition root only. Session windows are `windows.cjs`, saved-session
+persistence `profiles.cjs`, session/navigation policy `hardening.cjs`, recovery supervision
+`recovery.cjs`, screen inspection `inspection.cjs`, the dashboard contract `ipc.cjs`, and the test
+suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
+
+| Command                           | What it does                                                                        |
+| --------------------------------- | ----------------------------------------------------------------------------------- |
+| `npm run verify`                  | lint + typecheck + unit tests — the gate to run before any commit                   |
+| `npm run lint`                    | ESLint over the repository (flat config, separate browser globals for the renderer) |
+| `npm run typecheck`               | `tsc --checkJs` over `src/` and `test/`                                             |
+| `npm run format` / `format:check` | Prettier, with `.editorconfig` for editors                                          |
+
+`test/architecture.test.cjs` enforces the rules that matter as tests rather than conventions: no
+module over 200 lines, no cycles in the local require graph, no Electron import in the modules
+that claim to be unit testable, and no module left unreferenced.
 
 ## Session IP checks
 

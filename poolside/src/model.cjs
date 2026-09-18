@@ -1,7 +1,8 @@
 const { randomUUID } = require('node:crypto');
 const TABLES = ['Bangkok', 'Rome', 'Seoul'];
 function label(value) {
-  if (typeof value !== 'string' || !value.trim() || value.trim().length > 40) throw new Error('Use an account name between 1 and 40 characters.');
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 40)
+    throw new Error('Use an account name between 1 and 40 characters.');
   return value.trim();
 }
 function account(input, existing = []) {
@@ -21,11 +22,15 @@ function decode(value) {
   const ids = new Set();
   const active = [];
   const accounts = value.accounts.map(a => {
-    if (!a || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(a.id) || ids.has(a.id)) throw new Error('Invalid account identifier.');
+    if (!a || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(a.id) || ids.has(a.id))
+      throw new Error('Invalid account identifier.');
     ids.add(a.id);
     label(a.name);
     if (!['receiver', 'sender'].includes(a.role) || typeof a.archived !== 'boolean') throw new Error('Invalid account data.');
-    if (!a.archived) { account(a, active); active.push(a); }
+    if (!a.archived) {
+      account(a, active);
+      active.push(a);
+    }
     return { id: a.id, name: a.name, role: a.role, archived: a.archived, createdAt: String(a.createdAt) };
   });
   return { version: 1, accounts, settings: settings(value.settings) };

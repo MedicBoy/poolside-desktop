@@ -1,0 +1,93 @@
+// The data layer: the persisted workspace document, the activity feed, and the snapshot the
+// dashboard renders. Extracted from main.cjs so the composition root is wiring, not storage.
+
+const fs = require('node:fs');
+const path = require('node:path');
+const model = require('./model.cjs');
+const { events, sessions, workspace } = require('./state.cjs');
+
+const MAX_EVENTS = 100;
+
+/**
+ * Record an activity entry and push a fresh snapshot to the dashboard.
+ * @param {string} message
+ * @param {'info'|'warning'} [kind]
+ */
+function log(message, kind = 'info') {
+  events.unshift({ id: Date.now() + Math.random(), at: new Date().toISOString(), message, kind });
+  events.splice(MAX_EVENTS);
+  publish();
+}
+
+/**
+ * The dashboard-facing view of the workspace: accounts with their live session state.
+ * @returns {{accounts: object[], settings: import('./types.cjs').WorkspaceSettings, events: import('./types.cjs').ActivityEvent[], readOnly: boolean, version: string}}
+ */
+function snapshot() {
+  return {
+    accounts: workspace.data.accounts
+      .filter(a => !a.archived)
+      .map(a => {
+        const group = sessions.get(a.id);
+        return {
+          ...a,
+          status: group ? group.status : 'closed',
+          network: group && group.network ? group.network : null,
+          gameScreen: group && group.gameScreen ? group.gameScreen : null
+        };
+      }),
+    settings: workspace.data.settings,
+    events,
+    readOnly: workspace.readOnly,
+    version: workspace.version
+  };
+}
+
+/** Push the current snapshot to the dashboard, if it is open. */
+function publish() {
+  const dashboard = workspace.dashboard;
+  if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send('workspace:changed', snapshot());
+}
+
+/**
+ * Persist the workspace atomically, then publish.
+ * @param {import('./types.cjs').WorkspaceData} next
+ */
+function save(next) {
+  if (workspace.readOnly)
+    throw new Error('Workspace data could not be read. Restart after fixing the workspace file; existing data has not been overwritten.');
+  if (!workspace.storeFile) throw new Error('The workspace file is not initialised yet.');
+  fs.mkdirSync(path.dirname(workspace.storeFile), { recursive: true });
+  fs.writeFileSync(workspace.storeFile + '.tmp', JSON.stringify(next, null, 2), { mode: 0o600 });
+  fs.renameSync(workspace.storeFile + '.tmp', workspace.storeFile);
+  workspace.data = next;
+  publish();
+}
+
+/**
+ * @param {string} id
+ * @returns {import('./types.cjs').Account}
+ */
+function getAccount(id) {
+  const account = workspace.data.accounts.find(a => a.id === id && !a.archived);
+  if (!account) throw new Error('Account not found.');
+  return account;
+}
+
+/**
+ * Load the workspace document. A malformed file flips the app to read-only rather than
+ * overwriting data the user may still want.
+ * @param {string} file
+ */
+function load(file) {
+  workspace.storeFile = file;
+  if (!fs.existsSync(file)) return;
+  try {
+    workspace.data = model.decode(JSON.parse(fs.readFileSync(file, 'utf8')));
+  } catch {
+    workspace.readOnly = true;
+    log('Workspace file could not be read. Existing data was preserved.', 'warning');
+  }
+}
+
+module.exports = { log, snapshot, publish, save, getAccount, load, MAX_EVENTS };

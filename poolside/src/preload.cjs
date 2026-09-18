@@ -12,5 +12,9 @@ contextBridge.exposeInMainWorld('poolside', {
   closeAll: () => ipcRenderer.invoke('sessions:close'),
   arrange: () => ipcRenderer.invoke('sessions:arrange'),
   saveSettings: input => ipcRenderer.invoke('settings:save', input),
-  subscribe: listener => { const handler = (_event, value) => listener(value); ipcRenderer.on('workspace:changed', handler); return () => ipcRenderer.removeListener('workspace:changed', handler); }
+  subscribe: listener => {
+    const handler = (_event, value) => listener(value);
+    ipcRenderer.on('workspace:changed', handler);
+    return () => ipcRenderer.removeListener('workspace:changed', handler);
+  }
 });

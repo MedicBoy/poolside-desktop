@@ -74,7 +74,8 @@ const GAME_REGION_PROBE = `(() => {
 const REGION_REASONS = {
   'login-or-dialog': 'A sign-in field or dialog is covering the game area. Finish signing in first.',
   'no-surface': 'No canvas or iframe was found on the page. Is the game page open and loaded?',
-  'no-eligible-surface': 'A game surface was found but none was large enough or the right shape to capture. Bring the full game area into view.'
+  'no-eligible-surface':
+    'A game surface was found but none was large enough or the right shape to capture. Bring the full game area into view.'
 };
 
 module.exports = { GAME_REGION_PROBE, REGION_REASONS, MIN_WIDTH, MIN_HEIGHT, MIN_ASPECT, MAX_ASPECT, MIN_COVERAGE };

@@ -1,7 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const escape = s => String(s).replace(/[<>&"']/g, c => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;', "'":'&apos;' }[c]));
-function partition(id) { return `persist:poolside-${id}`; }
+const escape = s => String(s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]);
+function partition(id) {
+  return `persist:poolside-${id}`;
+}
 function fileFor(root, id) {
   if (!/^[a-f0-9-]{36}$/i.test(id)) throw new Error('Invalid session identifier.');
   return path.join(root, 'accounts', `${id}.plist`);
@@ -32,10 +34,20 @@ async function restoreSession(root, account, browserSession, crypto) {
     const current = await browserSession.cookies.get({});
     for (const c of saved.cookies.filter(c => c.session)) {
       if (current.some(x => x.name === c.name && x.domain === c.domain && x.path === c.path)) continue;
-      const cookie = { url: `${c.secure ? 'https' : 'http'}://${c.domain.replace(/^\./, '')}${c.path || '/'}`, name: c.name, value: c.value, path: c.path, secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite };
+      const cookie = {
+        url: `${c.secure ? 'https' : 'http'}://${c.domain.replace(/^\./, '')}${c.path || '/'}`,
+        name: c.name,
+        value: c.value,
+        path: c.path,
+        secure: c.secure,
+        httpOnly: c.httpOnly,
+        sameSite: c.sameSite
+      };
       if (!c.hostOnly) cookie.domain = c.domain;
       await browserSession.cookies.set(cookie);
     }
-  } catch { throw new Error('Saved session could not be restored. Its plist has been preserved.'); }
+  } catch {
+    throw new Error('Saved session could not be restored. Its plist has been preserved.');
+  }
 }
 module.exports = { partition, saveSession, restoreSession, fileFor };

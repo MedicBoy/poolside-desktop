@@ -34,7 +34,12 @@ function tileGeometry(count, area) {
   const minimumWidth = count === 1 ? WINDOW_MIN_WIDTH : Math.min(WINDOW_MIN_WIDTH, tileWidth);
   const minimumHeight = count === 1 ? WINDOW_MIN_HEIGHT : Math.min(WINDOW_MIN_HEIGHT, tileHeight);
   return {
-    cols, rows, tileWidth, tileHeight, minimumWidth, minimumHeight,
+    cols,
+    rows,
+    tileWidth,
+    tileHeight,
+    minimumWidth,
+    minimumHeight,
     cramped: tileWidth < CRAMPED_WIDTH || tileHeight < CRAMPED_HEIGHT
   };
 }
