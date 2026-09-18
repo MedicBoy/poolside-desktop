@@ -365,6 +365,8 @@ Two honest limits, recorded in ADR-0002 and ADR-0015 rather than glossed: the co
 
 ### 5.5 Reproducing this audit
 
+*This document was produced from the tree at `8420e24`, and is itself committed in `b6f118b` — which is why `git log` shows a HEAD one commit ahead of the hash named in the header. Every figure above was captured before the commit that added this file.*
+
 ```bash
 cd poolside
 npm run verify           # lint + typecheck + 257 unit tests
