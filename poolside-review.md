@@ -60,7 +60,7 @@ with `workspace:changed` snapshots pushed back on every mutation.
 | --- | --- | --- |
 | Unit + OCR | `npm test` | **8/8 pass**, 9.0 s (incl. live Tesseract against 7 fixtures) |
 | Electron self-test | `npm run test:desktop` | **4 PASS** on current `src/` |
-| Process-restart persistence | `npm run test:persistence` | **FAILS** — see D1 |
+| Process-restart persistence | `npm run test:persistence` | **8/8** after the fix in §8; was failing — see D1 |
 
 Packaged-build drift, confirmed by grepping each `app.asar`:
 
@@ -76,7 +76,7 @@ session persistence — the feature requested in the final Codex turn — exists
 
 ## 4. Defects
 
-**D1 — `npm run test:persistence` fails; root cause found (harness, not product).**
+**D1 — [RESOLVED] `npm run test:persistence` failed; root cause found (harness, not product).**
 `ERR_FAILED (-2) loading 'https://example.test/'`. Reduced it to a minimal case: after the app's
 **last** `BrowserWindow` is destroyed, the *next* `BrowserWindow` created in the same process
 fails to load with `ERR_FAILED (-2)` — for any partition, with or without a `protocol.handle`
@@ -89,7 +89,7 @@ while Poolside runs, and the self-test passes for exactly that reason. Fix is te
 hidden keep-alive window (or don't destroy between accounts). Until then, the persistence feature
 is **unverified end-to-end**.
 
-**D2 — README contradicts `src/`.** README lines 24–25 still claim "separate in-memory Chromium
+**D2 — [RESOLVED] README contradicted `src/`.** README lines 24–25 still claim "separate in-memory Chromium
 session … Exiting clears private session state." The code now uses `persist:poolside-<id>`
 partitions and writes `%APPDATA%/Poolside/accounts/<id>.plist`. The plist store, `test:persistence`
 script, and the newest build aren't documented at all. Anyone reading the README will misjudge
@@ -121,8 +121,7 @@ account's inspection blocks every other account.
 **D7 — `arrange()` permanently lowers window minimum size** from the intended 660×560 to 420×360
 (`setMinimumSize` is never restored).
 
-**D8 — 2.1 GB of duplicated Electron runtimes** across four separate `release*` folders, each
-~490 MB, all but `release-inspection` stale.
+**D8 — [RESOLVED] 2.1 GB of duplicated Electron runtimes** across four separate `release*` folders (now a single canonical `release/`).
 
 ## 5. Evidence gaps (things the docs already admit, plus one they don't)
 
@@ -157,3 +156,30 @@ live multiplayer game for its monetized currency, it breaks Miniclip's terms, it
 accounts being banned, and the surrounding ecosystem is where the loggers and droppers that
 already cost one PC come from. `README.md` line 3 is the honest description of this project's
 state, and it's worth keeping it that way.
+
+---
+
+## 8. Resolution log — 2026-09-17 (P0 + P1 executed)
+
+- **P0 — version control.** `git init` at `Coding/` (covers `poolside/`, both review docs and the
+  recording evidence). First commit `3834705`, 132 files, tag `v0.1.0-session-foundation`.
+  Identity is repo-local (`nicho@localhost`) because no global git identity exists on this machine.
+  `.gitignore` had `release/`, which would *not* have matched `release-navigation/` and friends —
+  changed to `release*/` before the first `add`, so no Electron binaries entered history
+  (verified: 0 matches).
+- **P0 — build folders.** `release-navigation`, `release-recovery` and `release-inspection` removed
+  after grep-confirming that `release-inspection` already contained every earlier feature
+  (`returnToGame`, `backgroundThrottling`, `ShopReturnGate`, `GAME_REGION_PROBE`, `classifyText`),
+  so no capability was lost. `poolside/` went 2.1 GB → 948 MB.
+- **P1.1 — D1 fixed.** `test/session-restart.cjs` holds a hidden keep-alive window for the run.
+  `npm run test:persistence` now reports PASS for both `seed` and `verify`, so the plist
+  persistence path is verified across a real process restart for the first time.
+- **P1.2 — packaging fixed.** `release/` rebuilt from current `src/`: the first packaged build to
+  contain `saved-session.cjs` (grep-verified), with native deps at
+  `resources/app.asar.unpacked/node_modules`. Packaged `Poolside.exe --self-test` reports 4 PASS.
+- **P1.3 — D2 fixed.** The README now documents the `persist:` profile, the
+  `accounts/<id>.plist` snapshot, which store is authoritative, and the session-cookie-only
+  restore rule; Validation covers `test:persistence`.
+
+Final state: `npm test` 8/8 · `npm run test:desktop` 4/4 · `npm run test:persistence` seed+verify ·
+packaged self-test 4/4. **Still open: D3–D7.** P2–P5 of the improvement list are not started.
