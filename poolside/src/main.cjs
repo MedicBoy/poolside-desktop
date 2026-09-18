@@ -5,7 +5,7 @@
 // (saved sessions), hardening.cjs (policy), recovery.cjs (supervision), inspection.cjs (screen
 // recognition), ipc.cjs (the dashboard contract) and self-test.cjs (the test suite).
 
-const { app, BrowserWindow, ipcMain, dialog, session, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, safeStorage, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -45,7 +45,15 @@ const profileManager = createProfileManager({
   crypto: safeStorage
 });
 const windows = createSessionManager({ log, publish, getAccount, selfTest, profileManager });
-const inspector = createInspector({ getAccount, publish, log, screenReaders });
+const inspector = createInspector({
+  getAccount,
+  publish,
+  log,
+  screenReaders,
+  // The display's own scale factor, so a capture's density can be compared with what was expected rather
+  // than assumed to be 1. Read at inspection time, never cached: it changes when a window moves displays.
+  deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor
+});
 
 /**
  * Ask before destroying something irreversible. A headless test run answers "no" rather than blocking on

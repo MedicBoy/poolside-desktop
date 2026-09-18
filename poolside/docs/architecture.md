@@ -48,6 +48,9 @@ and a pooled OCR worker.
 │  recovery.cjs     shop auto-return + repaint supervision                    │
 │  inspection.cjs   capture → classify orchestration + failure text           │
 │  game-region.cjs  locate the game surface                                   │
+│  vision-frame.cjs   capture coordinates + boundary rules (pure)             │
+│  vision-grid.cjs    recognised text into positioned cells and rows (pure)   │
+│  vision-pipeline.cjs the capture seam: frame, handles and grid (pure)       │
 │  game-screen.cjs  Tesseract + Sharp pipeline, classify()                    │
 │  screen-reader-pool.cjs  warm OCR workers, queue, idle retirement           │
 │  network.cjs      ipify check through a given session                       │
@@ -74,7 +77,7 @@ and a pooled OCR worker.
 | `main.cjs` is wiring only            | review + the size ceiling    |
 
 The modules in `PURE_MODULES` (`test/architecture.test.cjs`) must not import `electron`, so every one of
-them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `config-schema`, `config-walk`, `config-validator`, `session-config`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`.
+them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `config-schema`, `config-walk`, `config-validator`, `session-config`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`, `vision-frame`, `vision-grid`, `vision-pipeline`.
 
 Dependency direction is one-way. `state.cjs` is a leaf that others read. Feature modules receive what
 they need as an injected `deps` object, so `windows.cjs` can take `returnToGame` from itself without
@@ -456,27 +459,58 @@ second authority eventually disagrees with the first), and it never merges the t
 `identity.cjs` and `proxy.cjs`; merging silently discarded one of two configured identities until the parity
 suite caught it).
 
-## 12. Known gaps
+## 12. Vision: one capture, four coordinate systems
+
+Four coordinate systems meet in a single capture, and `vision-frame.cjs` owns every conversion between them
+(ADR-0015): the probe's **page CSS pixels**, the **DIPs** `capturePage` takes, the **captured image's pixels** at
+the display's scale factor, and the **resized image** the recogniser reads.
+
+| Module                | Question it answers                                                              |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `vision-frame.cjs`    | coordinates: convert, clip, and report the density that actually arrived         |
+| `vision-grid.cjs`     | text: recognised lines into cells with positions, rows, confidence and telemetry |
+| `vision-pipeline.cjs` | the seam: one capture in, frame + transform handles + grid parsing out           |
+| `inspection.cjs`      | drives the capture and reports what it found                                     |
+| `game-screen.cjs`     | the rule engine and the OCR worker; takes its band geometry from the handles     |
+
+The rules that matter, all arithmetic rather than claims about a window:
+
+- **Floor the origin, round the extent, never below one pixel.** A crop that starts one pixel late loses text at
+  a region's edge; a zero-sized extract is refused by `sharp`, so it is never allowed to get that far.
+- **Clip and flag; refuse only when nothing is left.** The probe already clamps to the viewport, so a partial
+  overlap is normal — an empty crop is not, and it is refused with a reason rather than read as a blank screen.
+- **The achieved density is reported, not assumed.** `zoom × deviceScaleFactor` is the expectation; a 125 %
+  display returns a larger image, and an image captured _below_ the page's own scale is called out, because that
+  is the condition under which a small label is misread.
+- **Two rectangle dialects.** Electron takes `{x, y}`, `sharp` takes `{left, top}`; the transform handles are
+  in sharp's, so nothing translates between them.
+
+The grid is **built but not yet in the recognition path**: the geometry is wired, the classifier still reads the
+concatenation of its two OCR passes. Changing what it reads needs the labelled corpus (ADR-0002), so it waits.
+
+## 13. Known gaps
 
 Carried deliberately, with the milestone that closes each:
 
-| Gap                                                            | Milestone                              |
-| -------------------------------------------------------------- | -------------------------------------- |
-| No transition history or deadline enforcement on session state | M1 (closed — `session-fsm.cjs`)        |
-| No crash/stall handlers or per-session health record           | M1 (closed — `supervision.cjs`)        |
-| Identity configuration, per session                            | M1 (closed — `identity.cjs`, ADR-0012) |
-| Remembered geometry and per-monitor bounds                     | M1 (closed — `geometry.cjs`)           |
-| Per-session route as infrastructure, honestly reported         | M1 (closed — `proxy.cjs`)              |
-| No profile lifecycle (establish, check, delete)                | M1 (closed — `profile-manager.cjs`)    |
-| No corruption detection on stored session data                 | M1 (closed — `profile-integrity.cjs`)  |
-| Config is hand-validated in `model.cjs`; venues are hardcoded  | M2 (closed — `config-schema.cjs`)      |
-| The roadmap sketch's five-section config is not built          | M2 remainder                           |
-| Corpus is seven positive fixtures and no negatives             | M3                                     |
-| Region ranking unvalidated against the live site               | M3 (needs a live pass)                 |
-| No structured logging, metrics or diagnostics bundle           | M4                                     |
-| No design system, i18n or accessibility audit                  | M5                                     |
-| No fault-injection harness, no soak results                    | M6                                     |
-| No threat model, SBOM or secret scanning                       | M7                                     |
-| No signing, no updater, no reproducible-build proof            | M8                                     |
-| No performance budgets measured on a reference machine         | M9                                     |
-| `main.cjs` wiring is reviewed, not enforced                    | M0 remainder                           |
+| Gap                                                            | Milestone                                           |
+| -------------------------------------------------------------- | --------------------------------------------------- |
+| No transition history or deadline enforcement on session state | M1 (closed — `session-fsm.cjs`)                     |
+| No crash/stall handlers or per-session health record           | M1 (closed — `supervision.cjs`)                     |
+| Identity configuration, per session                            | M1 (closed — `identity.cjs`, ADR-0012)              |
+| Remembered geometry and per-monitor bounds                     | M1 (closed — `geometry.cjs`)                        |
+| Per-session route as infrastructure, honestly reported         | M1 (closed — `proxy.cjs`)                           |
+| No profile lifecycle (establish, check, delete)                | M1 (closed — `profile-manager.cjs`)                 |
+| No corruption detection on stored session data                 | M1 (closed — `profile-integrity.cjs`)               |
+| Config is hand-validated in `model.cjs`; venues are hardcoded  | M2 (closed — `config-schema.cjs`)                   |
+| The roadmap sketch's five-section config is not built          | M2 remainder                                        |
+| Corpus is seven positive fixtures and no negatives             | M3 (harness in: `test/fixtures/vision-corpus.json`) |
+| Region ranking unvalidated against the live site               | M3 (needs a live pass)                              |
+| No labelled frame corpus, so accuracy is unmeasurable          | M3 remainder                                        |
+| No regression harness with enforced accuracy thresholds        | M3 remainder                                        |
+| No structured logging, metrics or diagnostics bundle           | M4                                                  |
+| No design system, i18n or accessibility audit                  | M5                                                  |
+| No fault-injection harness, no soak results                    | M6                                                  |
+| No threat model, SBOM or secret scanning                       | M7                                                  |
+| No signing, no updater, no reproducible-build proof            | M8                                                  |
+| No performance budgets measured on a reference machine         | M9                                                  |
+| `main.cjs` wiring is reviewed, not enforced                    | M0 remainder                                        |

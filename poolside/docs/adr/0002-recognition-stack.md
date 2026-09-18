@@ -1,8 +1,9 @@
 # ADR-0002 — Recognition stack: Tesseract + Sharp, revisited at M3
 
-- **Status:** Accepted (provisional — revisit in M3 with the labelled corpus)
+- **Status:** Accepted (provisional — still unsettled: the corpus _harness_ landed in M3, the ≥ 300 labelled
+  frames this record's criterion 1 requires did not. See `0015-vision-recognition-processing.md`.)
 - **Date:** 2026-09-18
-- **Related:** `src/game-screen.cjs`, `src/screen-reader-pool.cjs`, `test/fixtures/`, roadmap M3
+- **Related:** `src/game-screen.cjs`, `src/screen-reader-pool.cjs`, `src/vision-frame.cjs`, `test/fixtures/`, roadmap M3
 
 ## Context
 
@@ -34,6 +35,22 @@ If any criterion fails and template/feature matching or a small ONNX classifier 
 switch. The classifier's contract (`{state, score, evidence}`) is deliberately engine-agnostic so
 that swap is contained in one module.
 
+## M3 progress, and what is still unmet
+
+M3 landed the foundations this record depends on and did **not** settle it. Recorded here so the next reader
+knows exactly where the evidence stops:
+
+| Criterion                                                          | State after M3's foundations                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. ≥ 0.90 macro-F1 on a held-out split of ≥ 300 labelled frames    | **Cannot be measured.** There are seven recorded fixtures; the corpus added in M3 is 14 _synthetic layouts_ derived from them and from the named failure modes. They drive the matching logic and pin the coordinate rules, and they are explicitly not a labelled frame set.                                     |
+| 2. ≤ 800 ms p95 capture → classified                               | Unmeasured. The pool and the timeout exist; no latency series has been recorded on a reference machine (roadmap M9 owns the reference machine).                                                                                                                                                                   |
+| 3. `unknown` rather than a confident wrong answer on the negatives | **Partly answered, and the answer is uncomfortable.** The negative classes now exist as fixtures, and the result is that a _single misread gate term_ turns a known screen into `unknown` — see the `scaled-window` frame. The stack does not return a confident wrong answer; it returns an unhelpful right one. |
+
+So the stack stays provisional on evidence, not on preference. Two things would settle it, in order: label real
+frames (the seven fixtures plus live captures) to the ≥ 300 the criterion asks for, then run the regression
+harness with thresholds. Until then, changing `RULES` would be changing recognition behaviour with no way to
+measure the result.
+
 ## Consequences
 
 ### Positive
@@ -61,5 +78,10 @@ that swap is contained in one module.
 
 ## Enforcement
 
-Review only, for now. M3's regression harness is the mechanism: it will fail the build if accuracy
-drops below the thresholds above, so whichever engine is in place must hold the bar to stay in.
+Review only for the engine choice, and it stays review-only until the measurement exists — this record is
+provisional and M3 did not settle it, as recorded above. What _is_ enforced now is everything that must hold
+whichever engine is in place: the coordinate and boundary rules (ADR-0015, `test/vision-pipeline.test.cjs`),
+the corpus's structure, coverage and self-description (`test/vision-corpus.test.cjs`), and the rule engine's
+existing behaviour (`test/classification.test.cjs`). The regression harness with accuracy thresholds — the
+mechanism this record originally named — is the remaining M3 deliverable, and it needs the labelled corpus
+first.

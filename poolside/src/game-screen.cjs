@@ -1,6 +1,7 @@
 const { createWorker, PSM } = require('tesseract.js');
 const language = require('@tesseract.js-data/eng');
 const sharp = require('sharp');
+const { handles } = require('./vision-pipeline.cjs');
 
 // Ordered rules. Order encodes precedence, not score: the first state that satisfies its gate
 // wins. This matters because real screens overlap — the table selector renders the lobby's
@@ -102,11 +103,10 @@ async function createScreenReader() {
       let result = classify(data.text + '\n' + contrast.data.text);
       let source = 'full-frame';
       if (result.state === 'unknown') {
-        const bottom = await sharp(image)
-          .extract({ left: 0, top: Math.floor(height * 0.8), width, height: height - Math.floor(height * 0.8) })
-          .resize({ width: width * 2 })
-          .png()
-          .toBuffer();
+        // The band ratio and its magnification come from the pipeline (ADR-0015), so the geometry the second
+        // pass depends on has one definition instead of a literal repeated here.
+        const { bottomBand } = handles({ width, height });
+        const bottom = await sharp(image).extract(bottomBand.rect).resize(bottomBand.resize).png().toBuffer();
         const details = await worker.recognize(bottom);
         const detailResult = classify(details.data.text);
         if (['loading', 'connecting'].includes(detailResult.state)) {

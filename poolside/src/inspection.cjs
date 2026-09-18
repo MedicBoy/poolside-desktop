@@ -4,6 +4,7 @@
 // failure text can be unit tested without an Electron window.
 
 const { GAME_REGION_PROBE, REGION_REASONS } = require('./game-region.cjs');
+const { toCaptureRect, checkCapture, describeFrame } = require('./vision-frame.cjs');
 const { officialPage } = require('./shop-recovery.cjs');
 const { sessions } = require('./state.cjs');
 
@@ -25,10 +26,10 @@ function describeRegionFailure(region) {
 }
 
 /**
- * @param {{getAccount: Function, publish: Function, log: Function, screenReaders: {acquire: Function, release: Function}}} deps
+ * @param {{getAccount: Function, publish: Function, log: Function, screenReaders: {acquire: Function, release: Function}, deviceScaleFactor?: () => number}} deps
  */
 function createInspector(deps) {
-  const { getAccount, publish, log, screenReaders } = deps;
+  const { getAccount, publish, log, screenReaders, deviceScaleFactor } = deps;
 
   /**
    * Capture the game surface once and classify it. The result is a timestamped observation, never
@@ -56,18 +57,31 @@ function createInspector(deps) {
       const work = async () => {
         const region = await wc.executeJavaScriptInIsolatedWorld(999, [{ code: GAME_REGION_PROBE }]);
         if (!region || !region.ok) throw new Error(describeRegionFailure(region));
+        // The probe measures the surface in page CSS pixels; capturePage takes DIPs. That conversion, and the
+        // check that the image which came back is the region that was asked for, live in vision-frame.cjs
+        // (ADR-0015) rather than inline here, because a wrong conversion crops plausible pixels and OCR then
+        // answers confidently from the wrong ones.
         const zoom = wc.getZoomFactor();
-        const rect = {
-          x: Math.floor(region.rect.x * zoom),
-          y: Math.floor(region.rect.y * zoom),
-          width: Math.floor(region.rect.width * zoom),
-          height: Math.floor(region.rect.height * zoom)
-        };
-        const picture = await wc.capturePage(rect);
+        const requested = toCaptureRect(region.rect, zoom);
+        if (!requested.ok) throw new Error(requested.message);
+        const picture = await wc.capturePage(requested.rect);
         if (picture.isEmpty()) throw new Error('No game image was available.');
+        const size = picture.getSize();
+        const captured = checkCapture({
+          pageRect: region.rect,
+          zoom,
+          imageWidth: size.width,
+          imageHeight: size.height,
+          deviceScaleFactor: typeof deviceScaleFactor === 'function' ? deviceScaleFactor() : undefined
+        });
+        const captureNotes = captured.ok ? captured.notes : [];
         const entry = await screenReaders.acquire();
         try {
           if (expired) throw new Error('Screen inspection timed out.');
+          if (captureNotes.length) {
+            const described = captured.ok ? describeFrame(captured.frame) : 'no frame';
+            log(`${account.name}: capture note — ${described}: ${captureNotes.join('; ')}.`, 'warning');
+          }
           const reader = await entry.reader;
           return await reader.inspect(picture.resize({ width: CAPTURE_WIDTH }).toPNG());
         } finally {

@@ -21,6 +21,7 @@ costs us. They are written for whoever reads this codebase in six months — pos
 | [0012](0012-session-identity-surface.md)           | Session identity surface, and the limits of it         | Accepted               |
 | [0013](0013-profile-lifecycle-and-repair.md)       | Profile lifecycle, generation, and what repair may do  | Accepted               |
 | [0014](0014-configuration-validation-semantics.md) | Configuration validation semantics and the drift guard | Accepted               |
+| [0015](0015-vision-recognition-processing.md)      | Vision capture: coordinates, transforms, boundaries    | Accepted               |
 
 ## Template
 

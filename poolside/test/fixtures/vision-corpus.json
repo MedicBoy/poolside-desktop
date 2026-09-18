@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "disclaimer": "Structured recognition fixtures, not measurements. Each frame is a synthetic text layout derived from the seven recorded fixture screenshots and from the failure modes named in the roadmap (D4/D5). The wording is what the real screens show; the bounding boxes are plausible placements inside a 1200x675 surface, NOT hand-measured ground truth. This corpus drives the matching logic and pins the coordinate rules; it does not measure OCR accuracy, and a frame passing here says nothing about the live site.",
+  "usage": "test/vision-corpus.test.cjs builds a vision pipeline over each frame's surface, parses the lines into a positioned grid, and asserts the rule engine returns the stated state from the grid's text. The coordinate rules are asserted over the same boxes.",
+  "surfaceDefaults": { "width": 1200, "height": 675, "zoom": 1, "deviceScaleFactor": 1 },
+  "frames": [
+    {
+      "id": "lobby-recorded",
+      "state": "lobby",
+      "source": "recorded-lobby.png",
+      "note": "The lobby: the rule needs play + special + 9 ball, and one of box/unlock.",
+      "lines": [
+        { "text": "PLAY", "box": { "x": 548, "y": 596, "width": 104, "height": 36 }, "confidence": 94 },
+        { "text": "SPECIAL", "box": { "x": 812, "y": 132, "width": 118, "height": 30 }, "confidence": 91 },
+        { "text": "9 BALL", "box": { "x": 96, "y": 132, "width": 112, "height": 30 }, "confidence": 93 },
+        { "text": "UNLOCK", "box": { "x": 1096, "y": 596, "width": 92, "height": 28 }, "confidence": 88 },
+        { "text": "CLUBS", "box": { "x": 142, "y": 640, "width": 74, "height": 26 }, "confidence": 90 },
+        { "text": "MISSIONS", "box": { "x": 244, "y": 640, "width": 104, "height": 26 }, "confidence": 89 }
+      ]
+    },
+    {
+      "id": "table-selection-recorded",
+      "state": "table-selection",
+      "source": "recorded-table.png",
+      "note": "Two cells share one visual row: entry fee and prize are on the same line of the table card, which is what the row grouping has to get right.",
+      "lines": [
+        { "text": "ENTRY FEE 100", "box": { "x": 120, "y": 300, "width": 190, "height": 32 }, "confidence": 90 },
+        { "text": "PRIZE 500", "box": { "x": 330, "y": 306, "width": 132, "height": 30 }, "confidence": 92 },
+        { "text": "BERLIN", "box": { "x": 120, "y": 220, "width": 118, "height": 34 }, "confidence": 95 },
+        { "text": "1,482 PLAYERS ONLINE", "box": { "x": 120, "y": 380, "width": 286, "height": 26 }, "confidence": 87 },
+        { "text": "ROME", "box": { "x": 120, "y": 470, "width": 96, "height": 34 }, "confidence": 93 },
+        { "text": "ENTRY FEE 2,500", "box": { "x": 120, "y": 550, "width": 210, "height": 32 }, "confidence": 89 }
+      ]
+    },
+    {
+      "id": "lucky-promotion",
+      "state": "lucky-promotion",
+      "source": "lucky.png",
+      "note": "The promotion and the plain lucky-shot screen share the word lucky, so the promotion is evaluated first.",
+      "lines": [
+        { "text": "COME BACK EVERY DAY", "box": { "x": 360, "y": 148, "width": 480, "height": 40 }, "confidence": 93 },
+        { "text": "PLAY FREE", "box": { "x": 520, "y": 560, "width": 160, "height": 34 }, "confidence": 92 },
+        { "text": "GOLD BALL", "box": { "x": 500, "y": 260, "width": 200, "height": 30 }, "confidence": 90 }
+      ]
+    },
+    {
+      "id": "lucky-shot",
+      "state": "lucky-shot",
+      "source": "lucky.png",
+      "note": "The promotion wording is absent, so the promotion gate fails and the short form wins.",
+      "lines": [
+        { "text": "LUCKY SHOT", "box": { "x": 420, "y": 180, "width": 360, "height": 44 }, "confidence": 94 },
+        { "text": "PLAY FREE", "box": { "x": 520, "y": 560, "width": 160, "height": 34 }, "confidence": 91 }
+      ]
+    },
+    {
+      "id": "connecting",
+      "state": "connecting",
+      "source": "connecting.png",
+      "note": "A whole-word match: the same frame must not match through a longer word containing it.",
+      "lines": [{ "text": "CONNECTING", "box": { "x": 500, "y": 320, "width": 200, "height": 34 }, "confidence": 89 }]
+    },
+    {
+      "id": "loading",
+      "state": "loading",
+      "source": "loading.png",
+      "note": "The small loading label from the first recording frame, placed in the bottom band the second pass reads.",
+      "lines": [{ "text": "LOADING", "box": { "x": 540, "y": 600, "width": 124, "height": 30 }, "confidence": 72 }]
+    },
+    {
+      "id": "table-fixture",
+      "state": "table-selection",
+      "source": "table.png",
+      "note": "The table selector rendered over the lobby wording: table-selection is evaluated before lobby for exactly this overlap.",
+      "lines": [
+        { "text": "ENTRY FEE 20,000", "box": { "x": 140, "y": 336, "width": 224, "height": 32 }, "confidence": 88 },
+        { "text": "PRIZE 100,000", "box": { "x": 390, "y": 336, "width": 178, "height": 32 }, "confidence": 90 },
+        { "text": "PLAY", "box": { "x": 548, "y": 596, "width": 104, "height": 36 }, "confidence": 62 },
+        { "text": "9 BALL", "box": { "x": 96, "y": 132, "width": 112, "height": 30 }, "confidence": 64 },
+        { "text": "CUSHION SHOT", "box": { "x": 880, "y": 470, "width": 190, "height": 28 }, "confidence": 85 }
+      ]
+    },
+    {
+      "id": "lobby-hint-misread",
+      "state": "lobby",
+      "source": "lobby.png",
+      "note": "A misread hint must not change the outcome: hints are reported, never gating. This is the counterweight to scaled-window below, where a misread gate term does change it.",
+      "lines": [
+        { "text": "PLAY", "box": { "x": 548, "y": 596, "width": 104, "height": 36 }, "confidence": 93 },
+        { "text": "SPECIAL", "box": { "x": 812, "y": 132, "width": 118, "height": 30 }, "confidence": 92 },
+        { "text": "9 BALL", "box": { "x": 96, "y": 132, "width": 112, "height": 30 }, "confidence": 91 },
+        { "text": "UNLOCK", "box": { "x": 1096, "y": 596, "width": 92, "height": 28 }, "confidence": 90 },
+        {
+          "text": "PLAVERS ONLINE",
+          "box": { "x": 120, "y": 250, "width": 168, "height": 26 },
+          "confidence": 48,
+          "words": [
+            { "text": "PLAVERS", "confidence": 44 },
+            { "text": "ONLINE", "confidence": 91 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "blank-transition",
+      "state": "unknown",
+      "source": "none (negative)",
+      "note": "A blank or dark frame between screens. No text at all is the correct input, and the classifier must not invent a state from nothing.",
+      "lines": []
+    },
+    {
+      "id": "mid-load-partial",
+      "state": "unknown",
+      "source": "none (negative)",
+      "note": "Words still drawing: truncated fragments at low confidence. 'LOAD' is not 'loading', and a partial frame must not be reported as the state it is becoming.",
+      "lines": [
+        { "text": "LOAD", "box": { "x": 520, "y": 580, "width": 92, "height": 30 }, "confidence": 41 },
+        { "text": "CONNEC", "box": { "x": 300, "y": 600, "width": 130, "height": 28 }, "confidence": 38 }
+      ]
+    },
+    {
+      "id": "dialog-covering",
+      "state": "unknown",
+      "source": "none (negative)",
+      "note": "A dialog over the game. The region probe refuses this case before capture as login-or-dialog; this frame exists for the race where a dialog appears after the probe passes.",
+      "lines": [
+        { "text": "ARE YOU SURE?", "box": { "x": 430, "y": 280, "width": 340, "height": 40 }, "confidence": 92 },
+        { "text": "CANCEL", "box": { "x": 470, "y": 380, "width": 130, "height": 34 }, "confidence": 90 },
+        { "text": "OK", "box": { "x": 640, "y": 380, "width": 76, "height": 34 }, "confidence": 91 }
+      ]
+    },
+    {
+      "id": "shop-page",
+      "state": "unknown",
+      "source": "none (negative)",
+      "note": "The web shop rather than the game. Shop detection is a separate mechanism from classification; this asserts the classifier does not mistake shop wording for a game state.",
+      "lines": [
+        { "text": "BUY CASH", "box": { "x": 200, "y": 260, "width": 180, "height": 36 }, "confidence": 94 },
+        { "text": "SPECIAL OFFER", "box": { "x": 200, "y": 340, "width": 236, "height": 32 }, "confidence": 92 },
+        { "text": "ADD TO CART", "box": { "x": 200, "y": 440, "width": 200, "height": 34 }, "confidence": 93 }
+      ]
+    },
+    {
+      "id": "non-english",
+      "state": "unknown",
+      "source": "none (negative)",
+      "note": "A localised interface. The recogniser is English-only, so non-English wording must be unknown rather than a confident guess from a partly-similar word.",
+      "lines": [
+        { "text": "VERBINDEN", "box": { "x": 500, "y": 320, "width": 200, "height": 34 }, "confidence": 88 },
+        { "text": "WIRD GELADEN", "box": { "x": 480, "y": 590, "width": 240, "height": 30 }, "confidence": 86 }
+      ]
+    },
+    {
+      "id": "wrong-aspect-surface",
+      "state": "unknown",
+      "source": "none (negative)",
+      "note": "A page-wide background canvas selected by mistake: browser chrome wording, and one cell whose box runs past the right edge so the clipping rule is exercised on a real frame.",
+      "clipped": true,
+      "lines": [
+        { "text": "Home", "box": { "x": 40, "y": 24, "width": 70, "height": 26 }, "confidence": 90 },
+        { "text": "Sign in", "box": { "x": 1140, "y": 24, "width": 120, "height": 26 }, "confidence": 89 },
+        { "text": "Help", "box": { "x": 40, "y": 660, "width": 64, "height": 30 }, "confidence": 91 }
+      ]
+    },
+    {
+      "id": "scaled-window",
+      "state": "unknown",
+      "source": "none (negative)",
+      "note": "The decisive negative: a window captured at half density, where one gate term is misread. The gate fails and the result is unknown, because the classifier scores but does not recover from a single misread term. This frame is the measured justification for loosening the gates in classifier v2.",
+      "surface": { "width": 600, "height": 338, "zoom": 1, "deviceScaleFactor": 0.5 },
+      "lines": [
+        { "text": "PLAY", "box": { "x": 274, "y": 300, "width": 52, "height": 18 }, "confidence": 61 },
+        { "text": "SPECIAI", "box": { "x": 406, "y": 66, "width": 59, "height": 15 }, "confidence": 43 },
+        { "text": "9 BALL", "box": { "x": 48, "y": 66, "width": 56, "height": 15 }, "confidence": 58 },
+        { "text": "UNLOCK", "box": { "x": 548, "y": 300, "width": 46, "height": 14 }, "confidence": 39 }
+      ]
+    }
+  ]
+}
