@@ -54,6 +54,14 @@ The frames are **derived layouts, not labelled screenshots**: the wording is wha
 
 Capture coordinates are owned by `src/vision-frame.cjs` (ADR-0015). One capture crosses four coordinate systems: the page's CSS pixels where the surface is measured, the DIP rect `capturePage` takes, the captured image's own pixels at your display's scale factor, and the resized image the recogniser reads. The conversion, the clipping rules and the achieved density are now reported rather than assumed, and a capture taken _below_ the page's own scale is called out in the activity feed — that is the condition under which a small label gets misread. The band the second OCR pass reads is derived from one place rather than recomputed at the call site.
 
+## Timeline and diagnostics
+
+The dashboard's **Activity** view shows two things the app already recorded but never as one sequence. The session state machine keeps the last 50 transitions per session, and the activity feed keeps the last 100 entries; `src/timeline-engine.cjs` compiles them into a single ordered stream (newest last), and `src/timeline-query.cjs` indexes and queries it. Both are pure modules with no Electron dependency, so the ordering rule is tested without a window. The timeline is **derived on every snapshot, never stored**: there is no log file to rotate, and the history lives and dies with the process.
+
+`src/dashboard-telemetry.cjs` collates what the four subsystems measure — the directory size and the configured `quotaBytes` ceiling, the generation counter, corruption history and the crash flags — into layers that differ by sensitivity. A value nobody has measured is `null`, never `0`.
+
+Only the `export` layer may leave the machine (ADR-0010). **Diagnostics preview** in the Activity view asks the main process for that layer: `src/telemetry-redaction.cjs` rewrites every string — account names become `account 1`, addresses and paths become `[redacted:ipv4]` — and the handler then scans its own payload and **refuses** to return one that still carries a name, an address, a path or a token-shaped string. The scan is a floor, not a proof: it catches the shapes it knows and says so. Nothing is written to disk by this path; the bundle file, durable logs, frame timings and crash reporting remain M4's remainder.
+
 ## Development
 
 Layout: `main.cjs` is a composition root only. Session windows are `windows.cjs`, saved-session

@@ -8,6 +8,8 @@
 const { checkPublicIP } = require('./network.cjs');
 const model = require('./model.cjs');
 const configValidator = require('./config-validator.cjs');
+const timelineTransfer = require('./timeline-transfer.cjs');
+const telemetryRedaction = require('./telemetry-redaction.cjs');
 const { log, snapshot, save, publish, getAccount } = require('./workspace.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const { messageOf } = require('./errors.cjs');
@@ -102,6 +104,28 @@ function createIpc(deps) {
     });
     handle('profiles:refresh', () => {
       profiles.measure(workspace.data.accounts);
+    });
+    handle('diagnostics:preview', () => {
+      // The only thing the dashboard can ask for that is shaped like something leaving the machine, so it is
+      // cleaned and then *scanned*, and a payload that fails its own scan is refused rather than returned with a
+      // warning. ADR-0010 commits M4 to a bundle that is provably clean; a caller that has to remember to check
+      // is not a guarantee.
+      const current = snapshot();
+      const payload = telemetryRedaction.exportLayer(current.telemetry);
+      payload.timeline = timelineTransfer.redact(current.timeline.entries, /** @type {any[]} */ (current.accounts)).entries.map(entry => ({
+        ...entry,
+        message: entry.message ? telemetryRedaction.stripSecretShapes(entry.message) : entry.message
+      }));
+      const forbidden = /** @type {any[]} */ (current.accounts).map(account => account.name);
+      const findings = telemetryRedaction.findSecrets(payload, { forbidden });
+      if (findings.length) {
+        throw new Error(
+          `The diagnostics payload was refused: it still carries ${findings.length} item(s) that must not leave this machine (${findings
+            .map(item => `${item.path} [${item.kind}]`)
+            .join(', ')}).`
+        );
+      }
+      return { payload, entries: payload.timeline.length, clean: true };
     });
     handle('account:return-game', id => windows.returnToGame(id));
     handle('account:inspect', id => inspector.inspectGame(id));

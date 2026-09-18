@@ -91,6 +91,21 @@ async function runSelfTest(ctx) {
   assert.equal(configBoundary.limit, 25);
   assert.equal(configBoundary.hasJunk, false, 'an undeclared key must not reach the workspace document');
 
+  // --- The diagnostics payload: anonymised, then scanned, through the real bridge ----------------
+  // ADR-0010 commits this to a payload that carries no account names, and the handler refuses to hand one over
+  // that fails its own scan. Both halves are asserted here against the accounts this suite created.
+  const diagnostics = await dashboard.webContents.executeJavaScript(`(async () => {
+    const preview = await poolside.diagnosticsPreview();
+    return { ok: preview.ok, error: String(preview.error || ''), clean: preview.ok ? preview.value.clean : false, entries: preview.ok ? preview.value.entries : -1, serialised: preview.ok ? JSON.stringify(preview.value.payload) : '' };
+  })()`);
+  assert.equal(diagnostics.ok, true, `the diagnostics payload was refused: ${diagnostics.error}`);
+  assert.equal(diagnostics.clean, true);
+  assert.ok(diagnostics.entries >= 0, 'the payload reports how many timeline entries it carries');
+  for (const name of ['Test receiver', 'Test sender']) {
+    assert.equal(diagnostics.serialised.includes(name), false, `${name} must not appear in an exportable payload`);
+  }
+  assert.equal(/[A-Za-z]:\\\\/.test(diagnostics.serialised), false, 'and neither must a filesystem path');
+
   // --- Navigation, shop recovery, screen inspection and rejection, against an HTTPS fixture -----
   await runFixtureScenarios(ctx, assert, receiver);
 
@@ -105,7 +120,7 @@ async function runSelfTest(ctx) {
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, unavailable transfer control, and the configuration schema boundary refusing an unknown table before it is stored.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, unavailable transfer control, the configuration schema boundary refusing an unknown table before it is stored, and a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path.'
   );
   app.exit(0);
 }

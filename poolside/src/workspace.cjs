@@ -4,10 +4,18 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const model = require('./model.cjs');
+const dashboardTelemetry = require('./dashboard-telemetry.cjs');
 const { messageOf } = require('./errors.cjs');
 const { events, sessions, workspace, profileReports } = require('./state.cjs');
+const { view: timelineView } = require('./timeline-transfer.cjs');
 
 const MAX_EVENTS = 100;
+
+/**
+ * How much of the compiled timeline one snapshot carries: the snapshot is broadcast on every state change, so the
+ * full 400-entry stream would put a few hundred kilobytes on the wire repeatedly.
+ */
+const TIMELINE_VIEW_LIMIT = 100;
 
 /**
  * Record an activity entry and push a fresh snapshot to the dashboard.
@@ -35,28 +43,40 @@ function profileView(account) {
 
 /**
  * The dashboard-facing view of the workspace: accounts with their live session state.
- * @returns {{accounts: object[], settings: import('./types.cjs').WorkspaceSettings, events: import('./types.cjs').ActivityEvent[], readOnly: boolean, version: string}}
+ * @returns {{accounts: object[], settings: import('./types.cjs').WorkspaceSettings, events: import('./types.cjs').ActivityEvent[], timeline: any, telemetry: any, readOnly: boolean, version: string}}
  */
 function snapshot() {
+  const accounts = workspace.data.accounts
+    .filter(a => !a.archived)
+    .map(a => {
+      const group = sessions.get(a.id);
+      return {
+        ...a,
+        // A session with no group is closed: `closed` is a state, not a stored one.
+        status: group && group.fsm ? group.fsm.state : 'closed',
+        statusReason: group && group.fsm ? group.fsm.reason : null,
+        health: group && group.health ? group.health : null,
+        footprint: group && group.footprint ? group.footprint : null,
+        profile: profileView(a),
+        network: group && group.network ? group.network : null,
+        gameScreen: group && group.gameScreen ? group.gameScreen : null
+      };
+    });
+  // Compiled from the two rings that already record history — FSM transitions and the activity feed — rather
+  // than a third store that could drift from them (ADR-0016).
+  const timelines = workspace.data.accounts
+    .map(a => {
+      const group = sessions.get(a.id);
+      return group && group.fsm ? { id: a.id, name: a.name, transitions: group.fsm.history() } : null;
+    })
+    .filter(Boolean);
+  const compiled = timelineView({ sessions: timelines, events, limit: TIMELINE_VIEW_LIMIT });
   return {
-    accounts: workspace.data.accounts
-      .filter(a => !a.archived)
-      .map(a => {
-        const group = sessions.get(a.id);
-        return {
-          ...a,
-          // A session with no group is closed: `closed` is a state, not a stored one.
-          status: group && group.fsm ? group.fsm.state : 'closed',
-          statusReason: group && group.fsm ? group.fsm.reason : null,
-          health: group && group.health ? group.health : null,
-          footprint: group && group.footprint ? group.footprint : null,
-          profile: profileView(a),
-          network: group && group.network ? group.network : null,
-          gameScreen: group && group.gameScreen ? group.gameScreen : null
-        };
-      }),
+    accounts,
     settings: workspace.data.settings,
     events,
+    timeline: compiled,
+    telemetry: dashboardTelemetry.build(accounts, { version: workspace.version, timeline: compiled }),
     readOnly: workspace.readOnly,
     version: workspace.version
   };
@@ -123,10 +143,8 @@ function rememberWindowGeometry(id, record) {
 }
 
 /**
- * Merge a patch into one account's persisted profile bookkeeping, or clear it with `null`.
- *
- * Never throws. This is bookkeeping *about* a profile, and losing a counter must not be able to fail the
- * operation that triggered it — the same reasoning as remembered window geometry.
+ * Merge a patch into one account's persisted profile bookkeeping, or clear it with `null`. Never throws: losing a
+ * counter must not fail the operation that triggered it.
  * @param {string} id @param {object|null} patch
  */
 function updateAccountProfile(id, patch) {
@@ -176,5 +194,6 @@ module.exports = {
   rememberWindowGeometry,
   updateAccountProfile,
   profileView,
-  MAX_EVENTS
+  MAX_EVENTS,
+  TIMELINE_VIEW_LIMIT
 };

@@ -147,6 +147,23 @@ function renderAccounts() {
     )
     .join('');
 }
+// The merged history, rendered with the activity feed's own markup so it inherits the same styling and cannot
+// drift from it: a transition shows the states it moved between, an activity entry shows its message.
+function timelineRows(entries) {
+  return (
+    entries
+      .map(entry => {
+        const mark = entry.level === 'warning' ? '△' : entry.source === 'session' ? '→' : '•';
+        const label =
+          entry.source === 'session'
+            ? `${entry.accountName ? `${entry.accountName}: ` : ''}${entry.from} → ${entry.to} (${entry.event || 'transition'})${entry.reason ? ` — ${entry.reason}` : ''}`
+            : entry.message || '';
+        const stamp = entry.at ? new Date(entry.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+        return `<div class="event"><span class="event-mark ${entry.level}">${mark}</span><span class="event-message">${escapeHtml(label)}</span><time datetime="${escapeHtml(entry.at)}">${stamp}</time></div>`;
+      })
+      .join('') || '<p class="muted">Session transitions and activity will be merged here as sessions run.</p>'
+  );
+}
 function eventRows(events) {
   return (
     events
@@ -174,6 +191,12 @@ function render(next) {
   $('#arrange').disabled = !open;
   $('#recent-events').innerHTML = eventRows(state.events.slice(0, 3));
   $('#all-events').innerHTML = eventRows(state.events);
+  // The timeline is the two histories *merged*: session transitions and activity entries in one order, which is
+  // what makes a failure readable as a sequence rather than as two lists (ADR-0016).
+  const timeline = (state.timeline && state.timeline.entries) || [];
+  $('#timeline').innerHTML = timeline.length
+    ? `<div class="section-heading"><h2>Timeline <span class="count-pill">${timeline.length}</span></h2><span class="muted">transitions and activity, oldest first</span></div>${timelineRows(timeline.slice(-12).reverse())}`
+    : eventRows([]);
   renderAccounts();
 }
 document.addEventListener('click', async event => {
@@ -181,6 +204,19 @@ document.addEventListener('click', async event => {
   if (!button || button.disabled) return;
   if (button.dataset.view) view(button.dataset.view);
   if (button.classList.contains('add-account')) openDialog();
+  if (button.dataset.action === 'diagnostics-preview') {
+    // Its own branch, before the account-action chain: that chain ends in `poolside.open(id)` as the fallback,
+    // so an action with no account would silently try to open one.
+    await call(async () => {
+      const preview = await poolside.diagnosticsPreview();
+      if (preview.ok) {
+        const s = preview.value.payload.summary;
+        toast(`Diagnostics payload: ${preview.value.entries} timeline entries, ${s.accounts} account(s), no names, addresses or paths.`);
+      }
+      return preview;
+    });
+    return;
+  }
   if (button.dataset.action) {
     const { action, id } = button.dataset;
     await call(() =>

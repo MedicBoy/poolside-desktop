@@ -51,6 +51,11 @@ and a pooled OCR worker.
 │  vision-frame.cjs   capture coordinates + boundary rules (pure)             │
 │  vision-grid.cjs    recognised text into positioned cells and rows (pure)   │
 │  vision-pipeline.cjs the capture seam: frame, handles and grid (pure)       │
+│  timeline-engine.cjs  the two histories as one ordered stream (pure)        │
+│  timeline-query.cjs   index, query and summarise a stream (pure)            │
+│  timeline-transfer.cjs redaction: what may leave the machine (pure)         │
+│  dashboard-telemetry.cjs collate metrics into layers (pure)                 │
+│  telemetry-redaction.cjs the export projection and secret scanner (pure)    │
 │  game-screen.cjs  Tesseract + Sharp pipeline, classify()                    │
 │  screen-reader-pool.cjs  warm OCR workers, queue, idle retirement           │
 │  network.cjs      ipify check through a given session                       │
@@ -77,7 +82,7 @@ and a pooled OCR worker.
 | `main.cjs` is wiring only            | review + the size ceiling    |
 
 The modules in `PURE_MODULES` (`test/architecture.test.cjs`) must not import `electron`, so every one of
-them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `config-schema`, `config-walk`, `config-validator`, `session-config`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`, `vision-frame`, `vision-grid`, `vision-pipeline`.
+them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `config-schema`, `config-walk`, `config-validator`, `session-config`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`, `vision-frame`, `vision-grid`, `vision-pipeline`, `timeline-engine`, `timeline-query`, `timeline-transfer`, `dashboard-telemetry`, `telemetry-redaction`.
 
 Dependency direction is one-way. `state.cjs` is a leaf that others read. Feature modules receive what
 they need as an injected `deps` object, so `windows.cjs` can take `returnToGame` from itself without
@@ -359,8 +364,16 @@ it saw (ADR-0009).
 Today: an in-memory activity feed (last 100 events) with `info`/`warning` kinds, surfaced in the
 dashboard, plus console output. It records actions, not credentials and not full URLs.
 
-M4 adds the structured event bus, JSON logs with rotation, per-session metrics, frame-timing
-instrumentation and a redacted diagnostics bundle with a secret-scanner test.
+M4 compiles that feed together with the session FSM's transition history (last 50 per session) into one
+ordered **diagnostic timeline** (`timeline-engine.cjs`), reads it with `timeline-query.cjs`, and collates the
+per-account metrics — measured size, configured ceiling, generation, crash flags — into layers
+(`dashboard-telemetry.cjs`). The layers differ by sensitivity, and only the `export` layer may leave the
+machine: `telemetry-redaction.cjs` produces it, rewriting every string, and `diagnostics:preview` refuses to
+return a payload that fails its own scan (ADR-0016). Addresses, filesystem paths and token-shaped strings are
+matched by shape; account names by literal.
+
+Still to come in M4: durable JSON logs with rotation, the diagnostics bundle as a file, frame-timing
+instrumentation, and validation of that bundle against scripted failure scenarios.
 
 ## 9. Testing architecture
 
@@ -492,25 +505,29 @@ concatenation of its two OCR passes. Changing what it reads needs the labelled c
 
 Carried deliberately, with the milestone that closes each:
 
-| Gap                                                            | Milestone                                           |
-| -------------------------------------------------------------- | --------------------------------------------------- |
-| No transition history or deadline enforcement on session state | M1 (closed — `session-fsm.cjs`)                     |
-| No crash/stall handlers or per-session health record           | M1 (closed — `supervision.cjs`)                     |
-| Identity configuration, per session                            | M1 (closed — `identity.cjs`, ADR-0012)              |
-| Remembered geometry and per-monitor bounds                     | M1 (closed — `geometry.cjs`)                        |
-| Per-session route as infrastructure, honestly reported         | M1 (closed — `proxy.cjs`)                           |
-| No profile lifecycle (establish, check, delete)                | M1 (closed — `profile-manager.cjs`)                 |
-| No corruption detection on stored session data                 | M1 (closed — `profile-integrity.cjs`)               |
-| Config is hand-validated in `model.cjs`; venues are hardcoded  | M2 (closed — `config-schema.cjs`)                   |
-| The roadmap sketch's five-section config is not built          | M2 remainder                                        |
-| Corpus is seven positive fixtures and no negatives             | M3 (harness in: `test/fixtures/vision-corpus.json`) |
-| Region ranking unvalidated against the live site               | M3 (needs a live pass)                              |
-| No labelled frame corpus, so accuracy is unmeasurable          | M3 remainder                                        |
-| No regression harness with enforced accuracy thresholds        | M3 remainder                                        |
-| No structured logging, metrics or diagnostics bundle           | M4                                                  |
-| No design system, i18n or accessibility audit                  | M5                                                  |
-| No fault-injection harness, no soak results                    | M6                                                  |
-| No threat model, SBOM or secret scanning                       | M7                                                  |
-| No signing, no updater, no reproducible-build proof            | M8                                                  |
-| No performance budgets measured on a reference machine         | M9                                                  |
-| `main.cjs` wiring is reviewed, not enforced                    | M0 remainder                                        |
+| Gap                                                                   | Milestone                                                            |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| No transition history or deadline enforcement on session state        | M1 (closed — `session-fsm.cjs`)                                      |
+| No crash/stall handlers or per-session health record                  | M1 (closed — `supervision.cjs`)                                      |
+| Identity configuration, per session                                   | M1 (closed — `identity.cjs`, ADR-0012)                               |
+| Remembered geometry and per-monitor bounds                            | M1 (closed — `geometry.cjs`)                                         |
+| Per-session route as infrastructure, honestly reported                | M1 (closed — `proxy.cjs`)                                            |
+| No profile lifecycle (establish, check, delete)                       | M1 (closed — `profile-manager.cjs`)                                  |
+| No corruption detection on stored session data                        | M1 (closed — `profile-integrity.cjs`)                                |
+| Config is hand-validated in `model.cjs`; venues are hardcoded         | M2 (closed — `config-schema.cjs`)                                    |
+| The roadmap sketch's five-section config is not built                 | M2 remainder                                                         |
+| Corpus is seven positive fixtures and no negatives                    | M3 (harness in: `test/fixtures/vision-corpus.json`)                  |
+| Region ranking unvalidated against the live site                      | M3 (needs a live pass)                                               |
+| No labelled frame corpus, so accuracy is unmeasurable                 | M3 remainder                                                         |
+| No regression harness with enforced accuracy thresholds               | M3 remainder                                                         |
+| No ordered history across sessions; two rings with opposite orderings | M4 (closed — `timeline-engine.cjs`, ADR-0016)                        |
+| Metrics scattered across four subsystems, re-joined by the dashboard  | M4 (closed — `dashboard-telemetry.cjs`)                              |
+| No rule for what a diagnostics payload may contain                    | M4 (closed — `telemetry-redaction.cjs`: redaction + a refusing scan) |
+| No durable logs, no bundle file, no frame timings, no crash file      | M4 remainder                                                         |
+| The (future) bundle is validated against no scripted failure scenario | M4 remainder                                                         |
+| No design system, i18n or accessibility audit                         | M5                                                                   |
+| No fault-injection harness, no soak results                           | M6                                                                   |
+| No threat model, SBOM or secret scanning                              | M7                                                                   |
+| No signing, no updater, no reproducible-build proof                   | M8                                                                   |
+| No performance budgets measured on a reference machine                | M9                                                                   |
+| `main.cjs` wiring is reviewed, not enforced                           | M0 remainder                                                         |
