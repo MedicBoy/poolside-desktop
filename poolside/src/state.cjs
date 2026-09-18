@@ -19,6 +19,17 @@
 /** @type {SessionMap} */
 const sessions = new Map();
 
+/**
+ * Per-account profile diagnostics: what the profile occupies on disk and how that compares with its
+ * configured ceiling.
+ *
+ * Deliberately **not** persisted, unlike the generation counter and corruption history in the workspace
+ * document. These are re-derived on every scan, and writing the whole workspace document every time a
+ * directory is measured would be churn for no gain.
+ * @type {Map<string, import('./types.cjs').ProfileReport>}
+ */
+const profileReports = new Map();
+
 /** @type {import('./types.cjs').ActivityEvent[]} */
 const events = [];
 
@@ -40,4 +51,4 @@ const workspace = {
   version: '0.0.0'
 };
 
-module.exports = { sessions, events, sessionStores, workspace };
+module.exports = { sessions, events, sessionStores, workspace, profileReports };

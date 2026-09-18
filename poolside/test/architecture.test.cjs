@@ -26,7 +26,14 @@ const PURE_MODULES = [
   'identity-fields.cjs',
   'proxy.cjs',
   'geometry.cjs',
-  'display-geometry.cjs'
+  'display-geometry.cjs',
+  'profile-paths.cjs',
+  'profile-integrity.cjs',
+  'profile-repair.cjs',
+  'profile-removal.cjs',
+  'profile-diagnostics.cjs',
+  'profile-sweep.cjs',
+  'profile-manager.cjs'
 ];
 
 const ENTRY_POINTS = ['main.cjs', 'self-test.cjs'];

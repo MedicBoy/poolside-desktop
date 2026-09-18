@@ -54,6 +54,32 @@ function settings(input) {
 }
 
 /**
+ * Profile bookkeeping: how many times this account's storage has been established, and what damage has
+ * been found in it. App-managed and disposable — a damaged entry is dropped rather than being allowed
+ * to fail the whole document, because it is not worth someone's account list.
+ * @param {unknown} input
+ */
+function pickProfile(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const source = /** @type {Record<string, any>} */ (input);
+  /** @type {Record<string, unknown>} */
+  const picked = {};
+  if (Number.isInteger(source.generation) && source.generation >= 0) picked.generation = source.generation;
+  if (source.established === true || source.established === false) picked.established = source.established;
+  if (typeof source.firstSeenAt === 'string') picked.firstSeenAt = source.firstSeenAt;
+  const corruption = source.corruption;
+  if (corruption && typeof corruption === 'object' && !Array.isArray(corruption) && Number.isInteger(corruption.count)) {
+    picked.corruption = {
+      count: corruption.count,
+      lastAt: typeof corruption.lastAt === 'string' ? corruption.lastAt : null,
+      lastReason: typeof corruption.lastReason === 'string' ? corruption.lastReason : null,
+      lastAction: typeof corruption.lastAction === 'string' ? corruption.lastAction : null
+    };
+  }
+  return Object.keys(picked).length ? picked : undefined;
+}
+
+/**
  * Remembered window geometry, keyed by account id.
  *
  * This is **disposable** data. Unlike an account, a damaged geometry entry costs the user nothing, so it
@@ -107,6 +133,8 @@ function decode(value) {
     if (identity) kept.identity = identity;
     const proxy = pickKnown(a.proxy, PROXY_FIELDS);
     if (proxy) kept.proxy = proxy;
+    const profile = pickProfile(a.profile);
+    if (profile) kept.profile = profile;
     return kept;
   });
   /** @type {{version: number, accounts: any[], settings: any, windows?: Record<string, object>}} */
@@ -118,4 +146,4 @@ function decode(value) {
   return document;
 }
 
-module.exports = { account, settings, decode, windowGeometry, pickKnown, PROXY_FIELDS, TABLES };
+module.exports = { account, settings, decode, windowGeometry, pickKnown, pickProfile, PROXY_FIELDS, TABLES };

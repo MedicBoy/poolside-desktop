@@ -21,6 +21,13 @@ and a pooled OCR worker.
 │  saved-session.cjs  where the carry-over file lives, crypto, read/write     │
 │  session-cookies.cjs  which cookies are carried (policy + payload shape)    │
 │  plist.cjs        the plist document format                                 │
+│  profile-manager.cjs profile lifecycle: establish, generation, scan, delete │
+│  profile-paths.cjs  where a profile lives, and the deletion guards (pure)   │
+│  profile-integrity.cjs damage detection: the verdict vocabulary             │
+│  profile-repair.cjs quarantine a damaged file (never deletes)               │
+│  profile-removal.cjs delete a profile: files, directory, record             │
+│  profile-diagnostics.cjs measure a profile, compare with its ceiling        │
+│  profile-sweep.cjs  remove profile storage no account claims                │
 │  hardening.cjs    session, navigation and popup policy                      │
 │  session-fsm.cjs  the session state machine: transitions + deadlines        │
 │  supervision.cjs  crash/stall detection, bounded recovery, health record    │
@@ -55,13 +62,15 @@ and a pooled OCR worker.
 
 ### Dependency rules
 
-| Rule                                                                                                                                                                                                                                               | Enforced by                  |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| No module over 200 lines                                                                                                                                                                                                                           | `test/architecture.test.cjs` |
-| No cycles in the local require graph                                                                                                                                                                                                               | `test/architecture.test.cjs` |
-| `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry` must not import `electron` | `test/architecture.test.cjs` |
-| No unreferenced modules                                                                                                                                                                                                                            | `test/architecture.test.cjs` |
-| `main.cjs` is wiring only                                                                                                                                                                                                                          | review + the size ceiling    |
+| Rule                                 | Enforced by                  |
+| ------------------------------------ | ---------------------------- |
+| No module over 200 lines             | `test/architecture.test.cjs` |
+| No cycles in the local require graph | `test/architecture.test.cjs` |
+| No unreferenced modules              | `test/architecture.test.cjs` |
+| `main.cjs` is wiring only            | review + the size ceiling    |
+
+The modules in `PURE_MODULES` (`test/architecture.test.cjs`) must not import `electron`, so every one of
+them is testable without an Electron runtime: `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`, `session-cookies`, `plist`, `session-fsm`, `supervision`, `recovery-policy`, `identity`, `identity-fields`, `proxy`, `geometry`, `display-geometry`, `profile-paths`, `profile-integrity`, `profile-repair`, `profile-removal`, `profile-diagnostics`, `profile-sweep`, `profile-manager`.
 
 Dependency direction is one-way. `state.cjs` is a leaf that others read. Feature modules receive what
 they need as an injected `deps` object, so `windows.cjs` can take `returnToGame` from itself without
@@ -360,7 +369,48 @@ instrumentation and a redacted diagnostics bundle with a secret-scanner test.
 Game-facing behaviour is proved offline via `protocol.handle` fixtures (ADR-0007). No test uses a
 real account.
 
-## 10. Known gaps
+## 10. Profile lifecycle, integrity and diagnostics
+
+`profile-manager.cjs` (ADR-0013) owns everything that happens to an account's on-disk storage. Nothing
+else creates, repairs or deletes it.
+
+| Operation | Modules                                    | What it does, and what it refuses                                                                                                                           |
+| --------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Establish | `profile-manager.cjs`, `profile-paths.cjs` | ensures the two directories this app owns exist, and moves the generation counter when a storage directory is established — not on an ordinary open         |
+| Check     | `profile-integrity.cjs`                    | reads the carry-over file and returns one verdict: `ok`, `missing`, `suspect`, `legacy`, `unverifiable` or `corrupt`                                        |
+| Repair    | `profile-repair.cjs`                       | renames a corrupt file to `<id>.plist.corrupt-<timestamp>`. Never deletes, never rebuilds, and re-checks the verdict first so it cannot move a healthy file |
+| Delete    | `profile-removal.cjs`                      | removes the carry-over file, its quarantined copies and the partition directory, then the persisted record                                                  |
+| Measure   | `profile-diagnostics.cjs`                  | walks the directory under a file cap (and reports `truncated`), then compares the total with the account's configured ceiling                               |
+| Sweep     | `profile-sweep.cjs`                        | removes `poolside-<uuid>` directories and `<uuid>.plist` files that no account claims; every other name is reported foreign and left alone                  |
+
+Two storage layers, with different authority (ADR-0004):
+
+| Layer              | Path                                  | Holds                                  | If it is lost             |
+| ------------------ | ------------------------------------- | -------------------------------------- | ------------------------- |
+| Chromium partition | `<userData>/Partitions/poolside-<id>` | every cookie, all site storage, caches | a real re-login           |
+| Carry-over file    | `<userData>/accounts/<id>.plist`      | session cookies only, encrypted        | a sign-in for the session |
+
+**Startup order.** The integrity scan runs before the window is shown — one small file per account — and
+the measurement runs after it via `setImmediate`, because walking every profile directory is the slow half
+and the dashboard should not wait for it. The scan sweeps abandoned `.tmp` files, removes storage no
+account claims, checks each account and quarantines what is damaged, then logs one summary line.
+
+**Durable vs volatile.** The generation counter and the corruption history are persisted per account in the
+workspace document. `directoryBytes`, `fileCount`, `quotaBytes` and `overQuota` are re-derived on every
+scan into `state.profileReports` and never written: a measurement is not a fact worth surviving a restart,
+and rewriting the document on every measurement would be churn. The dashboard view merges the two, so the
+renderer sees one object.
+
+**Two traps this subsystem is built around**, both found the hard way and both now covered by tests:
+
+- `session.fromPartition` _creates_ the partition and its directory. Resolving one by id during a delete
+  resurrects the directory that was just removed, so the manager never asks for a session it does not
+  already hold — and the desktop suite asserts the directory is gone afterwards.
+- Chromium creates a partition directory lazily on first use, so "the directory is absent" cannot
+  distinguish _not used yet_ from _deleted_. That is why the persisted `established` flag exists; without
+  it the generation counter incremented on every open.
+
+## 11. Known gaps
 
 Carried deliberately, with the milestone that closes each:
 
@@ -371,6 +421,8 @@ Carried deliberately, with the milestone that closes each:
 | Identity configuration, per session                            | M1 (closed — `identity.cjs`, ADR-0012) |
 | Remembered geometry and per-monitor bounds                     | M1 (closed — `geometry.cjs`)           |
 | Per-session route as infrastructure, honestly reported         | M1 (closed — `proxy.cjs`)              |
+| No profile lifecycle (establish, check, delete)                | M1 (closed — `profile-manager.cjs`)    |
+| No corruption detection on stored session data                 | M1 (closed — `profile-integrity.cjs`)  |
 | Config is hand-validated in `model.cjs`; venues are hardcoded  | M2                                     |
 | Corpus is seven positive fixtures and no negatives             | M3                                     |
 | Region ranking unvalidated against the live site               | M3 (needs a live pass)                 |

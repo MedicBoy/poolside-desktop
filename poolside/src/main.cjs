@@ -5,7 +5,7 @@
 // (saved sessions), hardening.cjs (policy), recovery.cjs (supervision), inspection.cjs (screen
 // recognition), ipc.cjs (the dashboard contract) and self-test.cjs (the test suite).
 
-const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, safeStorage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -13,12 +13,14 @@ const model = require('./model.cjs');
 const { checkPublicIP } = require('./network.cjs');
 const { SHOP_PROBE } = require('./shop-recovery.cjs');
 const { createScreenReaderPool } = require('./screen-reader-pool.cjs');
-const { log, save, load, publish, getAccount, rememberWindowGeometry } = require('./workspace.cjs');
+const workspaceStore = require('./workspace.cjs');
+const { log, save, load, publish, getAccount, rememberWindowGeometry } = workspaceStore;
 const { sessions, workspace } = require('./state.cjs');
 const { createSessionManager, GAME_URL } = require('./windows.cjs');
 const { createSessionFsm } = require('./session-fsm.cjs');
 const { createInspector } = require('./inspection.cjs');
 const { createIpc } = require('./ipc.cjs');
+const { createProfileManager } = require('./profile-manager.cjs');
 const { messageOf } = require('./errors.cjs');
 
 const UI_FILE = path.join(__dirname, 'ui', 'index.html');
@@ -34,9 +36,40 @@ if (!testing && !app.requestSingleInstanceLock()) app.exit(0);
 // One warm pool for the whole app instead of a worker per inspection. Size 1 keeps memory
 // predictable; this is the knob to raise in M9 once per-session cost has been measured.
 const screenReaders = createScreenReaderPool({ size: 1, idleMs: 120000 });
-const windows = createSessionManager({ log, publish, getAccount, selfTest });
+
+// Profile lifecycle, integrity and diagnostics. Created before the session manager because every window
+// open establishes that account's storage through it.
+const profileManager = createProfileManager({
+  log,
+  root: app.getPath('userData'),
+  crypto: safeStorage
+});
+const windows = createSessionManager({ log, publish, getAccount, selfTest, profileManager });
 const inspector = createInspector({ getAccount, publish, log, screenReaders });
-const ipc = createIpc({ ipcMain, UI_URL, windows, inspector });
+
+/**
+ * Ask before destroying something irreversible. A headless test run answers "no" rather than blocking on
+ * a dialog nobody can see.
+ */
+async function confirmDestructive(title, detail) {
+  if (selfTest) return false;
+  const prompt = {
+    type: /** @type {'warning'} */ ('warning'),
+    buttons: ['Cancel', 'Delete'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+    title: 'Poolside',
+    message: title,
+    detail
+  };
+  // Parented to the dashboard when there is one, so the dialog cannot end up behind it.
+  const parent = workspace.dashboard;
+  const { response } = parent ? await dialog.showMessageBox(parent, prompt) : await dialog.showMessageBox(prompt);
+  return response === 1;
+}
+
+const ipc = createIpc({ ipcMain, UI_URL, windows, inspector, profiles: profileManager, confirmDestructive });
 
 app.on('second-instance', () => {
   const dashboard = workspace.dashboard;
@@ -99,6 +132,9 @@ function selfTestContext() {
     attachRecovery: (id, group) => windows.attachRecoveryFor(id, group),
     createSessionFsm,
     rememberWindowGeometry,
+    profiles: profileManager,
+    crypto: safeStorage,
+    store: workspaceStore,
     workspace,
     sessions,
     GAME_URL,
@@ -114,9 +150,14 @@ app
   .then(async () => {
     workspace.version = app.getVersion();
     load(path.join(app.getPath('userData'), 'workspace.json'));
+    // Integrity first, without measuring: checking a small file per account is quick, while walking every
+    // profile directory is not, and the window should not wait for it.
+    profileManager.scan(workspace.data.accounts, { measure: false });
     ipc.register();
     await createDashboard();
     log('Workspace ready. Account profiles and encrypted session backups are saved on this PC.');
+    // Then measure, once the dashboard is on screen and the result has somewhere to appear.
+    setImmediate(() => profileManager.measure(workspace.data.accounts));
     if (selfTest) await require('./self-test.cjs').runSelfTest(selfTestContext());
     if (gameCheck) await runGameCheck();
   })

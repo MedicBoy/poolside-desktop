@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const model = require('./model.cjs');
 const { messageOf } = require('./errors.cjs');
-const { events, sessions, workspace } = require('./state.cjs');
+const { events, sessions, workspace, profileReports } = require('./state.cjs');
 
 const MAX_EVENTS = 100;
 
@@ -18,6 +18,19 @@ function log(message, kind = 'info') {
   events.unshift({ id: Date.now() + Math.random(), at: new Date().toISOString(), message, kind });
   events.splice(MAX_EVENTS);
   publish();
+}
+
+/**
+ * One account's profile picture for the dashboard: the durable bookkeeping (generation, corruption
+ * history) merged with the live measurement taken by the last scan. Returns null when there is nothing
+ * to say, so the renderer can distinguish "not measured yet" from "measured and unremarkable".
+ * @param {import('./types.cjs').Account} account
+ * @returns {import('./types.cjs').ProfileView|null}
+ */
+function profileView(account) {
+  const persisted = account.profile || {};
+  const live = profileReports.get(account.id) || {};
+  return Object.keys(persisted).length || Object.keys(live).length ? { ...persisted, ...live } : null;
 }
 
 /**
@@ -37,6 +50,7 @@ function snapshot() {
           statusReason: group && group.fsm ? group.fsm.reason : null,
           health: group && group.health ? group.health : null,
           footprint: group && group.footprint ? group.footprint : null,
+          profile: profileView(a),
           network: group && group.network ? group.network : null,
           gameScreen: group && group.gameScreen ? group.gameScreen : null
         };
@@ -109,6 +123,33 @@ function rememberWindowGeometry(id, record) {
 }
 
 /**
+ * Merge a patch into one account's persisted profile bookkeeping, or clear it with `null`.
+ *
+ * Never throws. This is bookkeeping *about* a profile, and losing a counter must not be able to fail the
+ * operation that triggered it — the same reasoning as remembered window geometry.
+ * @param {string} id @param {object|null} patch
+ */
+function updateAccountProfile(id, patch) {
+  if (workspace.readOnly) return false;
+  try {
+    const accounts = workspace.data.accounts.map(account => {
+      if (account.id !== id) return account;
+      if (patch === null) {
+        const cleared = { ...account };
+        delete cleared.profile;
+        return cleared;
+      }
+      return { ...account, profile: { ...(account.profile || {}), ...patch } };
+    });
+    save({ ...workspace.data, accounts });
+    return true;
+  } catch (error) {
+    log(`Profile bookkeeping could not be saved: ${messageOf(error)}`, 'warning');
+    return false;
+  }
+}
+
+/**
  * Load the workspace document. A malformed file flips the app to read-only rather than
  * overwriting data the user may still want.
  * @param {string} file
@@ -133,5 +174,7 @@ module.exports = {
   load,
   savedWindowGeometry,
   rememberWindowGeometry,
+  updateAccountProfile,
+  profileView,
   MAX_EVENTS
 };

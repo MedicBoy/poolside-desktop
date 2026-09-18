@@ -60,12 +60,54 @@
  */
 
 /**
+ * One account's profile bookkeeping, persisted. Volatile measurements (size on disk, ceiling, over-quota)
+ * are *not* here: they are re-derived on every scan and belong in state.cjs, not in the document.
+ * @typedef {object} CorruptionRecord
+ * @property {number} count how many damaged saved sessions have been quarantined
+ * @property {string|null} [lastAt]
+ * @property {string|null} [lastReason]
+ * @property {string|null} [lastAction]
+ */
+
+/**
+ * @typedef {object} ProfileRecord
+ * @property {number} [generation] how many times this account's storage directory has been established
+ * @property {boolean} [established] set once the partition directory has actually been seen on disk
+ * @property {string} [firstSeenAt]
+ * @property {CorruptionRecord} [corruption]
+ */
+
+/**
+ * What the last scan measured about a profile. Never persisted.
+ * @typedef {object} ProfileReport
+ * @property {string} id
+ * @property {string} path
+ * @property {number} directoryBytes
+ * @property {number|null} carryOverBytes null when there is no carry-over file (unknown, not zero)
+ * @property {number} totalBytes
+ * @property {number} fileCount
+ * @property {number} directoryCount
+ * @property {number} unreadable
+ * @property {boolean} truncated the walk stopped at its file cap, so the figure is a lower bound
+ * @property {boolean} missing
+ * @property {number|null} quotaBytes
+ * @property {boolean} overQuota
+ * @property {string} checkedAt
+ */
+
+/** The dashboard view: the durable record with whatever the last scan measured merged over it. */
+/** @typedef {ProfileRecord & Partial<ProfileReport>} ProfileView */
+
+/**
  * @typedef {object} Account
  * @property {string} id
  * @property {string} name
  * @property {'receiver'|'sender'} role
  * @property {boolean} archived
  * @property {string} createdAt
+ * @property {object} [identity] per-account overrides of the workspace identity defaults
+ * @property {object} [proxy] per-account route, overrides the workspace default
+ * @property {ProfileRecord} [profile] absent until the account has been opened at least once
  */
 
 /**

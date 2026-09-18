@@ -32,7 +32,18 @@ test('identity, route and remembered geometry survive a decode round trip', () =
       {
         ...a,
         identity: { timezone: 'Asia/Tokyo', viewport: { width: 800, height: 600 } },
-        proxy: { spec: 'socks5://10.0.0.9:1080', bypass: ['8ballpool.com'] }
+        proxy: { spec: 'socks5://10.0.0.9:1080', bypass: ['8ballpool.com'] },
+        profile: {
+          generation: 2,
+          established: true,
+          firstSeenAt: '2026-09-18T00:00:00.000Z',
+          corruption: {
+            count: 1,
+            lastAt: '2026-09-18T01:00:00.000Z',
+            lastReason: 'the file has no encrypted session payload',
+            lastAction: 'quarantined'
+          }
+        }
       }
     ],
     settings: { table: 'Bangkok', limit: 10, identity: { locale: 'en-GB' }, proxy: { enabled: false, spec: '10.0.0.1:8080' } },

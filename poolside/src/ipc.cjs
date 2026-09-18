@@ -14,10 +14,10 @@ const { messageOf } = require('./errors.cjs');
 const PREFS_SAVED = 'Transfer preferences saved. Automation is not yet connected.';
 
 /**
- * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any}} deps
+ * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, profiles: any, confirmDestructive: (title: string, detail: string) => Promise<boolean>}} deps
  */
 function createIpc(deps) {
-  const { ipcMain, UI_URL, windows, inspector } = deps;
+  const { ipcMain, UI_URL, windows, inspector, profiles, confirmDestructive } = deps;
   const activeAccounts = () => workspace.data.accounts.filter(a => !a.archived);
 
   /**
@@ -82,6 +82,26 @@ function createIpc(deps) {
     });
     handle('account:check-ip', checkAccountIP);
     handle('account:check-route', id => windows.checkRoute(id));
+    handle('account:delete-profile', async id => {
+      const account = getAccount(id);
+      // The only irreversible action in the application, so it is confirmed natively rather than by a
+      // renderer-side confirm that a page script could forge.
+      const agreed = await confirmDestructive(
+        `Delete ${account.name}'s saved profile?`,
+        "This removes that account's cookies, site storage and saved session from this PC. They cannot be recovered, and you will need to sign in again."
+      );
+      if (!agreed) throw new Error('Profile deletion was cancelled.');
+      const outcome = await profiles.remove(account);
+      if (outcome.failures.length) {
+        throw new Error(
+          `The profile was only partly removed: ${outcome.removed.length} item(s) deleted, but ${outcome.failures.join('; ')}`
+        );
+      }
+      return outcome;
+    });
+    handle('profiles:refresh', () => {
+      profiles.measure(workspace.data.accounts);
+    });
     handle('account:return-game', id => windows.returnToGame(id));
     handle('account:inspect', id => inspector.inspectGame(id));
     handle('account:archive', id => {

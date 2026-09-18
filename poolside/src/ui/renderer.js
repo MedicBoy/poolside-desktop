@@ -71,6 +71,29 @@ function footprintRow(a) {
   const text = parts.length ? parts.join(' · ') : 'default footprint — no identity or route configured';
   return `<div class="network-row"><span>${escapeHtml(text)}</span><button class="text-button" data-action="check-route" data-id="${a.id}" title="Ask Chromium which route this session will actually use" ${isClosed(a) ? 'disabled' : ''}>Check route ↗</button></div>`;
 }
+const formatBytes = value => {
+  const n = Math.max(0, Number(value) || 0);
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
+// The profile on disk: which generation of storage this is, what it occupies, whether it is over its
+// ceiling, and whether damage has ever had to be repaired in it. Deletion is refused while the session is
+// open, so the control is disabled and says why rather than failing when pressed.
+function profileRow(a) {
+  const p = a.profile;
+  if (!p) return '';
+  const parts = [];
+  if (Number.isInteger(p.generation)) parts.push(`storage generation ${p.generation}`);
+  if (Number.isInteger(p.directoryBytes)) parts.push(`${formatBytes(p.directoryBytes)} on disk${p.truncated ? ' or more' : ''}`);
+  if (p.quotaBytes) parts.push(`ceiling ${formatBytes(p.quotaBytes)}${p.overQuota ? ' exceeded' : ''}`);
+  if (p.corruption && p.corruption.count) {
+    parts.push(`${p.corruption.count} damaged saved session${p.corruption.count === 1 ? '' : 's'} quarantined`);
+  }
+  const text = parts.length ? parts.join(' · ') : 'profile not measured yet';
+  const title = isClosed(a) ? "Remove this account's cookies, site storage and saved session from this PC" : 'Close this session first';
+  return `<div class="network-row"><span>${escapeHtml(text)}</span><button class="text-button" data-action="delete-profile" data-id="${a.id}" title="${title}" ${isClosed(a) ? '' : 'disabled'}>Delete profile…</button></div>`;
+}
 const escapeHtml = value =>
   String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function toast(message, error = false) {
@@ -120,7 +143,7 @@ function renderAccounts() {
   $('#accounts').innerHTML = accounts
     .map(
       a =>
-        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(statusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${footprintRow(a)}${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Shop opened after sign-in?</span><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></div></article>`
+        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(statusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${footprintRow(a)}${profileRow(a)}${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Shop opened after sign-in?</span><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></div></article>`
     )
     .join('');
 }
@@ -169,11 +192,13 @@ document.addEventListener('click', async event => {
             ? poolside.checkIP(id)
             : action === 'check-route'
               ? poolside.checkRoute(id)
-              : action === 'archive'
-                ? poolside.archive(id)
-                : action === 'close'
-                  ? poolside.close(id)
-                  : poolside.open(id)
+              : action === 'delete-profile'
+                ? poolside.deleteProfile(id)
+                : action === 'archive'
+                  ? poolside.archive(id)
+                  : action === 'close'
+                    ? poolside.close(id)
+                    : poolside.open(id)
     );
   }
 });

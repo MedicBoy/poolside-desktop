@@ -63,4 +63,30 @@ function readStringField(xml, key) {
   return xml.match(pattern)?.[1] ?? null;
 }
 
-module.exports = { buildDocument, readEncryptedPayload, readStringField, escapeXml };
+/**
+ * Read an integer field. Separate from `readStringField` because the document writes counts as
+ * `<integer>`: reading one with the string reader silently yields `null`, and a caller that then
+ * coerces with `Number()` turns that into a confident, wrong zero.
+ *
+ * Deliberately built with `indexOf` rather than a regex, so there is no pattern to escape.
+ * @param {unknown} xml
+ * @param {unknown} key
+ * @returns {number|null}
+ */
+function readIntegerField(xml, key) {
+  if (typeof xml !== 'string' || typeof key !== 'string') return null;
+  const marker = `<key>${key}</key>`;
+  const at = xml.indexOf(marker);
+  if (at < 0) return null;
+  // The value sits immediately after its key, so a bounded window avoids matching a later field's
+  // integer when this one is absent.
+  const window = xml.slice(at + marker.length, at + marker.length + 64);
+  const open = window.indexOf('<integer>');
+  if (open < 0) return null;
+  const close = window.indexOf('</integer>', open);
+  if (close < 0) return null;
+  const value = Number(window.slice(open + '<integer>'.length, close).trim());
+  return Number.isFinite(value) ? value : null;
+}
+
+module.exports = { buildDocument, readEncryptedPayload, readStringField, readIntegerField, escapeXml };

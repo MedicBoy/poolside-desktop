@@ -23,6 +23,9 @@
  * @property {Function} attachRecovery
  * @property {Function} createSessionFsm
  * @property {Function} rememberWindowGeometry
+ * @property {any} profiles
+ * @property {any} crypto
+ * @property {any} store
  * @property {any} workspace
  * @property {Map<string, any>} sessions
  * @property {string} GAME_URL
@@ -36,6 +39,7 @@ async function runSelfTest(ctx) {
   const assert = require('node:assert/strict');
   const { runFixtureScenarios } = require('./self-test-fixtures.cjs');
   const { runFootprintChecks } = require('./self-test-footprint.cjs');
+  const { runProfileChecks } = require('./self-test-profiles.cjs');
   const { app, BrowserWindow, session, model, fs, checkPublicIP, log, workspace } = ctx;
   const dashboard = workspace.dashboard;
 
@@ -78,6 +82,9 @@ async function runSelfTest(ctx) {
 
   // --- Per-session footprint: identity, route, storage ceiling ----------------------------------
   await runFootprintChecks(ctx, assert, log);
+
+  // --- Profile lifecycle: establishment, integrity, measurement, explicit deletion --------------
+  await runProfileChecks(ctx, assert, log);
 
   if (process.argv.includes('--live-ip-check')) {
     await checkPublicIP(receiver);

@@ -25,10 +25,10 @@ const store = require('./workspace.cjs');
 const GAME_URL = 'https://8ballpool.com/game';
 
 /**
- * @param {{log: import('./types.cjs').LogFn, publish: () => void, getAccount: (id: string) => import('./types.cjs').Account, selfTest: boolean}} deps
+ * @param {{log: import('./types.cjs').LogFn, publish: () => void, getAccount: (id: string) => import('./types.cjs').Account, selfTest: boolean, profileManager: any}} deps
  */
 function createSessionManager(deps) {
-  const { log, publish, getAccount, selfTest } = deps;
+  const { log, publish, getAccount, selfTest, profileManager } = deps;
   const profiles = createProfileStore({ log });
 
   /** The workspace-level defaults that an account's own configuration overrides. */
@@ -85,6 +85,9 @@ function createSessionManager(deps) {
       existing.window.focus();
       return;
     }
+    // Establish this account's storage and keep its generation counter current, before anything is
+    // created that will write into it.
+    profileManager.initialise(account);
     const footprint = await applyAccountFootprint(id, account);
     const isolated = session.fromPartition(savedSessions.partition(id));
     applySessionPolicy(isolated, account.name, log);
