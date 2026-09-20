@@ -141,6 +141,18 @@
       ]
     },
     {
+      "id": "shop-featured",
+      "state": "shop",
+      "source": "none (composed)",
+      "note": "The only frame exercising the shop rule. The gate needs FEATURED plus one of the shop-exclusive terms, so this carries both, and the shop is the highest-priority state because a shop page over the game must not read as the lobby.",
+      "lines": [
+        { "text": "FEATURED", "box": { "x": 200, "y": 200, "width": 220, "height": 40 }, "confidence": 96 },
+        { "text": "WEB SHOP EXCLUSIVE", "box": { "x": 200, "y": 268, "width": 340, "height": 34 }, "confidence": 93 },
+        { "text": "Wind City Bundle", "box": { "x": 200, "y": 330, "width": 300, "height": 34 }, "confidence": 88 },
+        { "text": "ULTIMATE", "box": { "x": 200, "y": 396, "width": 180, "height": 32 }, "confidence": 90 }
+      ]
+    },
+    {
       "id": "non-english",
       "state": "unknown",
       "source": "none (negative)",

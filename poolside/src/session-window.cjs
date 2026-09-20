@@ -16,10 +16,10 @@ const GAME_WINDOW_HEIGHT = 800;
 const WINDOW_BACKGROUND = '#14171b';
 
 /**
- * @param {{title: string, session: import('electron').Session, remembered: unknown}} options
+ * @param {{title: string, session: import('electron').Session, remembered: unknown, backgroundThrottling?: boolean}} options
  */
 function createSessionWindow(options) {
-  const { title, session, remembered } = options;
+  const { title, session, remembered, backgroundThrottling = false } = options;
   const restore = restoreBounds(remembered, screen.getAllDisplays(), {
     minimumWidth: WINDOW_MIN_WIDTH,
     minimumHeight: WINDOW_MIN_HEIGHT
@@ -43,7 +43,7 @@ function createSessionWindow(options) {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
-      backgroundThrottling: false
+      backgroundThrottling
     }
   });
   if (restore.maximized) window.maximize();

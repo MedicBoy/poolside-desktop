@@ -63,5 +63,5 @@ two pull in opposite directions unless the default is chosen deliberately.
 
 Test-backed where possible. `custom: 'none'` in the dashboard CSP and the absence of an outbound
 request are structural; `npm run test:desktop` asserts the renderer has no `require` and drives the
-IPC surface, and the M4 diagnostics bundle will carry an automated secret-scanner test (roadmap M4,
+IPC surface, and the local diagnostics bundle carries an automated secret-scanner test (roadmap M4,
 acceptance criterion 2). The remaining rules are enforced by review against this record.

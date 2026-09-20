@@ -1,6 +1,6 @@
 {
   "name": "poolside",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Local desktop workspace for isolated 8 Ball Pool account sessions",
   "main": "src/main.cjs",
@@ -16,7 +16,10 @@
     "test:desktop": "electron . --self-test",
     "test:persistence": "node test/run-session-restart.cjs",
     "test:game": "electron . --game-check",
-    "package": "electron-packager . Poolside --platform=win32 --arch=x64 --out=release --asar.unpackDir=node_modules --overwrite --ignore=^/release --ignore=^/test"
+    "package": "electron-packager . Poolside --platform=win32 --arch=x64 --out=release --asar.unpackDir=node_modules --overwrite --ignore=^/release --ignore=^/test",
+    "sbom": "node scripts/generate-sbom.cjs",
+    "sbom:check": "node scripts/generate-sbom.cjs --check",
+    "release:inspect": "node scripts/inspect-release.cjs"
   },
   "engines": {
     "node": ">=22"

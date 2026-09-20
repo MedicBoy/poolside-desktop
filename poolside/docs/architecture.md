@@ -3,7 +3,7 @@
 Structure of the application: what the modules are, what may depend on what, how a session moves
 through its states, and where each kind of state lives. Decisions behind the structure are in
 [`docs/adr/`](adr/README.md); the scope boundary is [ADR-0011](adr/0011-operational-scope-boundaries.md)
-and [`../BOUNDARIES.md`](../BOUNDARIES.md).
+and [`../BOUNDARIES.md`](../BOUNDARIES.md). The privacy and security review is in [the threat model](threat-model.md).
 
 ## 1. Shape of the system
 
@@ -375,7 +375,7 @@ machine: `telemetry-redaction.cjs` produces it, rewriting every string, and `dia
 return a payload that fails its own scan (ADR-0016). Addresses, filesystem paths and token-shaped strings are
 matched by shape; account names by literal.
 
-Still to come in M4: durable JSON logs with rotation, the diagnostics bundle as a file, frame-timing
+Still to come in M4: durable JSON logs with rotation, frame-timing
 instrumentation, and validation of that bundle against scripted failure scenarios.
 
 ## 9. Testing architecture
@@ -537,32 +537,32 @@ concatenation of its two OCR passes. Changing what it reads needs the labelled c
 
 Carried deliberately, with the milestone that closes each:
 
-| Gap                                                                   | Milestone                                                            |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| No transition history or deadline enforcement on session state        | M1 (closed — `session-fsm.cjs`)                                      |
-| No crash/stall handlers or per-session health record                  | M1 (closed — `supervision.cjs`)                                      |
-| Identity configuration, per session                                   | M1 (closed — `identity.cjs`, ADR-0012)                               |
-| Remembered geometry and per-monitor bounds                            | M1 (closed — `geometry.cjs`)                                         |
-| Per-session route as infrastructure, honestly reported                | M1 (closed — `proxy.cjs`)                                            |
-| No profile lifecycle (establish, check, delete)                       | M1 (closed — `profile-manager.cjs`)                                  |
-| No corruption detection on stored session data                        | M1 (closed — `profile-integrity.cjs`)                                |
-| Config is hand-validated in `model.cjs`; venues are hardcoded         | M2 (closed — `config-schema.cjs`)                                    |
-| The roadmap sketch's five-section config is not built                 | M2 remainder                                                         |
-| Corpus is seven positive fixtures and no negatives                    | M3 (harness in: `test/fixtures/vision-corpus.json`)                  |
-| Region ranking unvalidated against the live site                      | M3 (needs a live pass)                                               |
-| No labelled frame corpus, so accuracy is unmeasurable                 | M3 remainder                                                         |
-| No regression harness with enforced accuracy thresholds               | M3 remainder                                                         |
-| No ordered history across sessions; two rings with opposite orderings | M4 (closed — `timeline-engine.cjs`, ADR-0016)                        |
-| Metrics scattered across four subsystems, re-joined by the dashboard  | M4 (closed — `dashboard-telemetry.cjs`)                              |
-| No rule for what a diagnostics payload may contain                    | M4 (closed — `telemetry-redaction.cjs`: redaction + a refusing scan) |
-| No durable logs, no bundle file, no frame timings, no crash file      | M4 remainder                                                         |
-| The (future) bundle is validated against no scripted failure scenario | M4 remainder                                                         |
-| No settings UI bound to the configuration schema                      | M5 (closed — `settings-form-mapper.cjs`, ADR-0017)                   |
-| No per-session detail view; account overrides have no UI              | M5 remainder                                                         |
-| No design tokens, component kit, i18n or accessibility audit          | M5 remainder                                                         |
-| No command palette or hotkeys                                         | M5 remainder                                                         |
-| No fault-injection harness, no soak results                           | M6                                                                   |
-| No threat model, SBOM or secret scanning                              | M7                                                                   |
-| No signing, no updater, no reproducible-build proof                   | M8                                                                   |
-| No performance budgets measured on a reference machine                | M9                                                                   |
-| `main.cjs` wiring is reviewed, not enforced                           | M0 remainder                                                         |
+| Gap                                                                   | Milestone                                                                                              |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| No transition history or deadline enforcement on session state        | M1 (closed — `session-fsm.cjs`)                                                                        |
+| No crash/stall handlers or per-session health record                  | M1 (closed — `supervision.cjs`)                                                                        |
+| Identity configuration, per session                                   | M1 (closed — `identity.cjs`, ADR-0012)                                                                 |
+| Remembered geometry and per-monitor bounds                            | M1 (closed — `geometry.cjs`)                                                                           |
+| Per-session route as infrastructure, honestly reported                | M1 (closed — `proxy.cjs`)                                                                              |
+| No profile lifecycle (establish, check, delete)                       | M1 (closed — `profile-manager.cjs`)                                                                    |
+| No corruption detection on stored session data                        | M1 (closed — `profile-integrity.cjs`)                                                                  |
+| Config is hand-validated in `model.cjs`; venues are hardcoded         | M2 (closed — `config-schema.cjs`)                                                                      |
+| The roadmap sketch's five-section config is not built                 | M2 remainder                                                                                           |
+| Corpus is seven positive fixtures and no negatives                    | M3 (harness in: `test/fixtures/vision-corpus.json`)                                                    |
+| Region ranking unvalidated against the live site                      | M3 (needs a live pass)                                                                                 |
+| No labelled frame corpus, so accuracy is unmeasurable                 | M3 remainder                                                                                           |
+| No regression harness with enforced accuracy thresholds               | M3 remainder                                                                                           |
+| No ordered history across sessions; two rings with opposite orderings | M4 (closed — `timeline-engine.cjs`, ADR-0016)                                                          |
+| Metrics scattered across four subsystems, re-joined by the dashboard  | M4 (closed — `dashboard-telemetry.cjs`)                                                                |
+| No rule for what a diagnostics payload may contain                    | M4 (closed — `telemetry-redaction.cjs`: redaction + a refusing scan)                                   |
+| No durable logs, no frame timings, no crash file                      | M4 remainder                                                                                           |
+| The (future) bundle is validated against no scripted failure scenario | M4 remainder                                                                                           |
+| No settings UI bound to the configuration schema                      | M5 (closed — `settings-form-mapper.cjs`, ADR-0017)                                                     |
+| No per-session detail view; account overrides have no UI              | M5 remainder                                                                                           |
+| No design tokens, component kit, i18n or accessibility audit          | M5 remainder                                                                                           |
+| No command palette or hotkeys                                         | M5 remainder                                                                                           |
+| No fault-injection harness, no soak results                           | M6                                                                                                     |
+| No threat model, SBOM or secret scanning                              | M7 in progress — threat model and reproducible SBOM are in; privacy scanning and release review remain |
+| No signing, no updater, no reproducible-build proof                   | M8                                                                                                     |
+| No performance budgets measured on a reference machine                | M9                                                                                                     |
+| `main.cjs` wiring is reviewed, not enforced                           | M0 remainder                                                                                           |

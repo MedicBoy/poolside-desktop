@@ -1,5 +1,4 @@
-// The data layer: the persisted workspace document, the activity feed, and the snapshot the
-// dashboard renders. Extracted from main.cjs so the composition root is wiring, not storage.
+// The persisted workspace document, activity feed, and snapshot the dashboard renders.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -8,62 +7,65 @@ const dashboardTelemetry = require('./dashboard-telemetry.cjs');
 const { messageOf } = require('./errors.cjs');
 const { events, sessions, workspace, profileReports } = require('./state.cjs');
 const { view: timelineView } = require('./timeline-transfer.cjs');
+const { createWorkspaceHistory } = require('./workspace-history.cjs');
+const { buildAccountOverview } = require('./account-overview.cjs');
+const { resolveRecovery } = require('./recovery-settings.cjs');
+const { describeReadings } = require('./reading-status.cjs');
 
 const MAX_EVENTS = 100;
-
-/**
- * How much of the compiled timeline one snapshot carries: the snapshot is broadcast on every state change, so the
- * full 400-entry stream would put a few hundred kilobytes on the wire repeatedly.
- */
+/** Bounded because snapshots are broadcast on every state change. */
 const TIMELINE_VIEW_LIMIT = 100;
 
-/**
- * Record an activity entry and push a fresh snapshot to the dashboard.
- * @param {string} message
- * @param {'info'|'warning'} [kind]
- */
+const accountNames = () => workspace.data.accounts.map(account => account.name);
+const activityHistory = createWorkspaceHistory(events, MAX_EVENTS);
+
+const configureActivityJournal = journal => activityHistory.configure(journal);
+const loadActivityHistory = () => activityHistory.restore(accountNames());
+const clearActivityHistory = () => {
+  const result = activityHistory.clear();
+  publish();
+  return result;
+};
+
+/** @param {string} message @param {'info'|'warning'} [kind] */
 function log(message, kind = 'info') {
-  events.unshift({ id: Date.now() + Math.random(), at: new Date().toISOString(), message, kind });
+  const entry = { id: Date.now() + Math.random(), at: new Date().toISOString(), message, kind };
+  events.unshift(entry);
   events.splice(MAX_EVENTS);
+  activityHistory.record(entry, accountNames());
   publish();
 }
 
-/**
- * One account's profile picture for the dashboard: the durable bookkeeping (generation, corruption
- * history) merged with the live measurement taken by the last scan. Returns null when there is nothing
- * to say, so the renderer can distinguish "not measured yet" from "measured and unremarkable".
- * @param {import('./types.cjs').Account} account
- * @returns {import('./types.cjs').ProfileView|null}
- */
+/** @param {import('./types.cjs').Account} account @returns {import('./types.cjs').ProfileView|null} */
 function profileView(account) {
   const persisted = account.profile || {};
   const live = profileReports.get(account.id) || {};
   return Object.keys(persisted).length || Object.keys(live).length ? { ...persisted, ...live } : null;
 }
 
-/**
- * The dashboard-facing view of the workspace: accounts with their live session state.
- * @returns {{accounts: object[], settings: import('./types.cjs').WorkspaceSettings, events: import('./types.cjs').ActivityEvent[], timeline: any, telemetry: any, readOnly: boolean, version: string}}
- */
+/** @returns {{accounts: object[], archivedAccounts: object[], settings: import('./types.cjs').WorkspaceSettings, events: import('./types.cjs').ActivityEvent[], activityHistory: object, routePresets: object[], timeline: any, telemetry: any, readOnly: boolean, version: string}} */
 function snapshot() {
-  const accounts = workspace.data.accounts
-    .filter(a => !a.archived)
-    .map(a => {
-      const group = sessions.get(a.id);
-      return {
-        ...a,
-        // A session with no group is closed: `closed` is a state, not a stored one.
-        status: group && group.fsm ? group.fsm.state : 'closed',
-        statusReason: group && group.fsm ? group.fsm.reason : null,
-        health: group && group.health ? group.health : null,
-        footprint: group && group.footprint ? group.footprint : null,
-        profile: profileView(a),
-        network: group && group.network ? group.network : null,
-        gameScreen: group && group.gameScreen ? group.gameScreen : null
-      };
-    });
-  // Compiled from the two rings that already record history — FSM transitions and the activity feed — rather
-  // than a third store that could drift from them (ADR-0016).
+  const accountView = a => {
+    const group = sessions.get(a.id);
+    return {
+      ...a,
+      status: group && group.fsm ? group.fsm.state : 'closed',
+      statusReason: group && group.fsm ? group.fsm.reason : null,
+      health: group && group.health ? group.health : null,
+      footprint: group && group.footprint ? group.footprint : null,
+      profile: profileView(a),
+      network: group && group.network ? group.network : null,
+      gameScreen: group && group.gameScreen ? group.gameScreen : null,
+      visibleReadings: describeReadings(group && group.visibleReadings ? group.visibleReadings : {}, Date.now()),
+      monitoring: Boolean(group && group.monitoring),
+      monitorIntervalSeconds: resolveRecovery(a).monitorIntervalSeconds,
+      screenHistory: group && Array.isArray(group.screenHistory) ? group.screenHistory : [],
+      screenAttention: group && group.screenAttention?.message ? group.screenAttention : null,
+      overview: buildAccountOverview(a, { ...workspace.data.settings, routePresets: workspace.data.routePresets || [] }, group || null)
+    };
+  };
+  const accounts = workspace.data.accounts.filter(a => !a.archived).map(accountView);
+  const archivedAccounts = workspace.data.accounts.filter(a => a.archived).map(accountView);
   const timelines = workspace.data.accounts
     .map(a => {
       const group = sessions.get(a.id);
@@ -73,8 +75,11 @@ function snapshot() {
   const compiled = timelineView({ sessions: timelines, events, limit: TIMELINE_VIEW_LIMIT });
   return {
     accounts,
+    archivedAccounts,
     settings: workspace.data.settings,
+    routePresets: workspace.data.routePresets || [],
     events,
+    activityHistory: activityHistory.status(),
     timeline: compiled,
     telemetry: dashboardTelemetry.build(accounts, { version: workspace.version, timeline: compiled }),
     readOnly: workspace.readOnly,
@@ -122,15 +127,7 @@ function savedWindowGeometry(id) {
   return windows && windows[id] ? windows[id] : null;
 }
 
-/**
- * Remember where a session window was left.
- *
- * Never throws: window geometry is disposable, and losing a rectangle must not be able to fail an
- * operation the user actually asked for. A read-only workspace or a failed write is logged and
- * otherwise ignored.
- * @param {string} id
- * @param {object} record
- */
+/** Remember disposable window geometry without failing the action that triggered it. @param {string} id @param {object} record */
 function rememberWindowGeometry(id, record) {
   if (workspace.readOnly) return false;
   try {
@@ -193,6 +190,9 @@ module.exports = {
   savedWindowGeometry,
   rememberWindowGeometry,
   updateAccountProfile,
+  configureActivityJournal,
+  loadActivityHistory,
+  clearActivityHistory,
   profileView,
   MAX_EVENTS,
   TIMELINE_VIEW_LIMIT

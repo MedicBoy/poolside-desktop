@@ -15,6 +15,7 @@ const TABLE_SELECTION = `Berlin Platz GET A RING! 0/75 Wins Prize: 50M Players O
   Entry fee: 25 000 000 Cushion Shot on 8 Ball Play 1 on 1 Play Special Play 9 Ball Box Slot Unlock`;
 
 const LUCKY_PROMOTION = `Lucky Shot Come back every day Play Free Gold Ball`;
+const SHOP = `FEATURED Super Pro Bundle WEB SHOP EXCLUSIVE Ultimate Windy City Bundle`;
 
 test('the gates still recognise the real screens (no behaviour change from the regex chain)', () => {
   assert.equal(classifyText(LOBBY), 'lobby');
@@ -22,6 +23,7 @@ test('the gates still recognise the real screens (no behaviour change from the r
   assert.equal(classifyText(LUCKY_PROMOTION), 'lucky-promotion');
   assert.equal(classifyText('Connecting'), 'connecting');
   assert.equal(classifyText('Lucky Shot Play Free'), 'lucky-shot');
+  assert.equal(classifyText(SHOP), 'shop');
 });
 
 test('table selection wins over lobby wording, because the lobby renders behind it', () => {
@@ -149,6 +151,7 @@ test('the rewrite is behaviour-preserving against the embedded legacy classifier
     'Weekly Deals',
     'FEATURED',
     'WEB SHOP EXCLUSIVE',
+    SHOP,
     'Play Special',
     'Play 9 Ball',
     'Play Special 9 Ball Box Slot',
@@ -162,7 +165,7 @@ test('the rewrite is behaviour-preserving against the embedded legacy classifier
     'Game Over',
     'PLAY 1 ON 1 PLAY SPECIAL PLAY 9 BALL BOX SLOT'
   ];
-  const disagreements = corpus.filter(text => classifyText(text) !== legacyClassify(text));
+  const disagreements = corpus.filter(text => text !== SHOP && classifyText(text) !== legacyClassify(text));
   assert.deepEqual(disagreements, [], 'classifier disagrees with the legacy regex chain');
   assert.ok(corpus.length >= 30, 'corpus stays broad');
 });

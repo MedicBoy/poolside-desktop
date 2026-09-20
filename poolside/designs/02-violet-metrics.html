@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Poolside — Violet Metrics</title>
+<style>
+  :root{
+    --bg:#0d0a1d; --side:#120e26; --card:#171233; --card2:#1c1640;
+    --line:rgba(150,130,255,.14); --text:#f2efff; --muted:#8d86b8;
+    --violet:#a855f7; --magenta:#ec4899; --cyan:#38bdf8; --green:#34d399; --amber:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1600px;height:1000px;overflow:hidden;background:var(--bg);color:var(--text);
+    font:14px/1.45 "Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:flex}
+  /* sidebar */
+  aside{width:236px;flex:0 0 236px;background:var(--side);border-right:1px solid var(--line);padding:22px 16px;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:10px;padding:2px 6px 24px;font-size:17px;font-weight:700}
+  .brand i{width:30px;height:30px;border-radius:9px;background:linear-gradient(140deg,var(--violet),var(--magenta));display:grid;place-items:center;font-style:normal;font-size:13px;font-weight:800;color:#fff}
+  .sec{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5c5588;padding:16px 10px 8px}
+  nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;color:#b3abd8;text-decoration:none;font-size:13.5px;margin-bottom:2px}
+  nav a.on{background:linear-gradient(100deg,rgba(168,85,247,.3),rgba(236,72,153,.12));color:#fff;box-shadow:inset 0 0 0 1px rgba(168,85,247,.35)}
+  nav a .n{margin-left:auto;font-size:11px;color:#a78bfa}
+  nav svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round}
+  .who{margin-top:auto;display:flex;align-items:center;gap:11px;padding:12px;border-radius:14px;background:var(--card)}
+  .who .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(140deg,#a855f7,#ec4899);display:grid;place-items:center;font-weight:700;font-size:13px}
+  .who b{font-size:13px;display:block}.who span{font-size:11px;color:var(--muted)}
+  /* main */
+  main{flex:1;min-width:0;padding:24px 26px;display:flex;flex-direction:column;gap:18px;overflow:hidden}
+  .head{display:flex;align-items:flex-end;gap:16px}
+  h1{font-size:29px;letter-spacing:-.6px;font-weight:650}
+  .head p{color:var(--muted);font-size:13px;margin-top:5px}
+  .head .sp{margin-left:auto;display:flex;gap:10px}
+  .pill{padding:9px 15px;border-radius:11px;border:1px solid var(--line);background:var(--card);font-size:12.5px;color:#c9c2ea}
+  .pill.hot{background:linear-gradient(120deg,var(--violet),var(--magenta));border:0;color:#fff;font-weight:600}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 17px}
+  .kpi small{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .kpi .v{font-size:28px;font-weight:650;letter-spacing:-.7px;margin-top:10px;display:flex;align-items:baseline;gap:9px}
+  .kpi .v em{font-style:normal;font-size:11.5px;padding:2px 8px;border-radius:20px;background:rgba(52,211,153,.16);color:var(--green)}
+  .kpi .v em.dn{background:rgba(251,191,36,.16);color:var(--amber)}
+  .grid{flex:1;min-height:0;display:grid;grid-template-columns:1.55fr 1fr;gap:16px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;min-height:0}
+  .panel h3{font-size:15px;font-weight:600}
+  .panel .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .legend{margin-left:auto;display:flex;gap:16px;font-size:12px;color:var(--muted)}
+  .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
+  .chart{margin-top:14px;height:268px;flex:0 0 auto}
+  .foot{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:auto;padding-top:16px;border-top:1px solid var(--line)}
+  .foot div small{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:block}
+  .foot div b{font-size:19px;display:block;margin-top:7px;letter-spacing:-.3px}
+  .tabs{margin-left:auto;display:flex;gap:6px;background:var(--card2);padding:4px;border-radius:10px}
+  .tabs span{font-size:11.5px;padding:5px 11px;border-radius:7px;color:var(--muted)}
+  .tabs span.on{background:rgba(168,85,247,.3);color:#fff}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+  th{text-align:left;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:#6f6899;padding:9px 8px;border-bottom:1px solid var(--line)}
+  td{padding:12px 8px;border-bottom:1px solid rgba(150,130,255,.08)}
+  td b{font-weight:600}
+  .st{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;padding:4px 10px;border-radius:20px;background:rgba(52,211,153,.14);color:#6ee7b7}
+  .st.off{background:rgba(255,255,255,.05);color:#9c95c4}
+  .num{font-variant-numeric:tabular-nums}
+  .right{display:flex;flex-direction:column;gap:16px;min-height:0}
+  .bars{display:flex;align-items:flex-end;gap:9px;height:96px;margin-top:16px}
+  .bars i{flex:1;border-radius:5px 5px 3px 3px;background:linear-gradient(180deg,var(--violet),rgba(168,85,247,.25))}
+  .bars i:nth-child(3n){background:linear-gradient(180deg,var(--cyan),rgba(56,189,248,.2))}
+  .list{margin-top:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+  .item{display:flex;gap:11px;align-items:flex-start}
+  .item .sq{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--card2);color:#c4b5fd;flex:0 0 30px}
+  .item b{font-size:12.5px;font-weight:600;display:block}
+  .item span{font-size:11.5px;color:var(--muted)}
+  .donut{display:flex;align-items:center;gap:18px;margin-top:16px}
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><i>8</i>Poolside X</div>
+  <nav>
+    <div class="sec">Your workspace</div>
+    <a class="on" href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Sessions<span class="n">2</span></a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 3 12L15 12h6"/></svg>Activity</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Account management</a>
+    <div class="sec">Local tools</div>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h16v12H4z"/><circle cx="12" cy="13" r="3"/></svg>Capture lab<span class="n">87</span></a>
+    <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Settings</a>
+    <div class="sec">Routes</div>
+    <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg>Route presets<span class="n">3</span></a>
+  </nav>
+  <div class="who"><div class="av">M</div><div><b>Master</b><span>Local workspace</span></div></div>
+</aside>
+
+<main>
+  <div class="head">
+    <div><h1>Session workspace</h1><p>Two isolated accounts, each signed in on this PC. Nothing leaves the machine.</p></div>
+    <div class="sp"><span class="pill">Last 7 days</span><span class="pill hot">+ Add account</span></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><small>Account slots</small><div class="v">2<em>configured</em></div></div>
+    <div class="kpi"><small>Open windows</small><div class="v">1<em>ready</em></div></div>
+    <div class="kpi"><small>Inspections today</small><div class="v">34<em>+12%</em></div></div>
+    <div class="kpi"><small>Awaiting review</small><div class="v">2<em class="dn">action</em></div></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div style="display:flex;align-items:center"><div><h3>Balance movement</h3><div class="hint">Coins and cash as last read from each window</div></div>
+        <div class="legend"><span><i style="background:var(--violet)"></i>Coins</span><span><i style="background:var(--cyan)"></i>Cash</span></div></div>
+      <svg class="chart" viewBox="0 0 760 300" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a855f7" stop-opacity=".45"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></linearGradient>
+          <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38bdf8" stop-opacity=".32"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0"/></linearGradient>
+        </defs>
+        <g stroke="rgba(150,130,255,.12)" stroke-width="1">
+          <line x1="0" y1="60" x2="760" y2="60"/><line x1="0" y1="120" x2="760" y2="120"/>
+          <line x1="0" y1="180" x2="760" y2="180"/><line x1="0" y1="240" x2="760" y2="240"/></g>
+        <path d="M0 250 C90 244 150 214 220 196 C300 176 340 150 420 140 C500 130 560 96 640 74 L760 58 L760 300 L0 300 Z" fill="url(#g1)"/>
+        <path d="M0 250 C90 244 150 214 220 196 C300 176 340 150 420 140 C500 130 560 96 640 74 L760 58" fill="none" stroke="#a855f7" stroke-width="3"/>
+        <path d="M0 268 C80 262 140 240 220 226 C300 212 360 196 440 188 C520 180 580 164 660 152 L760 144 L760 300 L0 300 Z" fill="url(#g2)"/>
+        <path d="M0 268 C80 262 140 240 220 226 C300 212 360 196 440 188 C520 180 580 164 660 152 L760 144" fill="none" stroke="#38bdf8" stroke-width="3"/>
+        <circle cx="640" cy="74" r="6" fill="#0d0a1d" stroke="#a855f7" stroke-width="3"/>
+      </svg>
+      <div style="display:flex;justify-content:space-between;color:#6f6899;font-size:11px;margin-top:10px">
+        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+      <div class="foot">
+        <div><small>Readings today</small><b>34</b></div>
+        <div><small>Median recognition</small><b>412 ms</b></div>
+        <div><small>Uncertain readings</small><b>0</b></div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <div style="display:flex;align-items:center"><div><h3>Accounts</h3><div class="hint">Live state and last reading</div></div>
+          <div class="tabs"><span class="on">All</span><span>Open</span></div></div>
+        <table>
+          <thead><tr><th>Account</th><th>Role</th><th>Coins</th><th>State</th></tr></thead>
+          <tbody>
+            <tr><td><b>Master</b></td><td style="color:var(--muted)">Receiver</td><td class="num">4,120,650,362</td><td><span class="st">Open</span></td></tr>
+            <tr><td><b>Slave</b></td><td style="color:var(--muted)">Sender</td><td class="num" style="color:#6f6899">—</td><td><span class="st off">Closed</span></td></tr>
+          </tbody>
+        </table>
+        <div class="donut">
+          <svg width="86" height="86" viewBox="0 0 86 86">
+            <circle cx="43" cy="43" r="32" fill="none" stroke="rgba(150,130,255,.14)" stroke-width="11"/>
+            <circle cx="43" cy="43" r="32" fill="none" stroke="#a855f7" stroke-width="11" stroke-linecap="round" stroke-dasharray="140 61" transform="rotate(-90 43 43)"/>
+            <text x="43" y="48" text-anchor="middle" fill="#f2efff" font-size="18" font-weight="700">70%</text></svg>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.7">
+            <div style="color:var(--text);font-weight:600;font-size:13.5px">Recognition coverage</div>
+            74 of 87 frames labelled<br />13 held back as benchmark</div>
+        </div>
+      </div>
+
+      <div class="panel" style="flex:1">
+        <div style="display:flex;align-items:center"><h3>Recent activity</h3><span class="hint" style="margin-left:auto">Newest first</span></div>
+        <div class="list">
+          <div class="item"><div class="sq">LB</div><div><b>Lobby recognised · 73%</b><span>Master · 21:47</span></div></div>
+          <div class="item"><div class="sq">IP</div><div><b>Public IPv4 203.0.113.42</b><span>Master · 21:45</span></div></div>
+          <div class="item"><div class="sq">SH</div><div><b>Shop return completed</b><span>Master · 21:41</span></div></div>
+          <div class="item"><div class="sq">TS</div><div><b>Table selection seen</b><span>Master · 21:38</span></div></div>
+          <div class="item"><div class="sq">EV</div><div><b>2 frames saved for review</b><span>Capture lab · 21:36</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

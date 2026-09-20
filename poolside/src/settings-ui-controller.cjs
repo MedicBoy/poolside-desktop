@@ -98,7 +98,7 @@ function route(command) {
   const read = reset ? { values: {}, errors: [], touched: /** @type {string[]} */ ([]) } : values.readForm(name, source.values);
   if (read.errors.length) return refuse(read.errors, [], name, current);
 
-  const cleared = reset ? ['identity', 'proxy'] : Array.isArray(source.clear) ? source.clear.map(String) : [];
+  const cleared = reset ? ['identity', 'proxy', 'recovery'] : Array.isArray(source.clear) ? source.clear.map(String) : [];
   const base = reset && name === 'settings' ? values.nest(validator.applySettingsDefaults({})) : current;
   const candidate = values.unset(merge(base, values.nest(read.values)), cleared);
 

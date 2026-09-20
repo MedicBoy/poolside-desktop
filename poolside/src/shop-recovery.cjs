@@ -16,7 +16,8 @@ const SHOP_PROBE = `(() => {
   return /WEB SHOP EXCLUSIVE/i.test(text) && /FEATURED/i.test(text) && /(?:Weekly Deals|Daily Free Cue Piece)/i.test(text);
 })()`;
 class ShopReturnGate {
-  constructor() {
+  constructor(delayMs = SHOP_DELAY_MS) {
+    this.delayMs = delayMs;
     this.since = null;
     this.url = null;
     this.used = false;
@@ -36,7 +37,7 @@ class ShopReturnGate {
       this.url = url;
       return false;
     }
-    if (now - this.since < SHOP_DELAY_MS) return false;
+    if (now - this.since < this.delayMs) return false;
     this.used = true;
     return true;
   }

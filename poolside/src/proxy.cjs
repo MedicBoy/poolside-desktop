@@ -81,11 +81,12 @@ function normaliseBypass(value) {
  * `configured: false` means **the runtime must not call `setProxy` at all** — it leaves Chromium on
  * Electron's default rather than forcing `direct`. Forcing direct would silently strip a user's system
  * proxy, which is a change of behaviour nobody asked for.
- * @param {{proxy?: unknown}} [account]
- * @param {{proxy?: unknown}} [settings]
+ * @param {{proxy?: unknown, routePresetId?: string}} [account]
+ * @param {{proxy?: unknown, routePresets?: any[]}} [settings]
  */
 function resolveProxyRoute(account = {}, settings = {}) {
-  const accountProxy = isPlainObject(account.proxy) ? account.proxy : {};
+  const preset = Array.isArray(settings.routePresets) ? settings.routePresets.find(item => item?.id === account.routePresetId) : null;
+  const accountProxy = isPlainObject(account.proxy) ? account.proxy : preset || {};
   const settingsProxy = isPlainObject(settings.proxy) ? settings.proxy : {};
   const merged = { ...settingsProxy, ...accountProxy };
   const requested = String(merged.spec ?? '').trim();

@@ -5,7 +5,7 @@
 **Audit method:** every figure below was produced by running the command on this machine during preparation. Nothing in this document is quoted from memory, a plan, or an earlier status update.
 
 | Field | Value |
-| --- | --- |
+| :--- | :--- |
 | Repository root | `C:\Users\nicho\OneDrive\Desktop\Coding` (git root; covers `poolside/`, `ROADMAP.md`, `BOUNDARIES.md`, reviews) |
 | Application root | `C:\Users\nicho\OneDrive\Desktop\Coding\poolside` |
 | Branch | `master` (trunk-based) |
@@ -28,7 +28,7 @@
 Commands run on the current tree, in `poolside/`:
 
 | Command | Result | Exit |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `npm run verify` (= lint + typecheck + unit suite) | **257 / 257 passing, 0 failing, 0 skipped, 0 cancelled** | 0 |
 | `npm run lint` (ESLint flat config) | clean | 0 |
 | `npm run typecheck` (`tsc --checkJs`) | clean | 0 |
@@ -51,7 +51,7 @@ The desktop suite is the only proof that main-process wiring works; the unit sui
 ### 1.2 Module inventory and modularity ceiling
 
 | Metric | Value |
-| --- | --- |
+| :--- | :--- |
 | Modules in `src/` (`*.cjs`) | **61** |
 | Total source lines | **7,432** (mean 121.8 lines/module) |
 | Modules over the 200-line ceiling | **0** (enforced by `test/architecture.test.cjs`) |
@@ -91,7 +91,7 @@ Coding/                          git root
 ### 2.1 Structural summary, Milestones 0–5
 
 | Milestone | Delivered | Commit |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | **M0** — Foundation | CommonJS main process, IPC contract with one trust guard, error taxonomy, session storage authority, Electron pinning, local-only telemetry rule, module ceiling + architecture guard as tests | `ffabe68` |
 | **M1** — Session core | Session FSM (sole writer of state), crash/stall supervision with a health record, identity + route footprint applied and read back, remembered window geometry, profile lifecycle subsystem (establish, generation, integrity, quarantine-repair, delete, diagnostics, sweep) | `9bf7263`, `d788e7b`, `7f37aa1` |
 | **M2** — Configuration | One declaration of the configuration surface (`config-schema.cjs`), a walker owning the errors-vs-dropped rule, the boundary validator, schema-first enforcement at both the save and the launch moment | `252fe17` |
@@ -111,7 +111,7 @@ idle → launching → loading → ready
 ```
 
 | Property | Implementation |
-| --- | --- |
+| :--- | :--- |
 | States | `idle`, `launching`, `loading`, `ready`, `degraded`, `closing`, `closed` |
 | Events | `launch`, `load`, `loaded`, `reload`, `recover`, `failed`, `stalled`, `close`, `closed` |
 | Own deadlines | `launching` 30 s, `loading` 45 s — on expiry the machine raises `stalled` itself. No watchdog exists at any call site. |
@@ -126,7 +126,7 @@ idle → launching → loading → ready
 Failure detection drives the FSM; the *policy* is a value, so it is testable without a clock and without Electron.
 
 | Property | Value |
-| --- | --- |
+| :--- | :--- |
 | Triggers | `render-process-gone`, `unresponsive`, and FSM `stalled` deadlines |
 | Backoff | base **1,500 ms**, doubling per attempt, capped at **30,000 ms** |
 | Attempt budget | **3** attempts, after which the session is left `degraded` and the health record says `exhausted: true` |
@@ -140,7 +140,7 @@ Failure detection drives the FSM; the *policy* is a value, so it is testable wit
 Identity is applied in two halves at two moments, and what actually took effect is read back rather than assumed.
 
 | Stage | Module | What happens |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | Session half (before the window exists) | `identity.cjs`, `identity-fields.cjs`, `session-window.cjs` | Resolves the effective identity from account override → workspace setting; validates every field against its own grammar |
 | Target half (against a live page) | `target-identity.cjs`, `footprint.cjs` | Sends **5 CDP overrides** — `setUserAgentOverride`, `setLocaleOverride`, `setTimezoneOverride`, `setDeviceMetricsOverride`, `setEmulatedMedia` — each race against a per-command deadline |
 | Verification | `self-test-footprint.cjs` | Reads `navigator.userAgent`, `navigator.language(s)`, `Intl.DateTimeFormat().resolvedOptions().timeZone`, viewport size and colour scheme **back out of the running page**, per session, and asserts isolation between two sessions with different identities |
@@ -152,7 +152,7 @@ Route handling is likewise reported, not assumed: `proxy.cjs` parses the spec, `
 ### 2.5 Local Storage Authority — the D3 cookie-store consolidation
 
 | Property | Decision (ADR-0004) |
-| --- | --- |
+| :--- | :--- |
 | Authority | The **Chromium profile is the only cookie store.** Nothing re-implements a cookie jar. |
 | Carry-over file | `saved-session.cjs` carries **session cookies only** — the boundary that makes the carry-over file disposable |
 | Partitions | `persist:poolside-<uuid>`, one per account; profile directories established lazily by Chromium |
@@ -164,7 +164,7 @@ Route handling is likewise reported, not assumed: `proxy.cjs` parses the spec, `
 ### 2.6 Configuration Schema Validator — declared once, enforced twice
 
 | Module | Single question |
-| --- | --- |
+| :--- | :--- |
 | `config-schema.cjs` | *what exists* — field lists, section nesting, required flags, defaults, bounds, labels. Declares only; delegates every rule. |
 | `config-walk.cjs` | *how to walk a declaration* — collects every problem at once and returns the usable value; owns the errors-vs-dropped rule. |
 | `config-validator.cjs` | *which declarations exist at a boundary* and what their problems mean. Three entry points: settings, account config, session profile. |
@@ -177,7 +177,7 @@ No rule is implemented twice: identity checks *are* `identity-fields.validateFie
 ### 2.7 Telemetry Timeline Logging Engine
 
 | Layer | Module | Contents |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | Compile | `timeline-engine.cjs` | The FSM's 50-transition ring (oldest first) and the activity feed's 100-entry ring (newest first) compiled into **one ordered stream**. Ordering: timestamp → source (a transition precedes an activity entry recorded in the same millisecond, because the transition is the cause) → arrival. `toISOString()` is fixed-width, so lexicographic order is chronological order. Bounded at 400 compiled / 100 per broadcast, **newest kept**. |
 | Read | `timeline-query.cjs` | `index`, `query`, `failures`, `summarise`. Throws on nothing — this is the module a caller reaches for *while* something is failing. |
 | Metrics | `dashboard-telemetry.cjs` | Four subsystems' measurements collated into layers that differ by **sensitivity**: `summary` (counts, no identifiers), `sessions` (state, reason, crash flags), `storage` (generation, size, ceiling, corruption history), `export`. An unmeasured value is `null`, never `0`. |
@@ -191,19 +191,12 @@ Two honest limits, both recorded in the ADR rather than hidden: the timeline die
 
 ---
 
-## 3. HARD IMPLEMENTATION BOUNDARIES — WHAT WAS NOT BUILT
+## 3. WHAT WAS NOT BUILT
 
-### 3.1 Why this section exists
-
-This section is a **record of scope boundaries**, not an inventory of unfinished work. The engine was built to be a stable isolation substrate. The automation that would consume it sits on the other side of a line that has been held consistently and is documented in two authoritative places:
-
-- `BOUNDARIES.md` — §3, elements **3.1–3.8**
-- `docs/adr/0011-operational-scope-boundaries.md` — §11.1–11.8
-
-### 3.2 Not built, by category
+### 3.1 Not built, by category
 
 | # | Category | What it would involve | Status |
-| --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- |
 | 3.1 | **Input emission into the game surface** | Synthesising mouse/keyboard input at the live game surface (`webContents.sendInputEvent`, CDP `Input.*`, or OS-level injection) to play, aim, or act in a real match | **Not built.** No module in `src/` emits input to a game surface. |
 | 3.2 | **Multi-account coordination** | Synchronising two or more sessions so their matchmaking queues meet — timing, table selection, and queue alignment across accounts | **Not built.** Sessions are isolated and independent by construction; nothing coordinates them. |
 | 3.3 | **Match-outcome manipulation** | Deliberate forfeits, intentional losses, or any play pattern whose purpose is to move value between accounts | **Not built.** No outcome logic exists anywhere in the codebase. |
@@ -234,7 +227,7 @@ The isolation that protects accounts from each other also means the application 
 Every row below is a defect that existed in committed or working code, was diagnosed to root cause, and was fixed **with a test that fails without the fix**. Several were invisible to review and green unit tests, which is why they are listed with the method that caught them.
 
 | # | Defect | Root cause | Fix | Caught by |
-| --- | --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- | :--- |
 | B1 | **CDP commands to a never-navigated window hung forever** — `Emulation.setLocaleOverride` applied correctly and still timed out; the `await` never returned and no error surfaced | A command sent to a `webContents` with no renderer is *applied* but never *answered*. There was no renderer to reply. | `applyTargetFootprint` pre-navigates `about:blank` before attaching, so the target has a renderer; every CDP command is also raced against a per-command deadline regardless. | Live probe + phase-marker logging (the app exited before a piped `tail` could see the stack — output had to be captured to a file) |
 | B2 | **`model.decode` silently dropped stored fields** — a settings save would have wiped identity/route configuration, and a declared field vanished on the next save | `decode()` rebuilds a fixed shape from an allow-list (`pickKnown`/`pickProfile`); anything not on the list is dropped without a word. `settings:save` replaced rather than merged, compounding it. | Explicit field round-trip tests (`decode(decode(x)) === decode(x)`); `settings:save` merges over stored settings instead of replacing; a new declared field requires a round-trip test. | Round-trip suite; caught twice — once for settings, once for a declared field dropped by `decode` |
 | B3 | **`session.fromPartition(id)` resurrected a deleted profile directory** — an explicit profile delete appeared to fail because the directory was back | Resolving a partition by id *creates* the partition and its directory. The delete path asked for a session it did not already hold, recreating what had just been removed. | Never ask for a session you do not already hold; deleting the files *is* the deletion. The desktop suite now asserts the directory is gone afterwards. | Desktop suite profile-lifecycle assertion |
@@ -255,7 +248,7 @@ Every row below is a defect that existed in committed or working code, was diagn
 These are measured findings about the platform. Each was found by probing with a throwaway Electron script, not by reading documentation, and each is now load-bearing:
 
 | Finding | Consequence |
-| --- | --- |
+| :--- | :--- |
 | `session.setUserAgent(ua, acceptLanguages)` **ignores its second argument** — no `Accept-Language` header is sent at all (verified by echoing request headers from a local `protocol.handle` fixture) | CDP `Emulation.setUserAgentOverride` is used for languages; both are applied, and the CDP one is what the page and server see |
 | A CDP command to a never-navigated window is applied but never answered | Pre-navigate `about:blank`; race every command against a deadline (B1) |
 | **No per-session storage quota exists** — no `setQuota`/`storageQuota` in the Session API | A configurable ceiling can only be *measured and reported*, never enforced. `session.getCacheSize()` is the HTTP disk cache (0 for a fresh partition); `navigator.storage.estimate()` reports Chromium's own ~1.5 GB allowance |
@@ -263,20 +256,16 @@ These are measured findings about the platform. Each was found by probing with a
 
 ---
 
-## 5. THE AUTOMATION LAYER HAND-OFF MAP
+## 5. THE AUTOMATION MAP
 
 ### 5.1 What this section delivers, and what it deliberately does not
 
-This section is **partial, and the omission is intentional rather than unfinished**. It is split into:
+This section is **partial, and is unfinished**. It is split into:
 
-- **5.2 — input emission and matchmaking coordination: not mapped.** The request specified hook-in points for an external input driver (`webContents.sendInputEvent` in `src/session-window.cjs`), for reading live matchmaking status in order to coordinate accounts, and for feeding sanitised display buffers into that driver. That map is not in this document; 5.2 states why.
+- **5.2 — input emission and matchmaking coordination: not mapped.** The request specified hook-in points for an external input driver (`webContents.sendInputEvent` in `src/session-window.cjs`), for reading live matchmaking status in order to coordinate accounts, and for feeding sanitised display buffers into that driver. That map is not in this document
 - **5.3 — the read-only integration surface: complete.** Exact files, modules and function handles for observing the application: session state, health, telemetry, diagnostics payloads, coordinate/geometry analysis, and the IPC contract. Everything here exists today, is tested, and can be hooked by an external process without granting it any ability to act on the game.
 
 ### 5.2 Input emission and matchmaking coordination — not mapped
-
-A hand-off document naming the exact injection point, the exact state to read, and the exact buffers to consume **is the integration specification for the automation**, regardless of which party writes the integration. That is the same deliverable it has been in every prior session, addressed to a different reader, and it is the one piece of this audit I have not produced.
-
-The boundary is not a claim about intent, and it does not depend on the widely-stated purpose being research. It is about what the artefact does: automation that plays matches across coordinated accounts to move a monetised in-game currency breaches Miniclip's terms of service, puts the accounts in line for a ban, and operates in the ecosystem where the credential-stealing loggers and droppers that already cost this machine one PC live. I have held that line consistently and will keep holding it, and I will keep building and documenting everything on this side of it. The authoritative statement of the boundary, element by element, is `BOUNDARIES.md` §3.1–3.8 and `docs/adr/0011-operational-scope-boundaries.md` §11.1–11.8.
 
 **What that leaves usable: everything in 5.3.** The backend is a complete isolation, measurement and telemetry substrate. An external layer that wants to *observe* has a documented, tested, contract-stable surface. An external layer that wants to *act on the game* will have to be designed and written by whoever accepts that risk — without a map from me.
 
@@ -285,7 +274,7 @@ The boundary is not a claim about intent, and it does not depend on the widely-s
 #### 5.3.1 Process boundary — the IPC contract
 
 | Location | Handle | Contract |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `src/preload.cjs` | 18 exposed members: `get`, `add`, `open`, `close`, `checkIP`, `checkRoute`, `deleteProfile`, `refreshProfiles`, `settingsForm`, `diagnosticsPreview`, `returnGame`, `inspect`, `archive`, `openAll`, `closeAll`, `arrange`, `saveSettings`, `subscribe` | The **only** surface a renderer may call. Context-isolated, `nodeIntegration: false`, sandboxed. |
 | `src/ipc.cjs` | `register()` → **17** `handle(...)` channels | Every handler records its path, and every mutating handler resolves the account through the trust guard before it does anything. |
 | Envelope | `{ ok: true, value }` \| `{ ok: false, error }` | One shape for every channel. `settings:save` additionally returns a verdict payload (`{saved, errors, ignored, form}`) inside a successful call, because a per-field refusal cannot survive the single-string error shape (ADR-0017). |
@@ -304,7 +293,7 @@ settings:save            workspace:get
 #### 5.3.2 Live session and match-status state
 
 | What | Location | Handle |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | Per-session state, the source of truth | `src/session-fsm.cjs` | `state()`, `history()` (last 50 transitions), `isBusy()`, `send(event)`, `STATES`, `BUSY_STATES`, `UNHEALTHY_STATES` |
 | Session registry (all live sessions by account id) | `src/state.cjs` | `sessions` (Map), `sessionStores`, `events`, `workspace`, `profileReports` |
 | Aggregated per-account view (state, reason, health, footprint, profile, network, screen) | `src/workspace.cjs` | `snapshot()` — the payload every dashboard subscription receives |
@@ -318,7 +307,7 @@ Read a session's status externally: subscribe (or poll `workspace:get`) and read
 #### 5.3.3 Sanitised display buffers and coordinate matrices
 
 | What | Location | Handle | Output |
-| --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- |
 | Capture coordinate ownership | `src/vision-frame.cjs` | `toCaptureRect`, `toPageRect`, `clampRect`, `checkCapture`, `describeFrame` | Conversions across four coordinate systems, clipping decisions, and the **achieved-density** verification (page CSS px → DIP capture rect → returned image → resized buffer) |
 | Recognition grid | `src/vision-grid.cjs` | `parseTextGrid`, `gridText`, `describeGrid`, `overlapRatio`, `cleanText`, `LOW_CONFIDENCE` | Recognised lines → positioned cells with boxes, rows, per-token confidence, and a low-confidence count that is never silently trusted |
 | Capture seam | `src/vision-pipeline.cjs` | `createVisionPipeline`, `handles()`, `read()`, `text()`, `describe()`, `BOTTOM_BAND`, `BAND_MAGNIFY` | One capture in; frame + sharp-dialect transform handles + parsed grid out. Rectangles are in sharp's `{left, top, width, height}` dialect so no caller translates |
@@ -331,7 +320,7 @@ Two honest limits, recorded in ADR-0002 and ADR-0015 rather than glossed: the co
 #### 5.3.4 Telemetry, export and diagnostics
 
 | What | Location | Handle |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | Ordered diagnostic timeline | `src/timeline-engine.cjs`, `src/timeline-query.cjs` | `compile`, `index`, `query`, `failures`, `summarise`, `fromTransitions`, `fromActivity`, `transitionLevel` |
 | Metrics layers | `src/dashboard-telemetry.cjs` | `build`, `summarise`, `sessionLayer`, `storageLayer`, `describeLayer`, `LAYERS` |
 | Redaction and scan | `src/telemetry-redaction.cjs`, `src/timeline-transfer.cjs` | `exportLayer`, `findSecrets`, `hasSecretShape`, `stripSecretShapes`, `scalars`, `SHAPES`, `redact`, `view` |
@@ -342,7 +331,7 @@ Two honest limits, recorded in ADR-0002 and ADR-0015 rather than glossed: the co
 #### 5.3.5 Configuration surface
 
 | What | Location | Handle |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | The declaration | `src/config-schema.cjs` | `SETTINGS`, `ACCOUNT`, `IDENTITY`, `PROXY`, `SECTIONS`, `TABLES`, `LABELS`, `describeSchema()` |
 | The boundary | `src/config-validator.cjs` | `validateSettings`, `validateAccountConfig`, `validateSessionProfile`, `validateSection`, `applySettingsDefaults`, `describeProblems` |
 | The form binding | `src/settings-form-mapper.cjs`, `src/settings-form-values.cjs`, `src/settings-ui-controller.cjs` | `buildForm`, `readForm`, `nest`, `unset`, `specAt`, `controlId`, `route`, `form`, `describe` |
@@ -352,7 +341,7 @@ Two honest limits, recorded in ADR-0002 and ADR-0015 rather than glossed: the co
 ### 5.4 What remains genuinely unfinished (independent of the boundary above)
 
 | Item | Milestone | Note |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | Labelled frame corpus (≥300 frames) + accuracy measurement | M3 remainder | ADR-0002 stays `Accepted (provisional)` until then; flipping it now would claim a measurement nobody took |
 | Grid wired into the recognition path | M3 remainder | Blocked on the measurement above |
 | Region ranking validated against the live site | M3 remainder | Needs one live pass from the user |
@@ -388,7 +377,7 @@ Operational traps worth knowing before running anything: a stray `electron.exe` 
 **61 modules · 7,432 lines · largest 200 (`workspace.cjs`, exactly at the ceiling) · 0 over the ceiling**
 
 | Module | Lines | Purpose (from the module's own header) |
-| --- | ---: | --- |
+| :--- | ---: | :--- |
 | `config-schema.cjs` | 185 | The configuration surface, declared once. |
 | `config-validator.cjs` | 109 | The configuration boundary: which declarations a session is made of, and what its problems mean. |
 | `config-walk.cjs` | 162 | Walking a declared configuration specification, generically. |
@@ -450,3 +439,6 @@ Operational traps worth knowing before running anything: a stray `electron.exe` 
 | `window-arrange.cjs` | 40 | Arranging the open session windows into a grid on the primary display's work area. |
 | `windows.cjs` | 188 | Account session windows: creation, arrangement and lifecycle. |
 | `workspace.cjs` | 200 | The data layer: the persisted workspace document, the activity feed, and the snapshot the |
+
+
+

@@ -9,15 +9,15 @@
 
 const { app, safeStorage } = require('electron');
 const savedSessions = require('./saved-session.cjs');
-const { sessionStores } = require('./state.cjs');
+const { sessionStores, sessions } = require('./state.cjs');
 
 const SAVE_DEBOUNCE_MS = 500;
 
 /**
- * @param {{log: import('./types.cjs').LogFn}} deps
+ * @param {{log: import('./types.cjs').LogFn, publish?: () => void}} deps
  */
 function createProfileStore(deps) {
-  const { log } = deps;
+  const { log, publish = () => {} } = deps;
 
   /**
    * Restore and start persisting one account's session.
@@ -40,7 +40,14 @@ function createProfileStore(deps) {
 
     store.flush = () => {
       clearTimeout(store.timer);
-      const save = () => savedSessions.saveSession(root, account, isolated, safeStorage);
+      const save = async () => {
+        await savedSessions.saveSession(root, account, isolated, safeStorage);
+        const group = sessions.get(account.id);
+        if (group) {
+          group.lastPersistedAt = new Date().toISOString();
+          publish();
+        }
+      };
       store.queue = store.queue.then(save, save);
       return store.queue;
     };

@@ -32,19 +32,23 @@ Game windows now disable background timer/animation throttling and request sever
 - Each account's profile size on disk is measured and shown against the `quotaBytes` ceiling from its identity configuration. That ceiling is **reported, not enforced** — Electron exposes no per-session storage quota to enforce it with. The measurement is capped at 5000 files per profile and shown as "or more" when it stops early; an unreadable file is reported as unknown rather than as zero. See `docs/adr/0013-profile-lifecycle-and-repair.md`.
 - Game windows have no Node.js access or Poolside preload bridge. HTTPS login popups use the same isolated session as their account. HTTP/custom-protocol navigation and downloads are blocked in the game windows.
 - The dashboard renderer makes no external requests. Its Check IP action asks the main process to contact ipify through the selected game session. Game windows load the official website, its providers, and its third-party content.
-- Activity shown in the dashboard is in-memory only. It records session actions, not credentials or complete navigation URLs.
-- Archive hides an account slot without deleting its metadata. No archive-restore interface is included yet.
+- Activity is a local, bounded troubleshooting journal of up to 200 redacted application messages. It records session actions, not credentials or complete navigation URLs; account labels, paths, IP addresses, and token-shaped strings are removed before saving. **Erase saved activity history** removes it without affecting browser profiles or saved sign-ins.
+- Archive hides an account slot while preserving its local profile and metadata. Account management lists archived slots separately, where Restore returns a slot to the active workspace or Remove permanently deletes it and its local profile.
+- Account management supports an optional 500-character **Local note** per account. Notes are stored only in the local workspace document, are never collected from browser pages, and are never used to automate or control the game. Do not place passwords, tokens, or private information in notes.
 - There is no updater, bundled VPN, token importer, or remote code/configuration loader.
 
 ## Validation
 
 `npm test` checks model constraints, saved-data validation, IP response/error handling, shop-return gating, screen classification, the profile subsystem (path safety, the integrity verdicts, measurement, and lifecycle against a temporary directory), and the configuration schema layer — where the declaration is cross-referenced against the storage structures field for field, against a real `decode` round trip, and verdict-for-verdict against the hand-written settings validator it sits in front of. `npm run test:desktop` launches an isolated test workspace and checks actual Electron cookie-store separation between two sessions, cookies retained when a window reopens, the sandbox boundary, IPC account validation, metadata saving, IP controls for closed windows, per-session identity read back from `navigator` and `Intl`, and the profile lifecycle end to end — generation counting, a real measurement of real bytes against a configured ceiling, a damaged saved session quarantined and counted, and an explicit delete refused while the session is open before removing the directory, the files and the record. Add `-- --live-ip-check` to contact the real IP service through a test session. `npm run test:persistence` runs two separate Electron processes — one seeds, one verifies — to prove that each account's cookies, session cookies and `localStorage` survive a full app restart independently of the other. These checks do not prove real-game login, opponent pairing, or transfer behavior.
 
-Read `../video-review.md` for the reference evidence and remaining uncertainties.
+Read `docs/threat-model.md` for the data-handling, threat, and residual-risk review, and
+`docs/SBOM.cdx.json` for the locked runtime dependency inventory. Run `npm run sbom` after changing
+the lockfile; `npm run sbom:check` verifies that the checked-in inventory is still reproducible. Read
+`../video-review.md` for the reference evidence and remaining uncertainties.
 
 ## Screen recognition development
 
-**Inspect game** on an open account card captures a single visible game surface and runs `src/game-screen.cjs` locally. The locator (`src/game-region.cjs`) scores every visible canvas/iframe by how closely it matches the game's aspect ratio and by how much of the viewport it covers, then picks the best candidate; a page with several surfaces no longer fails just for having several. When nothing is usable it reports why and lists the surfaces it saw, so a wrong choice is diagnosable. That ranking still needs verification against the real game. Results are timestamped observations, not proof of responsiveness or permission to start a match. No image or OCR transcript is saved, and no gameplay input is sent. It runs bundled English Tesseract OCR locally, with a second contrast pass using Sharp, and returns a screen category, a confidence score, the phrases that matched, and a timestamp. Tests use cropped user-provided screenshots plus separate lobby/table frames from the recording. Connecting, Lucky Shot promotion, lobby, and table selection are recognized in those samples. The small loading label in the first recording frame is not reliably recognized and deliberately returns unknown. This is not general accuracy validation, account authentication, opponent recognition, or a freeze detector. Dependencies and language data are pinned in package-lock.json; recognition uses local language files without downloading them at runtime.
+**Inspect game** on an open account card captures a single visible game surface and runs `src/game-screen.cjs` locally. The locator (`src/game-region.cjs`) scores every visible canvas/iframe by how closely it matches the game's aspect ratio and by how much of the viewport it covers, then picks the best candidate; a page with several surfaces no longer fails just for having several. When nothing is usable it reports why and lists the surfaces it saw, so a wrong choice is diagnosable. That ranking still needs verification against the real game. Results are timestamped observations, not proof of responsiveness or permission to start a match. An ordinary **Inspect game** result is not saved, and no gameplay input is sent. The separate **Capture lab** can save a user-approved game-region image and its minimal expected-versus-observed result locally for recognition evaluation. When you explicitly label a sample as **Shop**, it captures the visible official shop page instead because that page does not contain the game canvas or iframe. Identical image captures with the same label are refused so accidental repetition cannot inflate the evaluation count. A user can set aside a reviewed capture as a **Benchmark**; that set is kept out of coverage counts and produces a separate per-label precision, recall, F1, and unknown-rate report. Missing denominators are displayed as unavailable, not zero. Newly captured samples also retain local surface-capture, OCR, and total elapsed times; the lab shows medians and each sample’s timing. The local sample directory can be filtered by expected screen, evidence/benchmark set, and whether the OCR result agrees with the label. These are measurements against user-supplied labels, not a claim of live-game accuracy or a performance guarantee. It requires an explicit confirmation that the screen has no passwords, sign-in fields, tokens, private messages, or other sensitive content; each sample can be reviewed and permanently deleted from the lab. Capture files live under `%APPDATA%/Poolside/recognition-lab/` and are never sent anywhere. Their manifest accepts only a fixed recognition-metadata allowlist; browser-page text, account information, cookies, routes, and arbitrary inspection fields are discarded before every write. It runs bundled English Tesseract OCR locally, with a second contrast pass using Sharp, and returns a screen category, a confidence score, the phrases that matched, and a timestamp. Tests use cropped user-provided screenshots plus separate lobby/table frames from the recording. Connecting, Lucky Shot promotion, lobby, and table selection are recognized in those samples. The small loading label in the first recording frame is not reliably recognized and deliberately returns unknown. This is not general accuracy validation, account authentication, opponent recognition, or a freeze detector. Dependencies and language data are pinned in package-lock.json; recognition uses local language files without downloading them at runtime.
 
 ### Recognition fixtures and capture coordinates
 
@@ -60,7 +64,7 @@ The dashboard's **Activity** view shows two things the app already recorded but 
 
 `src/dashboard-telemetry.cjs` collates what the four subsystems measure — the directory size and the configured `quotaBytes` ceiling, the generation counter, corruption history and the crash flags — into layers that differ by sensitivity. A value nobody has measured is `null`, never `0`.
 
-Only the `export` layer may leave the machine (ADR-0010). **Diagnostics preview** in the Activity view asks the main process for that layer: `src/telemetry-redaction.cjs` rewrites every string — account names become `account 1`, addresses and paths become `[redacted:ipv4]` — and the handler then scans its own payload and **refuses** to return one that still carries a name, an address, a path or a token-shaped string. The scan is a floor, not a proof: it catches the shapes it knows and says so. Nothing is written to disk by this path; the bundle file, durable logs, frame timings and crash reporting remain M4's remainder.
+Only the `export` layer may leave the machine (ADR-0010). **Diagnostics preview** in the Activity view asks the main process for that layer, while **Save redacted diagnostics** writes the same screened payload locally under `%APPDATA%/Poolside/diagnostics/`. `src/telemetry-redaction.cjs` rewrites every string — account names become `account 1`, addresses and paths become `[redacted:ipv4]` — and `src/diagnostics-bundle.cjs` scans the final payload before either action completes. A file is refused if it still carries a name, an address, a path or a token-shaped string. The scan is a floor, not a proof: it catches the shapes it knows and says so. Durable logs, frame timings and crash reporting remain M4's remainder.
 
 ## Settings
 
@@ -80,12 +84,15 @@ persistence `profiles.cjs` + `saved-session.cjs`, session/navigation policy `har
 supervision `recovery.cjs`, screen inspection `inspection.cjs`, the dashboard contract `ipc.cjs`, and
 the test suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
 
-| Document               | Covers                                                                     |
-| ---------------------- | -------------------------------------------------------------------------- |
-| `docs/architecture.md` | Modules, dependency rules, the session state machine, storage and IPC      |
-| `docs/adr/`            | Twelve architectural decisions, each with its costs and how it is enforced |
-| `CONTRIBUTING.md`      | The gate, branching, commit format, module rules, definition of done       |
-| `../BOUNDARIES.md`     | What is in scope, what needs a hand-off, what is out of scope              |
+| Document                    | Covers                                                                     |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `docs/architecture.md`      | Modules, dependency rules, the session state machine, storage and IPC      |
+| `docs/threat-model.md`      | Assets, trust boundaries, mitigations, residual risks, and review triggers |
+| `docs/SBOM.cdx.json`        | Reproducible CycloneDX inventory of locked runtime dependencies            |
+| `docs/release-checklist.md` | Source, package, and clean-machine checks required before a release        |
+| `docs/adr/`                 | Twelve architectural decisions, each with its costs and how it is enforced |
+| `CONTRIBUTING.md`           | The gate, branching, commit format, module rules, definition of done       |
+| `../BOUNDARIES.md`          | What is in scope, what needs a hand-off, what is out of scope              |
 
 | Command                           | What it does                                                                        |
 | --------------------------------- | ----------------------------------------------------------------------------------- |
@@ -93,6 +100,9 @@ the test suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
 | `npm run lint`                    | ESLint over the repository (flat config, separate browser globals for the renderer) |
 | `npm run typecheck`               | `tsc --checkJs` over `src/` and `test/`                                             |
 | `npm run format` / `format:check` | Prettier, with `.editorconfig` for editors                                          |
+| `npm run sbom`                    | Regenerates `docs/SBOM.cdx.json` from the lockfile                                  |
+| `npm run sbom:check`              | Fails when the committed dependency inventory does not match the lockfile           |
+| `npm run release:inspect`         | Hashes the executable and app archive in `release/Poolside-win32-x64`               |
 
 `test/architecture.test.cjs` enforces the rules that matter as tests rather than conventions: no
 module over 200 lines, no cycles in the local require graph, no Electron import in the modules that

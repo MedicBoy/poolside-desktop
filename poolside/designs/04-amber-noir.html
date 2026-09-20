@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Poolside — Amber Noir</title>
+<style>
+  :root{
+    --bg:#121010; --panel:#1b1817; --panel2:#221e1c; --card:#191616;
+    --line:rgba(255,214,170,.10); --text:#f6f1ec; --muted:#9c9086;
+    --orange:#f97316; --amber:#fbbf24; --cream:#ffe8d1; --green:#4ade80;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1600px;height:1000px;overflow:hidden;background:
+      radial-gradient(900px 520px at 12% -6%, rgba(249,115,22,.16), transparent 62%),
+      radial-gradient(760px 460px at 96% 8%, rgba(251,191,36,.09), transparent 60%), var(--bg);
+    color:var(--text);font:14px/1.5 "Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:flex}
+  aside{width:262px;flex:0 0 262px;padding:26px 18px;display:flex;flex-direction:column}
+  .me{display:flex;align-items:center;gap:12px;padding:6px 8px 26px}
+  .me .av{width:46px;height:46px;border-radius:16px;background:linear-gradient(140deg,#f97316,#b45309);
+    display:grid;place-items:center;font-weight:800;font-size:17px;color:#1a0f05;box-shadow:0 10px 24px rgba(249,115,22,.3)}
+  .me b{font-size:17px;font-weight:600;display:block}
+  .me span{font-size:11.5px;color:var(--muted)}
+  nav a{display:flex;align-items:center;gap:13px;padding:13px 14px;border-radius:16px;color:#c8bdb3;
+    text-decoration:none;font-size:14px;margin-bottom:5px}
+  nav a.on{background:linear-gradient(120deg,#f97316,#fb923c);color:#1a0d03;font-weight:650;
+    box-shadow:0 14px 30px rgba(249,115,22,.28)}
+  nav svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  aside .tip{margin-top:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:18px}
+  aside .tip b{font-size:13px;display:block;margin-bottom:6px}
+  aside .tip p{font-size:11.5px;color:var(--muted);line-height:1.65}
+  /* main */
+  main{flex:1;min-width:0;padding:26px 28px 26px 8px;display:flex;flex-direction:column;gap:18px;overflow:hidden}
+  .bar{display:flex;align-items:center}
+  .bar h1{font-size:30px;font-weight:600;letter-spacing:-.5px}
+  .bar .right{margin-left:auto;display:flex;gap:11px;align-items:center}
+  .ic{width:44px;height:44px;border-radius:14px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;color:#d6c9bd}
+  .add{padding:13px 22px;border-radius:14px;border:0;background:linear-gradient(120deg,#f97316,#fb923c);
+    color:#1a0d03;font-weight:700;font-size:13.5px;box-shadow:0 14px 30px rgba(249,115,22,.3)}
+  .grid{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:auto 1fr;gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:22px;display:flex;flex-direction:column;min-height:0}
+  .card .hd{display:flex;align-items:center;margin-bottom:4px}
+  .card h3{font-size:16px;font-weight:600}
+  .card .plus{margin-left:auto;width:32px;height:32px;border-radius:50%;background:var(--panel2);display:grid;place-items:center;color:#cbbdb0;font-size:17px}
+  .span2{grid-column:span 2}
+  /* hero account */
+  .hero{background:linear-gradient(140deg,#241c16,#191515 62%);position:relative;overflow:hidden}
+  .hero .row{display:flex;align-items:center;gap:14px}
+  .hero .badge{display:inline-flex;align-items:center;gap:8px;font-size:11px;padding:6px 12px;border-radius:20px;
+    background:rgba(74,222,128,.14);color:#86efac}
+  .hero .badge i{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .hero h2{font-size:26px;font-weight:600;margin-top:16px;letter-spacing:-.4px}
+  .hero .sub{color:var(--muted);font-size:12.5px;margin-top:4px}
+  .hero .money{display:flex;gap:40px;margin-top:22px}
+  .hero .money small{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#8d8177;display:block}
+  .hero .money b{font-size:30px;font-weight:650;display:block;margin-top:8px;letter-spacing:-.8px;font-variant-numeric:tabular-nums}
+  .hero .money em{font-style:normal;font-size:11px;color:var(--green);margin-left:9px}
+  .hero .actions{display:flex;gap:11px;margin-top:auto;padding-top:20px}
+  .hero .actions span{padding:11px 18px;border-radius:13px;font-size:12.5px;font-weight:650;background:var(--panel2);color:#d9ccc0}
+  .hero .actions span.pri{background:linear-gradient(120deg,#f97316,#fb923c);color:#1a0d03}
+  /* donut cards */
+  .stat-top{display:flex;align-items:center}
+  .stat-top b{font-size:24px;font-weight:650;letter-spacing:-.5px}
+  .stat-top .tag{margin-left:auto;font-size:11px;padding:5px 11px;border-radius:20px;background:rgba(74,222,128,.13);color:#86efac}
+  .donut{display:grid;place-items:center;flex:1;padding:8px 0}
+  /* transactions */
+  .txn{display:flex;align-items:center;gap:13px;padding:13px 0;border-bottom:1px solid rgba(255,214,170,.07)}
+  .txn:last-child{border-bottom:0}
+  .txn .av{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;font-size:12.5px;font-weight:700;flex:0 0 38px}
+  .txn b{font-size:13.5px;font-weight:600;display:block}
+  .txn span{font-size:11.5px;color:var(--muted)}
+  .txn .amt{margin-left:auto;font-size:14px;font-weight:650;font-variant-numeric:tabular-nums}
+  .txn .amt.up{color:var(--green)}.txn .amt.dn{color:#fb7185}
+  /* bars */
+  .bars{display:flex;align-items:flex-end;gap:14px;height:132px;flex:0 0 auto;padding-top:14px}
+  .bars .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:9px;height:100%;justify-content:flex-end}
+  .bars .b i{width:100%;min-height:10px;border-radius:11px;background:linear-gradient(180deg,#f97316,rgba(249,115,22,.22))}
+  .bars .b i.mut{background:linear-gradient(180deg,rgba(255,214,170,.20),rgba(255,214,170,.06))}
+  .bars .b span{font-size:11px;color:var(--muted)}
+  .kv{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,214,170,.07);font-size:13px}
+  .kv:last-child{border-bottom:0}
+  .kv span{color:var(--muted)}
+  .kv b{font-weight:600;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<aside>
+  <div class="me"><div class="av">M</div><div><b>Master</b><span>Local workspace</span></div></div>
+  <nav>
+    <a class="on" href="#"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V13h6v9"/></svg>Sessions</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 3 12L15 12h6"/></svg>Activity</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Account management</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h16v12H4z"/><circle cx="12" cy="13" r="3"/></svg>Capture lab</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M4 17l5-6 4 4 7-9"/></svg>Reports</a>
+    <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Settings</a>
+  </nav>
+  <div class="tip"><b>Nothing leaves this PC</b><p>Sign in inside each game window. Poolside keeps the profile, never the password.</p></div>
+</aside>
+
+<main>
+  <div class="bar">
+    <h1>Session workspace</h1>
+    <div class="right">
+      <div class="ic">⌕</div><div class="ic">◔</div>
+      <button class="add">+ Add account</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card hero span2">
+      <div class="row"><span class="badge"><i></i>Window open</span>
+        <span style="font-size:11.5px;color:var(--muted);margin-left:auto">Every 30 s · paused when unfocused</span></div>
+      <h2>Master</h2>
+      <div class="sub">Receiving account · lobby recognised at 73% · 203.0.113.42</div>
+      <div class="money">
+        <div><small>Cash</small><b>3,238<em>current</em></b></div>
+        <div><small>Coins</small><b>4,120,650,362<em>current</em></b></div>
+        <div><small>Read at</small><b style="font-size:20px;margin-top:14px">21:47</b></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <span style="font-size:11.5px;padding:6px 13px;border-radius:20px;background:rgba(255,214,170,.08);color:#c9b9a8">21:47 · current</span>
+        <span style="font-size:11.5px;padding:6px 13px;border-radius:20px;background:rgba(255,214,170,.08);color:#c9b9a8">21:17 · current</span>
+        <span style="font-size:11.5px;padding:6px 13px;border-radius:20px;background:rgba(255,214,170,.08);color:#c9b9a8">20:47 · current</span>
+        <span style="font-size:11.5px;padding:6px 13px;border-radius:20px;background:rgba(255,214,170,.08);color:#8d8177">live status every 30 s</span>
+      </div>
+      <div class="actions"><span class="pri">Inspect game</span><span>Return to game</span><span>Reload page</span><span>Stop live status</span></div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><h3>Recognition</h3><div class="plus">+</div></div>
+      <div class="donut">
+        <svg width="168" height="168" viewBox="0 0 168 168">
+          <circle cx="84" cy="84" r="62" fill="none" stroke="rgba(255,214,170,.12)" stroke-width="18"/>
+          <circle cx="84" cy="84" r="62" fill="none" stroke="#f97316" stroke-width="18" stroke-linecap="round"
+            stroke-dasharray="272 118" transform="rotate(-90 84 84)"/>
+          <text x="84" y="78" text-anchor="middle" fill="#f6f1ec" font-size="34" font-weight="700">70%</text>
+          <text x="84" y="102" text-anchor="middle" fill="#9c9086" font-size="12">of frames labelled</text></svg>
+      </div>
+      <div class="kv"><span>Evidence samples</span><b>74</b></div>
+      <div class="kv"><span>Benchmark held back</span><b>13</b></div>
+      <div class="kv"><span>Awaiting review</span><b style="color:#fbbf24">2</b></div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><h3>Second account</h3><div class="plus">+</div></div>
+      <div class="row" style="display:flex;align-items:center;gap:12px;margin-top:8px">
+        <div class="av" style="width:42px;height:42px;border-radius:14px;background:#2a2320;display:grid;place-items:center;font-weight:700">S</div>
+        <div><b style="font-size:15px">Slave</b><div style="font-size:11.5px;color:var(--muted)">Sending account · window closed</div></div>
+      </div>
+      <div class="kv" style="margin-top:18px"><span>Cash</span><b style="color:#6d6158">not read</b></div>
+      <div class="kv"><span>Coins</span><b style="color:#6d6158">not read</b></div>
+      <div class="kv"><span>Public IPv4</span><b style="color:#6d6158">not checked</b></div>
+      <div class="actions" style="display:flex;gap:11px;margin-top:auto;padding-top:18px">
+        <span style="padding:11px 18px;border-radius:13px;font-size:12.5px;font-weight:650;background:linear-gradient(120deg,#f97316,#fb923c);color:#1a0d03">Open</span>
+        <span style="padding:11px 18px;border-radius:13px;font-size:12.5px;font-weight:650;background:var(--panel2);color:#d9ccc0">Inspect game</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><h3>Recent activity</h3><span style="margin-left:auto;font-size:12px;color:var(--muted)">Show full history →</span></div>
+      <div style="margin-top:8px">
+        <div class="txn"><div class="av" style="background:rgba(249,115,22,.16);color:#fdba74">LB</div><div><b>Lobby recognised · 73%</b><span>Master · 21:47</span></div><div class="amt">6 phrases</div></div>
+        <div class="txn"><div class="av" style="background:rgba(74,222,128,.14);color:#86efac">IP</div><div><b>Public IPv4 checked</b><span>Master · 21:45</span></div><div class="amt up">203.0.113.42</div></div>
+        <div class="txn"><div class="av" style="background:rgba(251,191,36,.14);color:#fcd34d">SH</div><div><b>Shop return completed</b><span>Master · 21:41</span></div><div class="amt">auto</div></div>
+        <div class="txn"><div class="av" style="background:rgba(251,191,36,.14);color:#fcd34d">EV</div><div><b>2 frames saved for review</b><span>Capture lab · 21:36</span></div><div class="amt">new</div></div>
+        <div class="txn"><div class="av" style="background:rgba(96,165,250,.14);color:#93c5fd">SS</div><div><b>Session restored after restart</b><span>Slave · 20:58</span></div><div class="amt up">signed in</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><h3>Inspections</h3><span style="margin-left:auto;font-size:12px;color:var(--muted)">This week</span></div>
+      <div class="bars">
+        <div class="b"><i class="mut" style="height:52%"></i><span>Mon</span></div>
+        <div class="b"><i class="mut" style="height:38%"></i><span>Tue</span></div>
+        <div class="b"><i style="height:86%"></i><span>Wed</span></div>
+        <div class="b"><i class="mut" style="height:62%"></i><span>Thu</span></div>
+        <div class="b"><i style="height:72%"></i><span>Fri</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

@@ -1,11 +1,5 @@
-// Poolside — composition root.
-//
-// Wiring only: application lifecycle, the workspace document, the dashboard, and the last-resort
-// error surface. Feature behaviour lives in its own module — windows.cjs (sessions), profiles.cjs
-// (saved sessions), hardening.cjs (policy), recovery.cjs (supervision), inspection.cjs (screen
-// recognition), ipc.cjs (the dashboard contract) and self-test.cjs (the test suite).
-
-const { app, BrowserWindow, ipcMain, dialog, session, safeStorage, screen } = require('electron');
+// Poolside composition root.
+const { app, BrowserWindow, ipcMain, dialog, session, safeStorage, screen, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -18,7 +12,9 @@ const { log, save, load, publish, getAccount, rememberWindowGeometry } = workspa
 const { sessions, workspace } = require('./state.cjs');
 const { createSessionManager, GAME_URL } = require('./windows.cjs');
 const { createSessionFsm } = require('./session-fsm.cjs');
-const { createInspector } = require('./inspection.cjs');
+const { createObservationServices } = require('./observation-services.cjs');
+const { createCaptureLab } = require('./capture-lab.cjs');
+const { createActivityJournal } = require('./activity-journal.cjs');
 const { createIpc } = require('./ipc.cjs');
 const { createProfileManager } = require('./profile-manager.cjs');
 const { messageOf } = require('./errors.cjs');
@@ -29,36 +25,32 @@ const selfTest = process.argv.includes('--self-test');
 const gameCheck = process.argv.includes('--game-check');
 const testing = selfTest || gameCheck;
 
+if (selfTest) [process.stdout, process.stderr].forEach(output => output.on('error', error => error && error.code === 'EPIPE'));
+
 app.setName('Poolside');
 if (testing) app.setPath('userData', path.join(app.getPath('temp'), `poolside-test-${process.pid}`));
 if (!testing && !app.requestSingleInstanceLock()) app.exit(0);
 
-// One warm pool for the whole app instead of a worker per inspection. Size 1 keeps memory
-// predictable; this is the knob to raise in M9 once per-session cost has been measured.
 const screenReaders = createScreenReaderPool({ size: 1, idleMs: 120000 });
 
-// Profile lifecycle, integrity and diagnostics. Created before the session manager because every window
-// open establishes that account's storage through it.
 const profileManager = createProfileManager({
   log,
   root: app.getPath('userData'),
   crypto: safeStorage
 });
+const activityJournal = createActivityJournal({ root: app.getPath('userData') });
 const windows = createSessionManager({ log, publish, getAccount, selfTest, profileManager });
-const inspector = createInspector({
+const captureLab = createCaptureLab({ root: app.getPath('userData') });
+const { inspector, monitor } = createObservationServices({
   getAccount,
   publish,
   log,
   screenReaders,
-  // The display's own scale factor, so a capture's density can be compared with what was expected rather
-  // than assumed to be 1. Read at inspection time, never cached: it changes when a window moves displays.
-  deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor
+  captureLab,
+  deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor,
+  sessions
 });
-
-/**
- * Ask before destroying something irreversible. A headless test run answers "no" rather than blocking on
- * a dialog nobody can see.
- */
+// Ask before an irreversible removal; headless tests answer no rather than blocking on a dialog.
 async function confirmDestructive(title, detail) {
   if (selfTest) return false;
   const prompt = {
@@ -76,8 +68,18 @@ async function confirmDestructive(title, detail) {
   const { response } = parent ? await dialog.showMessageBox(parent, prompt) : await dialog.showMessageBox(prompt);
   return response === 1;
 }
-
-const ipc = createIpc({ ipcMain, UI_URL, windows, inspector, profiles: profileManager, confirmDestructive });
+const ipc = createIpc({
+  ipcMain,
+  UI_URL,
+  windows,
+  inspector,
+  monitor,
+  profiles: profileManager,
+  captureLab,
+  diagnosticsRoot: app.getPath('userData'),
+  openPath: destination => shell.openPath(destination),
+  confirmDestructive
+});
 
 app.on('second-instance', () => {
   const dashboard = workspace.dashboard;
@@ -146,7 +148,8 @@ function selfTestContext() {
     workspace,
     sessions,
     GAME_URL,
-    SHOP_PROBE
+    SHOP_PROBE,
+    monitor
   };
 }
 
@@ -157,7 +160,9 @@ app
   .whenReady()
   .then(async () => {
     workspace.version = app.getVersion();
+    workspaceStore.configureActivityJournal(activityJournal);
     load(path.join(app.getPath('userData'), 'workspace.json'));
+    workspaceStore.loadActivityHistory();
     // Integrity first, without measuring: checking a small file per account is quick, while walking every
     // profile directory is not, and the window should not wait for it.
     profileManager.scan(workspace.data.accounts, { measure: false });
@@ -183,6 +188,7 @@ app.on('before-quit', event => {
   if (quitting) return;
   quitting = true;
   windows.flushAll().then(async results => {
+    monitor.dispose();
     await screenReaders.closeAll().catch(() => {});
     if (results.some(r => r.status === 'rejected')) {
       dialog.showErrorBox('Session save incomplete', 'Some login state could not be saved. Existing profile files remain on this PC.');

@@ -2,6 +2,8 @@ const { createWorker, PSM } = require('tesseract.js');
 const language = require('@tesseract.js-data/eng');
 const sharp = require('sharp');
 const { handles } = require('./vision-pipeline.cjs');
+const { parseVisibleReadings } = require('./visible-readings.cjs');
+const { readingsFromCells, cellsFromBlocks } = require('./reading-regions.cjs');
 
 // Ordered rules. Order encodes precedence, not score: the first state that satisfies its gate
 // wins. This matters because real screens overlap — the table selector renders the lobby's
@@ -17,6 +19,7 @@ const { handles } = require('./vision-pipeline.cjs');
 // label — no score, no evidence, so a single missing phrase produced `unknown` with nothing to
 // inspect. Loosening these gates is an M3 task that must be justified by the labelled corpus.
 const RULES = [
+  { state: 'shop', all: ['featured'], any: ['web shop exclusive', 'bundle'], hints: ['ultimate', 'windy city'] },
   { state: 'lucky-promotion', all: ['come back every day'], any: ['play free'], hints: ['gold ball', 'free reward'] },
   { state: 'lucky-shot', all: ['lucky'], any: ['play free', 'gold ball'], hints: ['lucky shot'] },
   { state: 'table-selection', all: ['entry fee'], any: ['prize'], hints: ['players online', 'cushion shot', 'wins', 'berlin', 'mumbai'] },
@@ -84,7 +87,9 @@ async function createScreenReader() {
   await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, user_defined_dpi: '150' });
   return {
     async inspect(image) {
-      const { data } = await worker.recognize(image);
+      // The block tree is requested because the balances carry no words to match on: their identity comes
+      // from where they sit, which only the positioned output can say.
+      const { data } = await worker.recognize(image, {}, { text: true, blocks: true });
       const pixels = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
       const { width, height, channels } = pixels.info;
       const mask = Buffer.alloc(width * height);
@@ -100,7 +105,9 @@ async function createScreenReader() {
         .png()
         .toBuffer();
       const contrast = await worker.recognize(filtered);
-      let result = classify(data.text + '\n' + contrast.data.text);
+      const recognizedText = data.text + '\n' + contrast.data.text;
+      const observedAt = new Date().toISOString();
+      let result = classify(recognizedText);
       let source = 'full-frame';
       if (result.state === 'unknown') {
         // The band ratio and its magnification come from the pipeline (ADR-0015), so the geometry the second
@@ -114,14 +121,17 @@ async function createScreenReader() {
           source = 'bottom-band';
         }
       }
-      // Return a state, a confidence score and the phrases that matched. Recognized account names
-      // and balances are still discarded: only rule terms ever leave this function.
+      // Keep OCR text inside this local reader. Only numeric readings may leave it: the positioned balances,
+      // then anything the labelled matcher found that they did not already answer for.
+      const bounds = { width, height };
+      const labelled = parseVisibleReadings(recognizedText, observedAt, Number(data.confidence) / 100);
       return {
         state: result.state,
         score: result.score,
         evidence: result.evidence.slice(0, 4),
         source,
-        observedAt: new Date().toISOString()
+        observedAt,
+        readings: { ...labelled, ...readingsFromCells(cellsFromBlocks(data.blocks), bounds, observedAt) }
       };
     },
     close: () => worker.terminate()

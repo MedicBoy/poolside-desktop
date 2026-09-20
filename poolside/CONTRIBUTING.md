@@ -32,6 +32,8 @@ pieces, for when you want them separately:
 | `npm run test:desktop`            | `electron . --self-test` — real Electron behaviour                |
 | `npm run test:persistence`        | two real processes, seed then verify                              |
 | `npm run package`                 | build `release/`                                                  |
+| `npm run sbom:check`              | confirm the committed runtime dependency inventory is current     |
+| `npm run release:inspect`         | hash the executable and packaged application archive              |
 
 The Electron-level suites are not part of `verify` because they need a display and take minutes. Run
 them before finishing any change that touches sessions, windows, inspection or recovery.
@@ -112,6 +114,7 @@ in its own module.
 - [ ] Docs updated in the same change: `README.md` for behaviour, `docs/architecture.md` for
       structure, an ADR for any changed decision
 - [ ] Conventional commit, and the body explains why
+- [ ] For a release candidate, complete `docs/release-checklist.md` and retain its inspection output
 
 ## Documentation policy
 

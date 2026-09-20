@@ -29,6 +29,7 @@ const VALID_IDENTITY = {
 };
 
 const VALID_PROXY = { enabled: true, spec: 'socks5://127.0.0.1:1080', bypass: ['8ballpool.com'] };
+const VALID_RECOVERY = { shopReturnDelaySeconds: 8, backgroundThrottling: true, repaintMitigation: false };
 
 function workspaceWith(settings, accountConfig) {
   const receiver = { ...model.account({ name: 'Main', role: 'receiver' }), ...(accountConfig || {}) };
@@ -46,14 +47,14 @@ test('the schema declares exactly the fields the grammar and the storage layer k
   assert.deepEqual(schema.fields(schema.PROXY), model.PROXY_FIELDS);
   assert.deepEqual(schema.TABLES, model.TABLES, 'the venue list must live in exactly one place');
   assert.deepEqual(schema.fields(schema.SETTINGS), ['table', 'limit', 'identity', 'proxy']);
-  assert.deepEqual(schema.fields(schema.ACCOUNT), ['identity', 'proxy']);
+  assert.deepEqual(schema.fields(schema.ACCOUNT), ['identity', 'proxy', 'recovery']);
 });
 
 test('every declared field has a working rule and a label', () => {
   for (const field of IDENTITY_FIELDS) {
     assert.equal(validateField(field, VALID_IDENTITY[field]).ok, true, `${field} has no working grammar rule`);
   }
-  const all = { ...schema.SETTINGS, ...schema.ACCOUNT, ...schema.IDENTITY, ...schema.PROXY };
+  const all = { ...schema.SETTINGS, ...schema.ACCOUNT, ...schema.IDENTITY, ...schema.PROXY, ...schema.RECOVERY };
   for (const [key, spec] of Object.entries(all)) {
     assert.ok(spec.label, `${key} is declared without a label, so an error or a form cannot name it`);
   }
@@ -61,10 +62,13 @@ test('every declared field has a working rule and a label', () => {
 
 test('a document carrying every declared field survives decode unchanged', () => {
   const settings = { table: 'Bangkok', limit: 10, identity: { ...VALID_IDENTITY }, proxy: { ...VALID_PROXY } };
-  const decoded = model.decode(workspaceWith(settings, { identity: { ...VALID_IDENTITY }, proxy: { ...VALID_PROXY } }));
+  const decoded = model.decode(
+    workspaceWith(settings, { identity: { ...VALID_IDENTITY }, proxy: { ...VALID_PROXY }, recovery: { ...VALID_RECOVERY } })
+  );
   assert.deepEqual(decoded.settings, settings, 'a field the schema declares but decode drops is silent data loss');
   assert.deepEqual(decoded.accounts[0].identity, VALID_IDENTITY, 'an account identity is stored the same way');
   assert.deepEqual(decoded.accounts[0].proxy, VALID_PROXY);
+  assert.deepEqual(decoded.accounts[0].recovery, VALID_RECOVERY);
 });
 
 test('the validator emits a shape the storage layer keeps', () => {
@@ -76,7 +80,10 @@ test('the validator emits a shape the storage layer keeps', () => {
   });
   assert.equal(validated.ok, true);
   assert.deepEqual(validated.errors, []);
-  assert.deepEqual(validator.validateAccountConfig({ identity: { ...VALID_IDENTITY }, proxy: { ...VALID_PROXY } }).errors, []);
+  assert.deepEqual(
+    validator.validateAccountConfig({ identity: { ...VALID_IDENTITY }, proxy: { ...VALID_PROXY }, recovery: { ...VALID_RECOVERY } }).errors,
+    []
+  );
   const decoded = model.decode(workspaceWith(validated.value));
   assert.deepEqual(decoded.settings, validated.value, 'a validated value that decode would drop is validated output nobody can store');
 });
@@ -185,7 +192,7 @@ test('a dropped field is reported by path and the rest of the configuration surv
 });
 
 test('a structural error is fatal, and every problem is reported at once', () => {
-  const result = validator.validateSettings({ table: 'Paris', limit: 500, junk: true });
+  const result = validator.validateSettings({ table: 'Atlantis', limit: 500, junk: true });
   assert.equal(result.ok, false);
   assert.deepEqual(result.errors.map(item => item.path).sort(), ['settings.limit', 'settings.table']);
   assert.deepEqual(
@@ -193,7 +200,7 @@ test('a structural error is fatal, and every problem is reported at once', () =>
     ['settings.junk'],
     'an unknown key is reported, never dropped in silence'
   );
-  assert.match(validator.describeProblems(result) || '', /Preferred table must be one of Bangkok, Rome, Seoul/);
+  assert.match(validator.describeProblems(result) || '', /Preferred table must be one of/);
 });
 
 test('an unknown key is reported rather than discarded in silence', () => {

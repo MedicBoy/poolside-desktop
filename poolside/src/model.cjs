@@ -1,11 +1,10 @@
 const { randomUUID } = require('node:crypto');
 const { IDENTITY_FIELDS } = require('./identity-fields.cjs');
+const { RECOVERY_FIELDS } = require('./recovery-settings.cjs');
+const routePresets = require('./route-presets.cjs');
 const { normaliseRemembered } = require('./geometry.cjs');
-// The venue list is declared in the schema, so "which tables exist" has one home. This module re-exports it.
 const { TABLES } = require('./config-schema.cjs');
 
-// The route field list, declared here because this module is what validates a stored route. The schema
-// declares the same list; test/config.test.cjs asserts the two agree rather than trusting that they do.
 const PROXY_FIELDS = ['enabled', 'spec', 'bypass'];
 
 function label(value) {
@@ -14,12 +13,39 @@ function label(value) {
   return value.trim();
 }
 
+/** Optional local reminder. It is intentionally separate from account identity and must not be used for credentials. */
+function note(value) {
+  if (typeof value !== 'string') throw new Error('Account notes must be plain text.');
+  const clean = value.trim();
+  if (clean.length > 500) throw new Error('Keep an account note to 500 characters or fewer.');
+  return clean || undefined;
+}
+
 function account(input, existing = []) {
   const name = label(input.name);
   if (existing.some(a => a.name.toLowerCase() === name.toLowerCase())) throw new Error('An account with this name already exists.');
   if (!['receiver', 'sender'].includes(input.role)) throw new Error('Choose a valid account role.');
   if (input.role === 'receiver' && existing.some(a => a.role === 'receiver')) throw new Error('There is already a receiving account.');
   return { id: randomUUID(), name, role: input.role, createdAt: new Date().toISOString(), archived: false };
+}
+
+/** Update the user-editable fields of an existing account without changing its durable identity. */
+function updateAccount(input, current, existing = []) {
+  if (!current || typeof current !== 'object') throw new Error('Account not found.');
+  const name = label(input.name);
+  const others = existing.filter(candidate => candidate.id !== current.id);
+  if (others.some(candidate => candidate.name.toLowerCase() === name.toLowerCase()))
+    throw new Error('An account with this name already exists.');
+  if (!['receiver', 'sender'].includes(input.role)) throw new Error('Choose a valid account role.');
+  if (input.role === 'receiver' && others.some(candidate => candidate.role === 'receiver'))
+    throw new Error('There is already a receiving account.');
+  const updated = { ...current, name, role: input.role };
+  if (Object.hasOwn(input, 'note')) {
+    const text = note(input.note);
+    if (text) updated.note = text;
+    else delete updated.note;
+  }
+  return updated;
 }
 
 /**
@@ -114,12 +140,13 @@ function windowGeometry(input, ids) {
  * Rebuild a workspace document from stored JSON. Every field it keeps must survive a round trip, or a
  * setting silently vanishes on the next save (the D3 defect).
  * @param {any} value
- * @returns {{version: number, accounts: any[], settings: any, windows?: Record<string, object>}}
+ * @returns {{version: number, accounts: any[], settings: any, windows?: Record<string, object>, routePresets?: any[]}}
  */
 function decode(value) {
   if (!value || value.version !== 1 || !Array.isArray(value.accounts)) throw new Error('Unsupported workspace data.');
   const ids = new Set();
   const active = [];
+  const presets = routePresets.decode(value.routePresets);
   const accounts = value.accounts.map(a => {
     if (!a || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(a.id) || ids.has(a.id))
       throw new Error('Invalid account identifier.');
@@ -136,17 +163,36 @@ function decode(value) {
     if (identity) kept.identity = identity;
     const proxy = pickKnown(a.proxy, PROXY_FIELDS);
     if (proxy) kept.proxy = proxy;
+    const recovery = pickKnown(a.recovery, RECOVERY_FIELDS);
+    if (recovery) kept.recovery = recovery;
     const profile = pickProfile(a.profile);
     if (profile) kept.profile = profile;
+    if (typeof a.routePresetId === 'string' && presets.some(preset => preset.id === a.routePresetId)) kept.routePresetId = a.routePresetId;
+    if (a.note !== undefined) {
+      const text = note(a.note);
+      if (text) kept.note = text;
+    }
     return kept;
   });
-  /** @type {{version: number, accounts: any[], settings: any, windows?: Record<string, object>}} */
+  /** @type {{version: number, accounts: any[], settings: any, windows?: Record<string, object>, routePresets?: any[]}} */
   const document = { version: 1, accounts, settings: settings(value.settings) };
-  // Omitted rather than written as `{}`, so a decode of a document without geometry is that document
-  // exactly — and an existing workspace file does not gain an empty key on its next save.
+  if (presets.length) document.routePresets = presets;
   const geometry = windowGeometry(value.windows, ids);
   if (Object.keys(geometry).length) document.windows = geometry;
   return document;
 }
 
-module.exports = { account, settings, decode, windowGeometry, pickKnown, pickProfile, PROXY_FIELDS, TABLES };
+module.exports = {
+  account,
+  updateAccount,
+  settings,
+  decode,
+  windowGeometry,
+  pickKnown,
+  pickProfile,
+  label,
+  note,
+  PROXY_FIELDS,
+  RECOVERY_FIELDS,
+  TABLES
+};

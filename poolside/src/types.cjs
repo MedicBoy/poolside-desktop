@@ -16,6 +16,9 @@
  * @property {string|null} nextAttemptAt
  */
 
+/** A conservative display-only account value read from local OCR. */
+/** @typedef {{label: string, value: number, confidence: number, observedAt: string, source: string, status?: 'current'|'uncertain'|'stale', statusLabel?: string}} VisibleReading */
+
 /**
  * One account's open browser session and everything observed about it.
  * @typedef {object} SessionGroup
@@ -28,9 +31,14 @@
  * @property {Footprint} footprint
  * @property {{used: boolean, reset: () => void, observe: (url: string, shop: boolean, now: number) => boolean}} [shopGate]
  * @property {number} [observationGeneration]
- * @property {{state: string, score?: number, evidence?: string[], observedAt?: string}|null} [gameScreen]
+ * @property {{state: string, score?: number, evidence?: string[], observedAt?: string, readings?: Record<string, VisibleReading>}|null} [gameScreen]
+ * @property {Record<string, VisibleReading>} [visibleReadings]
  * @property {{status: 'checking'|'checked'|'error', ip?: string, checkedAt?: string}} [network]
  * @property {boolean} [inspecting]
+ * @property {boolean} [monitoring]
+ * @property {{state: string, score: number|null, observedAt: string}[]} [screenHistory]
+ * @property {{state: string, since: string, message: string}|null} [screenAttention]
+ * @property {string|null} [lastPersistedAt] timestamp of the last successful Poolside session save
  */
 
 /**
@@ -105,8 +113,11 @@
  * @property {'receiver'|'sender'} role
  * @property {boolean} archived
  * @property {string} createdAt
+ * @property {string} [note] optional local reminder; never read from a browser page
  * @property {object} [identity] per-account overrides of the workspace identity defaults
  * @property {object} [proxy] per-account route, overrides the workspace default
+ * @property {object} [recovery] per-account local reliability preferences
+ * @property {string} [routePresetId] optional workspace route preset
  * @property {ProfileRecord} [profile] absent until the account has been opened at least once
  */
 
@@ -124,6 +135,7 @@
  * @property {Account[]} accounts
  * @property {WorkspaceSettings} settings
  * @property {Record<string, object>} [windows] remembered window geometry, keyed by account id
+ * @property {{id: string, name: string, enabled: boolean, spec: string, bypass: string}[]} [routePresets]
  */
 
 /**

@@ -1,7 +1,3 @@
-// Account session windows: creation, arrangement and lifecycle.
-//
-// The "group" shape is documented in src/types.cjs. Session policy lives in hardening.cjs, profile
-// persistence in profiles.cjs, recovery supervision in recovery.cjs. This module owns the *state* of a
 // session: it drives the FSM (session-fsm.cjs) from real Electron events, hands recovery policy to
 // supervision.cjs, and applies the configured footprint through footprint.cjs at the two moments
 // Electron allows. Geometry lives in session-window.cjs and geometry.cjs.
@@ -20,6 +16,7 @@ const { applyTargetFootprint } = require('./target-identity.cjs');
 const { verifyRoute, reportFootprint } = require('./footprint.cjs');
 const { createSessionConfig } = require('./session-config.cjs');
 const { messageOf } = require('./errors.cjs');
+const { resolveRecovery } = require('./recovery-settings.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const store = require('./workspace.cjs');
 
@@ -30,11 +27,14 @@ const GAME_URL = 'https://8ballpool.com/game';
  */
 function createSessionManager(deps) {
   const { log, publish, getAccount, selfTest, profileManager } = deps;
-  const profiles = createProfileStore({ log });
+  const profiles = createProfileStore({ log, publish });
   // The configuration-facing half of a session: the schema boundary and the footprint application.
   const config = createSessionConfig({
     log,
-    getSettings: () => workspace.data && workspace.data.settings,
+    getSettings: () => ({
+      ...(workspace.data && workspace.data.settings),
+      routePresets: (workspace.data && workspace.data.routePresets) || []
+    }),
     sessionFor: id => session.fromPartition(savedSessions.partition(id)),
     userAgent: () => app.userAgentFallback
   });
@@ -58,7 +58,6 @@ function createSessionManager(deps) {
     await group.window.loadURL(GAME_URL);
   }
 
-  /** The recovery mechanism handed to supervision.cjs, which owns the policy and the timing. */
   function recoverWith(window) {
     return () => {
       if (window.isDestroyed()) return;
@@ -88,7 +87,8 @@ function createSessionManager(deps) {
     const { window, restore } = createSessionWindow({
       title: `Poolside · ${account.name}`,
       session: isolated,
-      remembered: store.savedWindowGeometry(id)
+      remembered: store.savedWindowGeometry(id),
+      backgroundThrottling: resolveRecovery(account).backgroundThrottling
     });
     if (restore.adjusted) log(`${account.name}: window ${describeRestore(restore)}.`);
     // Every state change republishes; only a degradation is worth an activity-feed entry, or the
@@ -157,7 +157,16 @@ function createSessionManager(deps) {
     return verified;
   }
 
-  /** @param {string} id */
+  function reloadAccount(id) {
+    const account = getAccount(id);
+    const group = sessions.get(id);
+    if (!group || group.window.isDestroyed()) throw new Error('Open this account window before reloading it.');
+    group.fsm.send('reload', 'manual page reload');
+    log(`${account.name}: reloading the browser page on request.`);
+    group.window.webContents.reload();
+    publish();
+  }
+
   function closeAccount(id) {
     const group = sessions.get(id);
     if (group && !group.window.isDestroyed()) group.window.close();
@@ -176,6 +185,7 @@ function createSessionManager(deps) {
     closeAccount,
     closeAll,
     returnToGame,
+    reloadAccount,
     checkRoute,
     arrange,
     flushAll: profiles.flushAll,

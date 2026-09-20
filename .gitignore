@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build output — packaged Electron runtimes are reproducible from src + lockfile
+release*/
+poolside-builds/
+*.asar
+
+# Logs and local agent state
+*.log
+.env
+.env.*
+
+# OS / editor
+Thumbs.db
+.DS_Store

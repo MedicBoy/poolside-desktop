@@ -8,19 +8,21 @@
 const { checkPublicIP } = require('./network.cjs');
 const model = require('./model.cjs');
 const settingsController = require('./settings-ui-controller.cjs');
-const timelineTransfer = require('./timeline-transfer.cjs');
-const telemetryRedaction = require('./telemetry-redaction.cjs');
-const { log, snapshot, save, publish, getAccount } = require('./workspace.cjs');
+const diagnosticsBundle = require('./diagnostics-bundle.cjs');
+const { log, snapshot, save, publish, getAccount, clearActivityHistory } = require('./workspace.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const { messageOf } = require('./errors.cjs');
+const { registerAccountManagement } = require('./account-management-ipc.cjs');
+const routePresets = require('./route-presets.cjs');
+const { registerCaptureLab } = require('./capture-lab-ipc.cjs');
 
 const PREFS_SAVED = 'Transfer preferences saved. Automation is not yet connected.';
 
 /**
- * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, profiles: any, confirmDestructive: (title: string, detail: string) => Promise<boolean>}} deps
+ * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, monitor: any, profiles: any, captureLab: any, diagnosticsRoot: string, openPath: (path: string) => Promise<string>, confirmDestructive: (title: string, detail: string) => Promise<boolean>}} deps
  */
 function createIpc(deps) {
-  const { ipcMain, UI_URL, windows, inspector, profiles, confirmDestructive } = deps;
+  const { ipcMain, UI_URL, windows, inspector, monitor, profiles, captureLab, diagnosticsRoot, openPath, confirmDestructive } = deps;
   const activeAccounts = () => workspace.data.accounts.filter(a => !a.archived);
 
   /**
@@ -73,6 +75,20 @@ function createIpc(deps) {
 
   function register() {
     handle('workspace:get', () => snapshot());
+    handle('route-preset:add', input => {
+      const preset = routePresets.create(input, workspace.data.routePresets || []);
+      save({ ...workspace.data, routePresets: [...(workspace.data.routePresets || []), preset] });
+      log(`Route preset ${preset.name} saved.`);
+      return preset;
+    });
+    handle('route-preset:delete', id => {
+      const preset = (workspace.data.routePresets || []).find(item => item.id === id);
+      if (!preset) throw new Error('Route preset not found.');
+      const used = workspace.data.accounts.filter(account => account.routePresetId === id);
+      if (used.length) throw new Error(`Remove this preset from ${used.length} account(s) before deleting it.`);
+      save({ ...workspace.data, routePresets: (workspace.data.routePresets || []).filter(item => item.id !== id) });
+      log(`Route preset ${preset.name} removed.`);
+    });
     handle('account:add', input => {
       const account = model.account(input, activeAccounts());
       save({ ...workspace.data, accounts: [...workspace.data.accounts, account] });
@@ -105,36 +121,41 @@ function createIpc(deps) {
     handle('profiles:refresh', () => {
       profiles.measure(workspace.data.accounts);
     });
-    handle('diagnostics:preview', () => {
-      // The only thing the dashboard can ask for that is shaped like something leaving the machine, so it is
-      // cleaned and then *scanned*, and a payload that fails its own scan is refused rather than returned with a
-      // warning. ADR-0010 commits M4 to a bundle that is provably clean; a caller that has to remember to check
-      // is not a guarantee.
-      const current = snapshot();
-      const payload = telemetryRedaction.exportLayer(current.telemetry);
-      payload.timeline = timelineTransfer.redact(current.timeline.entries, /** @type {any[]} */ (current.accounts)).entries.map(entry => ({
-        ...entry,
-        message: entry.message ? telemetryRedaction.stripSecretShapes(entry.message) : entry.message
-      }));
-      const forbidden = /** @type {any[]} */ (current.accounts).map(account => account.name);
-      const findings = telemetryRedaction.findSecrets(payload, { forbidden });
-      if (findings.length) {
-        throw new Error(
-          `The diagnostics payload was refused: it still carries ${findings.length} item(s) that must not leave this machine (${findings
-            .map(item => `${item.path} [${item.kind}]`)
-            .join(', ')}).`
-        );
-      }
-      return { payload, entries: payload.timeline.length, clean: true };
+    // Both preview and file export use the same prepare() step. A diagnostics file cannot be written unless the
+    // exact payload preview first constructs and passes the secret scanner.
+    handle('diagnostics:preview', () => diagnosticsBundle.prepare(snapshot()));
+    handle('diagnostics:save', () => diagnosticsBundle.write(diagnosticsRoot, diagnosticsBundle.prepare(snapshot())));
+    handle('diagnostics:open-folder', async () => {
+      const error = await openPath(diagnosticsBundle.directory(diagnosticsRoot));
+      if (error) throw new Error(`Diagnostics folder could not be opened: ${error}`);
+      return { opened: true };
+    });
+    handle('activity:history-clear', async () => {
+      const agreed = await confirmDestructive(
+        'Erase saved activity history?',
+        'This removes Poolside activity messages saved on this PC. It does not remove browser profiles or saved sign-in sessions.'
+      );
+      if (!agreed) throw new Error('Saved activity history was not erased.');
+      return clearActivityHistory();
     });
     handle('account:return-game', id => windows.returnToGame(id));
+    handle('account:reload', id => windows.reloadAccount(id));
     handle('account:inspect', id => inspector.inspectGame(id));
-    handle('account:archive', id => {
-      const account = getAccount(id);
-      if (sessions.has(id)) throw new Error('Close this session before archiving it.');
-      save({ ...workspace.data, accounts: workspace.data.accounts.map(a => (a.id === id ? { ...a, archived: true } : a)) });
-      log(`${account.name}: account slot archived.`);
+    handle('account:monitor-start', id => {
+      getAccount(id);
+      const group = sessions.get(id);
+      if (!group) throw new Error('Open this account window before starting live monitoring.');
+      group.monitoring = true;
+      return monitor.start(id);
     });
+    handle('account:monitor-stop', id => {
+      getAccount(id);
+      const group = sessions.get(id);
+      if (group) group.monitoring = false;
+      return monitor.stop(id);
+    });
+    registerCaptureLab({ handle, inspector, captureLab });
+    registerAccountManagement({ handle, model, workspace, sessions, save, log, getAccount, profiles, confirmDestructive, activeAccounts });
     handle('sessions:open', async () => {
       await Promise.all(activeAccounts().map(a => windows.openAccount(a.id)));
     });

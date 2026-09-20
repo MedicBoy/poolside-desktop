@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { account, settings, decode } = require('../src/model.cjs');
+const { account, updateAccount, settings, decode } = require('../src/model.cjs');
 test('account slots have distinct IDs and prevent ambiguous receiver or duplicate labels', () => {
   const main = account({ name: ' Main ', role: 'receiver' });
   const sender = account({ name: 'Sender', role: 'sender' }, [main]);
@@ -10,6 +10,25 @@ test('account slots have distinct IDs and prevent ambiguous receiver or duplicat
   assert.throws(() => account({ name: 'Other', role: 'receiver' }, [main]));
   assert.throws(() => account({ name: '', role: 'sender' }));
   assert.throws(() => account({ name: 'Invalid', role: 'unknown' }));
+});
+test('account edits preserve its id and enforce the active workspace role and label rules', () => {
+  const main = account({ name: 'Main', role: 'receiver' });
+  const sender = account({ name: 'Sender', role: 'sender' }, [main]);
+  const renamed = updateAccount({ name: 'Support', role: 'sender' }, sender, [main, sender]);
+  assert.equal(renamed.id, sender.id);
+  assert.equal(renamed.name, 'Support');
+  assert.throws(() => updateAccount({ name: 'MAIN', role: 'sender' }, sender, [main, sender]));
+  assert.throws(() => updateAccount({ name: 'Support', role: 'receiver' }, sender, [main, sender]));
+});
+test('local account notes are bounded, clearable, and survive a workspace decode', () => {
+  const main = account({ name: 'Main', role: 'receiver' });
+  const noted = updateAccount({ name: 'Main', role: 'receiver', note: '  Use this account for ordinary play.  ' }, main, [main]);
+  assert.equal(noted.note, 'Use this account for ordinary play.');
+  const document = { version: 1, accounts: [noted], settings: { table: 'Bangkok', limit: 10 } };
+  assert.equal(decode(document).accounts[0].note, noted.note);
+  const cleared = updateAccount({ name: 'Main', role: 'receiver', note: '  ' }, noted, [noted]);
+  assert.equal(Object.hasOwn(cleared, 'note'), false);
+  assert.throws(() => updateAccount({ name: 'Main', role: 'receiver', note: 'x'.repeat(501) }, main, [main]));
 });
 test('workspace decoder rejects invalid paths, duplicate IDs, and malformed settings', () => {
   const a = account({ name: 'Main', role: 'receiver' });
@@ -69,4 +88,23 @@ test('unusable geometry and unknown keys are dropped without costing the workspa
   assert.deepEqual(decoded.accounts[0].proxy, { spec: '10.0.0.1:8080' });
   assert.equal(Object.hasOwn(decoded, 'windows'), false, 'an unusable rectangle is dropped, and the account survives');
   assert.equal(decoded.accounts.length, 1);
+});
+
+test('saved route presets and selected account routes survive a workspace decode', () => {
+  const a = account({ name: 'Main', role: 'receiver' });
+  const preset = {
+    id: '11111111-1111-4111-8111-111111111111',
+    name: 'Home route',
+    enabled: true,
+    spec: 'socks5://127.0.0.1:1080',
+    bypass: '<local>'
+  };
+  const document = {
+    version: 1,
+    accounts: [{ ...a, routePresetId: preset.id }],
+    settings: { table: 'Bangkok', limit: 10 },
+    routePresets: [preset]
+  };
+  assert.deepEqual(decode(document), document);
+  assert.equal(Object.hasOwn(decode({ ...document, routePresets: [] }).accounts[0], 'routePresetId'), false);
 });

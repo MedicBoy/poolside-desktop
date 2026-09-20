@@ -4,6 +4,7 @@
 // mitigations rather than a verified fix (see ../video-review.md).
 
 const { SHOP_PROBE, ShopReturnGate, officialPage } = require('./shop-recovery.cjs');
+const { resolveRecovery } = require('./recovery-settings.cjs');
 
 const POLL_INTERVAL_MS = 1000;
 const SHOP_SETTLE_MS = 5000;
@@ -18,7 +19,8 @@ const REPAINT_DELAYS_MS = [0, 1000, 3000, 8000];
 function attachRecovery(id, group, deps) {
   const { log, publish, getAccount, returnToGame } = deps;
   const wc = group.window.webContents;
-  const gate = new ShopReturnGate();
+  const preferences = resolveRecovery(getAccount(id));
+  const gate = new ShopReturnGate(preferences.shopReturnDelaySeconds * 1000);
   group.shopGate = gate;
   let busy = false;
   let generation = 0;
@@ -42,7 +44,7 @@ function attachRecovery(id, group, deps) {
 
   wc.on('did-finish-load', () => {
     clearRepaints();
-    if (!officialPage(wc.getURL())) return;
+    if (!preferences.repaintMitigation || !officialPage(wc.getURL())) return;
     for (const delay of REPAINT_DELAYS_MS) {
       const timer = setTimeout(() => {
         repaintTimers.delete(timer);
@@ -69,7 +71,7 @@ function attachRecovery(id, group, deps) {
       const shop = await wc.executeJavaScriptInIsolatedWorld(999, [{ code: SHOP_PROBE }]);
       if (wc.isDestroyed() || observedGeneration !== generation || url !== wc.getURL()) return;
       if (gate.observe(url, shop === true, Date.now())) {
-        log(`${getAccount(id).name}: shop remained visible for five seconds; returning to the game automatically.`);
+        log(`${getAccount(id).name}: shop remained visible for the configured delay; returning to the game automatically.`);
         await returnToGame(id, false);
       }
     } catch {

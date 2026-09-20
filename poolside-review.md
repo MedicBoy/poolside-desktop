@@ -27,7 +27,7 @@ What exists is the session platform, the diagnostics, and screen recognition —
 ## 2. Architecture
 
 | File | Lines | Role |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `src/main.cjs` | 373 | App, window/session lifecycle, IPC, shop auto-return, inspect orchestration |
 | `src/model.cjs` | 33 | Account/settings validation, workspace decode with strict UUID + uniqueness checks |
 | `src/saved-session.cjs` | 41 | `persist:` partition naming, encrypted `.plist` snapshot save/restore |
@@ -39,17 +39,19 @@ What exists is the session platform, the diagnostics, and screen recognition —
 | `src/ui/*` | 127 | Dashboard: sidebar, account cards, activity, settings, CSP-locked |
 
 ### Data flow
+
 `renderer → preload bridge → ipcMain.handle → trusted() check → model validation → atomic write`
 with `workspace:changed` snapshots pushed back on every mutation.
 
 ### Security posture — genuinely good
+
 - `trusted()` verifies sender **and** `senderFrame` **and** frame URL before any IPC runs.
 - Game windows: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, no preload.
 - `will-navigate`/`will-redirect` reject anything non-HTTPS; `will-download` always blocked;
-  all permission requests and checks denied.
+all permission requests and checks denied.
 - Popups inherit the account's session but are re-hardened recursively.
 - Workspace writes are `tmp` + `rename` (atomic), `mode 0600`; a corrupt file flips the app to
-  read-only instead of overwriting user data.
+read-only instead of overwriting user data.
 - Dashboard has a strict CSP (`connect-src 'none'`), all interpolated text is HTML-escaped.
 - OCR returns only `{ state, observedAt }` — recognized names/balances are discarded on purpose.
 - IP addresses are held in memory only and never written to `workspace.json`.
@@ -57,7 +59,7 @@ with `workspace:changed` snapshots pushed back on every mutation.
 ## 3. Verified by execution on this machine
 
 | Suite | Command | Result |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | Unit + OCR | `npm test` | **8/8 pass**, 9.0 s (incl. live Tesseract against 7 fixtures) |
 | Electron self-test | `npm run test:desktop` | **4 PASS** on current `src/` |
 | Process-restart persistence | `npm run test:persistence` | **8/8** after the fix in §8; was failing — see D1 |
@@ -65,7 +67,7 @@ with `workspace:changed` snapshots pushed back on every mutation.
 Packaged-build drift, confirmed by grepping each `app.asar`:
 
 | Build | Packaged | Contains |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `release/` | 20:36 | base session manager |
 | `release-navigation/` | 20:52 | + manual Return to game |
 | `release-recovery/` | 21:09 | + shop auto-return, repaint workarounds |
@@ -90,8 +92,8 @@ hidden keep-alive window (or don't destroy between accounts). Until then, the pe
 is **unverified end-to-end**.
 
 **D2 — [RESOLVED] README contradicted `src/`.** README lines 24–25 still claim "separate in-memory Chromium
-session … Exiting clears private session state." The code now uses `persist:poolside-<id>`
-partitions and writes `%APPDATA%/Poolside/accounts/<id>.plist`. The plist store, `test:persistence`
+session … Exiting clears private session state." The code now uses `persist:poolside-`
+partitions and writes `%APPDATA%/Poolside/accounts/.plist`. The plist store, `test:persistence`
 script, and the newest build aren't documented at all. Anyone reading the README will misjudge
 what is persisted and when.
 
@@ -145,40 +147,29 @@ worker). Tests use local HTTPS fixtures instead of real accounts, and the test s
 *absences* (transfer control disabled, IPC rejected, credentials omitted) — that's the right
 instinct for this codebase.
 
-## 7. Scope going forward
-
-Editing and reviewing this code is fine, and I'll keep helping with the engineering that is real
-work: the session workspace, OCR recognition quality, the test harness and D1–D8, packaging, and
-the documentation drift. What I won't write is the automation itself — the coordinated
-matchmaking, deliberate-forfeit coin farming, and browser-identity spoofing. That is botting a
-live multiplayer game for its monetized currency, it breaks Miniclip's terms, it risks the
-accounts being banned, and the surrounding ecosystem is where the loggers and droppers that
-already cost one PC come from. `README.md` line 3 is the honest description of this project's
-state, and it's worth keeping it that way.
-
 ---
 
 ## 8. Resolution log — 2026-09-17 (P0 + P1 executed)
 
 - **P0 — version control.** `git init` at `Coding/` (covers `poolside/`, both review docs and the
-  recording evidence). First commit `3834705`, 132 files, tag `v0.1.0-session-foundation`.
-  Identity is repo-local (`nicho@localhost`) because no global git identity exists on this machine.
-  `.gitignore` had `release/`, which would *not* have matched `release-navigation/` and friends —
-  changed to `release*/` before the first `add`, so no Electron binaries entered history
-  (verified: 0 matches).
+recording evidence). First commit `3834705`, 132 files, tag `v0.1.0-session-foundation`.
+Identity is repo-local (`nicho@localhost`) because no global git identity exists on this machine.
+`.gitignore` had `release/`, which would *not* have matched `release-navigation/` and friends —
+changed to `release*/` before the first `add`, so no Electron binaries entered history
+(verified: 0 matches).
 - **P0 — build folders.** `release-navigation`, `release-recovery` and `release-inspection` removed
-  after grep-confirming that `release-inspection` already contained every earlier feature
-  (`returnToGame`, `backgroundThrottling`, `ShopReturnGate`, `GAME_REGION_PROBE`, `classifyText`),
-  so no capability was lost. `poolside/` went 2.1 GB → 948 MB.
+after grep-confirming that `release-inspection` already contained every earlier feature
+(`returnToGame`, `backgroundThrottling`, `ShopReturnGate`, `GAME_REGION_PROBE`, `classifyText`),
+so no capability was lost. `poolside/` went 2.1 GB → 948 MB.
 - **P1.1 — D1 fixed.** `test/session-restart.cjs` holds a hidden keep-alive window for the run.
-  `npm run test:persistence` now reports PASS for both `seed` and `verify`, so the plist
-  persistence path is verified across a real process restart for the first time.
+`npm run test:persistence` now reports PASS for both `seed` and `verify`, so the plist
+persistence path is verified across a real process restart for the first time.
 - **P1.2 — packaging fixed.** `release/` rebuilt from current `src/`: the first packaged build to
-  contain `saved-session.cjs` (grep-verified), with native deps at
-  `resources/app.asar.unpacked/node_modules`. Packaged `Poolside.exe --self-test` reports 4 PASS.
+contain `saved-session.cjs` (grep-verified), with native deps at
+`resources/app.asar.unpacked/node_modules`. Packaged `Poolside.exe --self-test` reports 4 PASS.
 - **P1.3 — D2 fixed.** The README now documents the `persist:` profile, the
-  `accounts/<id>.plist` snapshot, which store is authoritative, and the session-cookie-only
-  restore rule; Validation covers `test:persistence`.
+`accounts/.plist` snapshot, which store is authoritative, and the session-cookie-only
+restore rule; Validation covers `test:persistence`.
 
 Final state: `npm test` 8/8 · `npm run test:desktop` 4/4 · `npm run test:persistence` seed+verify ·
 packaged self-test 4/4. **Still open: D3–D7.** P2–P5 of the improvement list are not started.
@@ -190,26 +181,26 @@ packaged self-test 4/4. **Still open: D3–D7.** P2–P5 of the improvement list
 Executed ahead of M1/M3 because all four were real defects with no milestone dependency.
 
 - **D7 — closed.** New pure module `src/layout.cjs` (`tileGeometry`, `rectFor`). The per-window
-  minimum now tracks the tile and is clamped so it can never exceed it (a minimum larger than the
-  tile made `setBounds` clamp and rows overlap), and arranging a single window restores the
-  660×560 default. Cramped grids log a warning instead of silently clamping. 7 unit tests,
-  including the explicit 8-windows-then-1-window restore regression.
+minimum now tracks the tile and is clamped so it can never exceed it (a minimum larger than the
+tile made `setBounds` clamp and rows overlap), and arranging a single window restores the
+660×560 default. Cramped grids log a warning instead of silently clamping. 7 unit tests,
+including the explicit 8-windows-then-1-window restore regression.
 - **D4 — closed.** `game-region.cjs` rewritten to score every eligible surface (shape distance to
-  16:9 weighted 0.65, viewport coverage 0.35) and to return `{ok:false, reason, candidates[]}`.
-  `main.cjs` renders that into a message naming the surfaces it saw. Two new self-test assertions
-  cover four canvases (game surface + clipped + tiny + hidden) and an unusable-surface failure
-  that must report `120×60`. **The ranking is still unvalidated against the live site** — that
-  remains an M3 task, now with the diagnostics to settle it in one pass.
+16:9 weighted 0.65, viewport coverage 0.35) and to return `{ok:false, reason, candidates[]}`.
+`main.cjs` renders that into a message naming the surfaces it saw. Two new self-test assertions
+cover four canvases (game surface + clipped + tiny + hidden) and an unusable-surface failure
+that must report `120×60`. **The ranking is still unvalidated against the live site** — that
+remains an M3 task, now with the diagnostics to settle it in one pass.
 - **D5 — closed.** `classify()` returns `{state, score, evidence, alternatives}`; `classifyText()`
-  is retained as a thin wrapper. Deliberately **behaviour-preserving**: the gates are the original
-  conditions unchanged, with `hints` contributing to evidence but never to the decision. The
-  regression test embeds the legacy regex chain and asserts agreement over a 30+ string corpus —
-  it caught the rewrite dropping `\b` semantics (`"Reconnecting to the server"` would otherwise
-  have matched `connecting`), which is now fixed with boundary-aware matching.
+is retained as a thin wrapper. Deliberately **behaviour-preserving**: the gates are the original
+conditions unchanged, with `hints` contributing to evidence but never to the decision. The
+regression test embeds the legacy regex chain and asserts agreement over a 30+ string corpus —
+it caught the rewrite dropping `\b` semantics (`"Reconnecting to the server"` would otherwise
+have matched `connecting`), which is now fixed with boundary-aware matching.
 - **D6 — closed.** New `src/screen-reader-pool.cjs`: warm worker pool with queueing, idle
-  retirement and injectable factory. `main.cjs` holds one pool; the global `inspecting` flag is
-  replaced by a per-account flag, so one account's inspection no longer blocks the others. 7 pool
-  tests, including "five inspections, one worker" and "queued work is served on release".
+retirement and injectable factory. `main.cjs` holds one pool; the global `inspecting` flag is
+replaced by a per-account flag, so one account's inspection no longer blocks the others. 7 pool
+tests, including "five inspections, one worker" and "queued work is served on release".
 
 **Verification after the wave:** `npm test` **33/33** (was 8) · `npm run test:desktop` **6 PASS**
 (was 4) · `npm run test:persistence` seed+verify. New modules: `layout.cjs` 51 lines,
@@ -220,3 +211,6 @@ self-test grew and `describeRegionFailure` was added — and it is exactly what 
 is for. It should not grow further before `inspection.cjs` and the self-test are extracted.
 
 **Still open: D3** (duplicate cookie stores) plus the whole of M0–M9.
+
+
+

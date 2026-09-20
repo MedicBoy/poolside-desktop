@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Poolside — Slate Rail</title>
+<style>
+  :root{
+    --bg:#0c0f16; --rail:#101521; --panel:#141a27; --panel2:#182031;
+    --line:rgba(148,170,205,.13); --text:#e8edf7; --muted:#7d8aa5;
+    --teal:#2dd4bf; --blue:#60a5fa; --violet:#8b7cf6; --green:#4ade80; --amber:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1600px;height:1000px;overflow:hidden;background:var(--bg);color:var(--text);
+    font:13.5px/1.45 "Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:flex}
+  .rail{width:72px;flex:0 0 72px;background:var(--rail);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;align-items:center;padding:18px 0;gap:8px}
+  .rail .mk{width:38px;height:38px;border-radius:12px;background:linear-gradient(140deg,#2dd4bf,#3b82f6);
+    display:grid;place-items:center;font-weight:800;color:#05131a;font-size:14px;margin-bottom:14px}
+  .rail a{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:#6c7a97}
+  .rail a.on{background:rgba(45,212,191,.12);color:var(--teal);box-shadow:inset 0 0 0 1px rgba(45,212,191,.28)}
+  .rail a svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .rail .sp{margin-top:auto}
+  /* second column */
+  .sub{width:250px;flex:0 0 250px;background:#0f1420;border-right:1px solid var(--line);padding:22px 16px;display:flex;flex-direction:column}
+  .sub h2{font-size:16px;font-weight:650;padding:0 6px 4px}
+  .sub p{font-size:11.5px;color:var(--muted);padding:0 6px 18px;letter-spacing:.03em}
+  .grp{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#55617d;padding:14px 10px 8px}
+  .sub a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:#a9b4cb;text-decoration:none;font-size:13px;margin-bottom:1px}
+  .sub a.on{background:rgba(45,212,191,.1);color:#eafdfa;box-shadow:inset 0 0 0 1px rgba(45,212,191,.22)}
+  .sub a .n{margin-left:auto;font-size:11px;color:#5f6d8a;font-variant-numeric:tabular-nums}
+  .sub .note{margin-top:auto;font-size:11px;color:#5c6883;line-height:1.7;padding:14px 10px 0;border-top:1px solid var(--line)}
+  /* content */
+  main{flex:1;min-width:0;padding:22px 24px;display:flex;flex-direction:column;gap:16px;overflow:hidden}
+  .bar{display:flex;align-items:center;gap:14px}
+  .bar .t{font-size:20px;font-weight:650;letter-spacing:-.3px}
+  .bar .s{font-size:11.5px;color:var(--muted)}
+  .bar .right{margin-left:auto;display:flex;gap:9px;align-items:center}
+  .chip{padding:8px 13px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:12px;color:#b7c2d8}
+  .chip.go{background:var(--teal);border:0;color:#04241f;font-weight:650}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .k{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:15px 16px}
+  .k small{font-size:10px;letter-spacing:.17em;text-transform:uppercase;color:#6b7893}
+  .k b{display:block;font-size:26px;font-weight:650;margin-top:9px;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+  .k span{font-size:11.5px;color:var(--muted);display:block;margin-top:5px}
+  .k span.up{color:var(--green)}
+  .row2{flex:1;min-height:0;display:grid;grid-template-columns:1.35fr 1fr;gap:14px}
+  .col{display:flex;flex-direction:column;gap:14px;min-height:0}
+  .p{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px;display:flex;flex-direction:column;min-height:0}
+  .p h3{font-size:13px;font-weight:600}
+  .p .cap{font-size:11.5px;color:var(--muted);margin-top:3px}
+  .p .hd{display:flex;align-items:center}
+  .p .hd .r{margin-left:auto;font-size:11px;color:var(--teal)}
+  .acct{border:1px solid var(--line);border-radius:12px;background:var(--panel2);padding:15px 16px;margin-top:12px}
+  .acct .h{display:flex;align-items:center;gap:12px}
+  .av{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-weight:700;font-size:14px;
+    background:linear-gradient(150deg,#1f2b42,#16203a);border:1px solid rgba(148,170,205,.2)}
+  .acct .h b{font-size:14.5px}
+  .acct .h em{font-style:normal;display:block;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#6b7893}
+  .stt{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:11px;padding:5px 11px;border-radius:20px;
+    background:rgba(74,222,128,.12);color:#86efac}
+  .stt i{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .stt.off{background:rgba(148,170,205,.09);color:#8b98b3}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+  .metrics div small{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#66738e;display:block}
+  .metrics div b{font-size:16px;display:block;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
+  .metrics div em{font-style:normal;font-size:10.5px;color:var(--green);margin-left:7px}
+  .metrics div em.mut{color:#5f6b86}
+  .btns{display:flex;gap:9px;margin-top:14px}
+  .btns span{flex:1;text-align:center;padding:9px 0;border-radius:9px;font-size:12px;font-weight:600;border:1px solid var(--line);color:#c2cde3;background:rgba(148,170,205,.05)}
+  .btns span.pri{background:var(--teal);border:0;color:#04241f}
+  .feed{margin-top:12px;display:flex;flex-direction:column;gap:11px;overflow:hidden}
+  .fi{display:flex;gap:10px;align-items:flex-start;font-size:12px}
+  .fi .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);margin-top:6px;flex:0 0 7px}
+  .fi .dot.b{background:var(--blue)}.fi .dot.v{background:var(--violet)}.fi .dot.a{background:var(--amber)}
+  .fi b{font-weight:600;display:block;color:#d5dded}
+  .fi span{color:#6f7d97;font-size:11px}
+  .bars{display:flex;align-items:flex-end;gap:6px;height:78px;margin-top:14px}
+  .bars i{flex:1;border-radius:3px;background:linear-gradient(180deg,var(--teal),rgba(45,212,191,.18))}
+  .bars i:nth-child(2n){background:linear-gradient(180deg,#3b82f6,rgba(59,130,246,.16))}
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:10px}
+  .legend i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px}
+</style>
+</head>
+<body>
+<div class="rail">
+  <div class="mk">8</div>
+  <a class="on" href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></a>
+  <a href="#"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 3 12L15 12h6"/></svg></a>
+  <a href="#"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></a>
+  <a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h16v12H4z"/><circle cx="12" cy="13" r="3"/></svg></a>
+  <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></a>
+  <a class="sp" href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg></a>
+</div>
+
+<div class="sub">
+  <h2>Sessions</h2>
+  <p>Isolated browser sessions on this PC</p>
+  <div class="grp">Workspace</div>
+  <a class="on" href="#">All sessions<span class="n">2</span></a>
+  <a href="#">Open windows<span class="n">1</span></a>
+  <a href="#">Archived<span class="n">0</span></a>
+  <div class="grp">Observation</div>
+  <a href="#">Live status<span class="n">1</span></a>
+  <a href="#">Screen history<span class="n">18</span></a>
+  <a href="#">Capture lab<span class="n">87</span></a>
+  <div class="grp">Configuration</div>
+  <a href="#">Identity defaults</a>
+  <a href="#">Route presets<span class="n">3</span></a>
+  <div class="note"><span style="color:#4ade80">●</span> Local workspace<br />Sign in inside each game window. Nothing is uploaded.</div>
+</div>
+
+<main>
+  <div class="bar">
+    <div><div class="t">Session workspace</div><div class="s">Workspace / Sessions</div></div>
+    <div class="right"><span class="chip">Dedicated browser sessions</span><span class="chip go">+ Add account</span></div>
+  </div>
+
+  <div class="kpi">
+    <div class="k"><small>Account slots</small><b>2</b><span>Configured on this device</span></div>
+    <div class="k"><small>Open windows</small><b>1</b><span class="up">Ready</span></div>
+    <div class="k"><small>Inspections today</small><b>34</b><span>Local OCR · median 412 ms</span></div>
+    <div class="k"><small>Awaiting review</small><b>2</b><span>Frames saved automatically</span></div>
+  </div>
+
+  <div class="row2">
+    <div class="col">
+      <div class="p" style="flex:0 0 auto">
+        <div class="hd"><div><h3>Accounts</h3><div class="cap">Live state, last reading, and what this window presents</div></div><span class="r">Manage →</span></div>
+
+        <div class="acct">
+          <div class="h"><div class="av">M</div><div><b>Master</b><em>Receiving account</em></div><div class="stt"><i></i>Window open</div></div>
+          <div class="metrics">
+            <div><small>Cash</small><b>3,238<em>current</em></b></div>
+            <div><small>Coins</small><b>4,120,650,362<em>current</em></b></div>
+            <div><small>Screen</small><b>lobby<em class="mut">73%</em></b></div>
+            <div><small>Public IPv4</small><b>203.0.113.42</b></div>
+          </div>
+          <div class="btns"><span class="pri">Inspect game</span><span>Return to game</span><span>Reload page</span><span>Stop live status</span></div>
+        </div>
+
+        <div class="acct">
+          <div class="h"><div class="av">S</div><div><b>Slave</b><em>Sending account</em></div><div class="stt off"><i></i>Window closed</div></div>
+          <div class="metrics">
+            <div><small>Cash</small><b style="color:#5f6b86">—<em class="mut">not read</em></b></div>
+            <div><small>Coins</small><b style="color:#5f6b86">—<em class="mut">not read</em></b></div>
+            <div><small>Screen</small><b style="color:#5f6b86">not inspected</b></div>
+            <div><small>Public IPv4</small><b style="color:#5f6b86">not checked</b></div>
+          </div>
+          <div class="btns"><span class="pri">Open</span><span>Inspect game</span><span>Check IP</span><span>Session preferences</span></div>
+        </div>
+      </div>
+
+      <div class="p" style="flex:1">
+        <div class="hd"><div><h3>Recognition coverage</h3><div class="cap">Samples recorded locally, by screen state</div></div><span class="r">Open capture lab →</span></div>
+        <div class="bars">
+          <i style="height:82%"></i><i style="height:64%"></i><i style="height:91%"></i><i style="height:48%"></i>
+          <i style="height:72%"></i><i style="height:56%"></i><i style="height:88%"></i><i style="height:40%"></i>
+          <i style="height:66%"></i><i style="height:78%"></i><i style="height:52%"></i><i style="height:70%"></i>
+        </div>
+        <div class="legend"><span><i style="background:#2dd4bf"></i>Evidence · 74</span><span><i style="background:#3b82f6"></i>Benchmark · 13</span><span style="margin-left:auto">Median capture 96 ms · median OCR 412 ms</span></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="p">
+        <div class="hd"><div><h3>Live status</h3><div class="cap">Master · every 30 seconds</div></div><span class="r">Active</span></div>
+        <svg viewBox="0 0 300 90" style="margin-top:12px" preserveAspectRatio="none">
+          <path d="M0 70 C40 66 60 44 100 40 C140 36 160 22 200 26 C240 30 260 14 300 10" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
+          <path d="M0 70 C40 66 60 44 100 40 C140 36 160 22 200 26 C240 30 260 14 300 10 L300 90 L0 90 Z" fill="rgba(45,212,191,.10)"/>
+        </svg>
+        <div class="cap" style="margin-top:8px">Pauses while the window is not focused, so the game is never read in the background.</div>
+      </div>
+      <div class="p" style="flex:1">
+        <div class="hd"><div><h3>Recent activity</h3></div><span class="r">Show all →</span></div>
+        <div class="feed">
+          <div class="fi"><span class="dot"></span><div><b>Lobby recognised · 73%</b><span>Master · 21:47 · 6 phrases matched</span></div></div>
+          <div class="fi"><span class="dot b"></span><div><b>Public IPv4 checked</b><span>Master · 203.0.113.42 · 21:45</span></div></div>
+          <div class="fi"><span class="dot v"></span><div><b>Returned to the game from the shop</b><span>Master · 21:41</span></div></div>
+          <div class="fi"><span class="dot a"></span><div><b>2 frames saved for review</b><span>Capture lab · 21:36</span></div></div>
+          <div class="fi"><span class="dot b"></span><div><b>Session restored after restart</b><span>Slave · 20:58</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

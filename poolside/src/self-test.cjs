@@ -60,15 +60,15 @@ async function runSelfTest(ctx) {
   assert.equal((await sender.cookies.get({ name: 'session' }))[0].value, 'sender');
   reopened.destroy();
 
-  // --- Dashboard IPC: validation, sandbox, and the disabled transfer control -------------------
+  // --- Dashboard IPC: validation and sandbox ----------------------------------------------------
   const results = await dashboard.webContents.executeJavaScript(`(async () => {
     const a = await poolside.add({ name: 'Test receiver', role: 'receiver' });
     const b = await poolside.add({ name: 'Test sender', role: 'sender' });
     const duplicate = await poolside.add({ name: 'Test receiver', role: 'sender' });
     const result = await poolside.get();
-    return { a: a.ok, b: b.ok, duplicate: duplicate.ok, count: result.value.accounts.length, bridge: typeof require, disabled: document.querySelector('#start-transfer').disabled };
+    return { a: a.ok, b: b.ok, duplicate: duplicate.ok, count: result.value.accounts.length, bridge: typeof require, inspection: document.querySelector('#inspection-status').textContent };
   })()`);
-  assert.deepEqual(results, { a: true, b: true, duplicate: false, count: 2, bridge: 'undefined', disabled: true });
+  assert.deepEqual(results, { a: true, b: true, duplicate: false, count: 2, bridge: 'undefined', inspection: 'Waiting' });
   assert.equal(model.decode(JSON.parse(fs.readFileSync(workspace.storeFile, 'utf8'))).accounts.length, 2);
   const ipControls = await dashboard.webContents.executeJavaScript(`(async () => {
     const state = await poolside.get();
@@ -124,6 +124,20 @@ async function runSelfTest(ctx) {
   }
   assert.equal(/[A-Za-z]:\\\\/.test(diagnostics.serialised), false, 'and neither must a filesystem path');
 
+  // Saving takes the exact same redacted projection, then writes it under the trusted local data root. The bridge
+  // only receives a filename, so it cannot learn or display an absolute user-directory path.
+  const savedDiagnostics = await dashboard.webContents.executeJavaScript(`(async () => {
+    const saved = await poolside.diagnosticsSave();
+    return { ok: saved.ok, error: String(saved.error || ''), fileName: saved.ok ? saved.value.fileName : '', clean: saved.ok ? saved.value.clean : false };
+  })()`);
+  assert.equal(savedDiagnostics.ok, true, `the diagnostics file was refused: ${savedDiagnostics.error}`);
+  assert.equal(savedDiagnostics.clean, true);
+  assert.match(savedDiagnostics.fileName, /^poolside-diagnostics-.*\.json$/);
+  assert.equal(savedDiagnostics.fileName.includes('\\'), false, 'the renderer receives no filesystem path');
+  const bundleFile = require('node:path').join(app.getPath('userData'), 'diagnostics', savedDiagnostics.fileName);
+  const savedBundle = fs.readFileSync(bundleFile, 'utf8');
+  for (const name of ['Test receiver', 'Test sender'])
+    assert.equal(savedBundle.includes(name), false, `${name} must not be in the local export`);
   // --- The Activity view renders the merged timeline, not just the payload -----------------------
   // The payload being correct and the panel showing it are different claims; this asserts the second one.
   const timelinePanel = await dashboard.webContents.executeJavaScript(`(() => {
@@ -149,7 +163,7 @@ async function runSelfTest(ctx) {
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, unavailable transfer control, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
   );
   app.exit(0);
 }

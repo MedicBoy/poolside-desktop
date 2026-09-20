@@ -41,7 +41,11 @@ test('every declared field has a control, and no control describes an undeclared
     ...declared.identity.map(f => `identity.${f}`),
     ...declared.proxy.map(f => `proxy.${f}`)
   ]);
-  assert.deepEqual(pathsOf('account'), [...declared.identity.map(f => `identity.${f}`), ...declared.proxy.map(f => `proxy.${f}`)]);
+  assert.deepEqual(pathsOf('account'), [
+    ...declared.identity.map(f => `identity.${f}`),
+    ...declared.proxy.map(f => `proxy.${f}`),
+    ...declared.recovery.map(f => `recovery.${f}`)
+  ]);
   // The other direction: every path a form offers resolves to a declared spec.
   for (const name of ['settings', 'account']) {
     for (const path of pathsOf(name)) {
@@ -109,7 +113,11 @@ test('a value the control cannot hold is refused by name, not coerced', () => {
   const cases = [
     [{ limit: 'ten' }, 'limit', 'Match limit must be a whole number.'],
     [{ limit: '1.5' }, 'limit', 'Match limit must be a whole number.'],
-    [{ table: 'Paris' }, 'table', 'Preferred table must be one of: Bangkok, Rome, Seoul.'],
+    [
+      { table: 'Atlantis' },
+      'table',
+      'Preferred table must be one of: Bangkok, London, Sydney, Moscow, Tokyo, Las Vegas, Jakarta, Toronto, Cairo, Mumbai, Seoul, Rome, Paris, Berlin, Venice, Miami, Dallas, Shanghai.'
+    ],
     [{ 'proxy.enabled': 'maybe' }, 'proxy.enabled', 'Route enabled must be on or off.']
   ];
   for (const [values, path, message] of cases) {
@@ -117,7 +125,7 @@ test('a value the control cannot hold is refused by name, not coerced', () => {
   }
   // The message names its field because the same string also reaches the status line and the activity log, where
   // no label sits beside it — the validator's own messages are read as a joined list for the same reason.
-  assert.match(formValues.readForm('settings', { table: 'Paris' }).errors[0].message, /^Preferred table/);
+  assert.match(formValues.readForm('settings', { table: 'Atlantis' }).errors[0].message, /^Preferred table/);
 });
 
 test('a field grammar is not re-implemented here: text is passed through untouched', () => {

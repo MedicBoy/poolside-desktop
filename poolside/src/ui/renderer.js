@@ -1,6 +1,7 @@
 const $ = selector => document.querySelector(selector);
 let state = { accounts: [], events: [], settings: { table: 'Bangkok', limit: 10 } };
 let toastTimer;
+const dialogOpeners = new WeakMap();
 // Session states come from the FSM (src/session-fsm.cjs). `closed` is what a session with no open
 // window reports, so it appears here even though nothing stores it as a state.
 const CLOSED_STATUSES = ['idle', 'closed'];
@@ -10,7 +11,7 @@ const STATUS_LABELS = {
   closed: '○ Window closed',
   launching: '◌ Starting session…',
   loading: '◌ Loading game…',
-  ready: '● Window open · login unverified',
+  ready: '● Browser window ready',
   degraded: '△ Needs attention',
   closing: '○ Closing…'
 };
@@ -25,13 +26,16 @@ function healthRow(a) {
   const attempts = health.attempts ? ` · ${health.attempts} recovery attempt${health.attempts === 1 ? '' : 's'}` : '';
   const next = health.nextAttemptAt ? ` · retrying ${new Date(health.nextAttemptAt).toLocaleTimeString()}` : '';
   const spent = health.exhausted ? ' · automatic recovery stopped; reopen the window to retry' : '';
-  return `<div class="network-row"><span>${escapeHtml(`${a.statusReason || 'Session needs attention'}${attempts}${next}${spent}`)}</span></div>`;
+  const detail = `${a.statusReason || 'Session needs attention'}${attempts}${next}${spent}`;
+  return `<div class="network-row health-row"><span>${escapeHtml(detail)}</span><button class="text-button" data-action="reload" data-id="${a.id}" title="Reload this browser page while keeping its isolated saved sign-in." ${isBusy(a) ? 'disabled' : ''}>Reload page ↗</button></div>`;
 }
 function screenRow(a) {
   const screen = a.gameScreen;
+  const attention = a.screenAttention;
   const names = {
     inspecting: 'Inspecting game…',
     unknown: 'Screen not recognized',
+    shop: 'Shop visible',
     loading: 'Loading screen',
     connecting: 'Connecting screen',
     lobby: 'Lobby visible',
@@ -42,7 +46,25 @@ function screenRow(a) {
   const label = screen
     ? `${names[screen.state] || names.unknown}${typeof screen.score === 'number' && screen.score > 0 ? ' · ' + Math.round(screen.score * 100) + '%' : ''}${screen.observedAt ? ' · ' + new Date(screen.observedAt).toLocaleTimeString() : ''}`
     : 'Game screen not inspected';
-  return `<div class="network-row"><span>${escapeHtml(label)}</span><button class="text-button" data-action="inspect" data-id="${a.id}" title="Read a single game image locally; this does not verify responsiveness" ${isClosed(a) || isBusy(a) || screen?.state === 'inspecting' ? 'disabled' : ''}>Inspect game ↗</button></div>`;
+  const evidence = Array.isArray(screen?.evidence)
+    ? screen.evidence.filter(value => typeof value === 'string' && value.trim()).slice(0, 4)
+    : [];
+  const source =
+    screen?.source === 'bottom-band'
+      ? 'Read from the lower status area.'
+      : screen?.source === 'full-frame'
+        ? 'Read from the game area.'
+        : '';
+  const detail = evidence.length ? `Matched: ${evidence.join(', ')}. ${source}`.trim() : source;
+  const canMonitor = !isClosed(a) && !isBusy(a) && screen?.state !== 'inspecting';
+  const monitorLabel = a.monitoring ? 'Stop live status' : 'Start live status';
+  const monitorTitle = a.monitoring
+    ? 'Stop the local screen-status monitor for this account.'
+    : 'Read one visible game screen locally about every 30 seconds. It never clicks or controls the game.';
+  const monitorDetail = a.monitoring
+    ? `<small class="screen-detail">Live status is on · local screen reading about every ${a.monitorIntervalSeconds || 30} seconds, paused while this window is not focused.</small>`
+    : '';
+  return `<div class="network-row screen-row"><span><span class="screen-result">${escapeHtml(label)}</span>${attention ? `<small class="screen-detail screen-attention">${escapeHtml(attention.message)}</small>` : ''}${monitorDetail}${detail ? `<small class="screen-detail">${escapeHtml(detail)}</small>` : ''}</span><span class="screen-actions"><button class="text-button" data-action="inspect" data-id="${a.id}" title="Read one game image locally; this does not verify responsiveness" ${canMonitor ? '' : 'disabled'}>Inspect game ↗</button><button class="text-button" data-action="monitor" data-id="${a.id}" title="${monitorTitle}" ${canMonitor ? '' : 'disabled'}>${monitorLabel}</button></span></div>`;
 }
 function networkRow(a) {
   const n = a.network;
@@ -96,6 +118,18 @@ function profileRow(a) {
 }
 const escapeHtml = value =>
   String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+function showDialog(dialogSelector, focusSelector) {
+  const dialog = $(dialogSelector);
+  dialogOpeners.set(dialog, document.activeElement);
+  dialog.showModal();
+  requestAnimationFrame(() => $(focusSelector)?.focus());
+}
+document.querySelectorAll('dialog').forEach(dialog =>
+  dialog.addEventListener('close', () => {
+    const opener = dialogOpeners.get(dialog);
+    if (opener && document.contains(opener)) opener.focus();
+  })
+);
 function toast(message, error = false) {
   $('#toast').textContent = message;
   $('#toast').className = `toast${error ? ' error' : ''}`;
@@ -114,10 +148,15 @@ async function call(fn) {
   }
 }
 function view(name) {
-  if (!['sessions', 'activity', 'settings'].includes(name)) return;
+  if (!['sessions', 'activity', 'accounts', 'capture-lab', 'settings'].includes(name)) return;
   document.querySelectorAll('.view').forEach(el => el.classList.toggle('hidden', el.id !== `view-${name}`));
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.view === name));
-  $('#breadcrumb').textContent = name[0].toUpperCase() + name.slice(1);
+  document.querySelectorAll('.nav-item').forEach(el => {
+    const active = el.dataset.view === name;
+    el.classList.toggle('active', active);
+    el.toggleAttribute('aria-current', active);
+  });
+  $('#breadcrumb').textContent = name === 'capture-lab' ? 'Capture lab' : name[0].toUpperCase() + name.slice(1);
+  if (name === 'capture-lab') loadCaptureLab();
 }
 function openDialog() {
   $('#account-form').reset();
@@ -125,8 +164,7 @@ function openDialog() {
   const hasReceiver = state.accounts.some(a => a.role === 'receiver');
   $('#account-role').value = hasReceiver ? 'sender' : 'receiver';
   $('#account-role option[value="receiver"]').disabled = hasReceiver;
-  $('#account-dialog').showModal();
-  $('#account-name').focus();
+  showDialog('#account-dialog', '#account-name');
 }
 function renderAccounts() {
   const query = $('#search').value.toLowerCase().trim();
@@ -143,9 +181,143 @@ function renderAccounts() {
   $('#accounts').innerHTML = accounts
     .map(
       a =>
-        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(statusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${footprintRow(a)}${profileRow(a)}${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Shop opened after sign-in?</span><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></div></article>`
+        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(statusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${footprintRow(a)}${profileRow(a)}${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Page tools</span><span class="screen-actions"><button class="text-button" data-action="reload" data-id="${a.id}" title="Reload this browser page while keeping its isolated saved sign-in." ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Reload page ↗</button><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></span></div></article>`
     )
     .join('');
+}
+function profileSummary(account) {
+  const profile = account.profile;
+  if (!profile) return 'Profile has not been measured yet.';
+  const parts = [];
+  if (profile.established) parts.push('saved browser profile established');
+  if (Number.isInteger(profile.generation)) parts.push(`storage generation ${profile.generation}`);
+  if (Number.isInteger(profile.directoryBytes)) parts.push(`${formatBytes(profile.directoryBytes)} on disk`);
+  if (profile.corruption?.count)
+    parts.push(`${profile.corruption.count} quarantined damaged session${profile.corruption.count === 1 ? '' : 's'}`);
+  return parts.join(' · ') || 'Profile has not been measured yet.';
+}
+function overviewValue(value, fallback = 'Uses workspace/browser default') {
+  return value === null || value === undefined || value === '' ? fallback : String(value);
+}
+function overviewRow(label, value, copyValue = null) {
+  const copy = copyValue
+    ? ` <button class="text-button copy-overview" data-copy="${escapeHtml(copyValue)}" aria-label="Copy ${escapeHtml(label)}">Copy</button>`
+    : '';
+  return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}${copy}</dd></div>`;
+}
+function accountOverview(account) {
+  const overview = account.overview;
+  if (!overview) return '';
+  const identity = overview.identity || {};
+  const route = overview.route || {};
+  const session = overview.session || {};
+  const routeSource = route.presetName ? `Saved preset: ${route.presetName}` : 'Route source: account override or workspace default';
+  const routeStatus = route.configured
+    ? route.matches === false
+      ? `Route mismatch: Chromium reported ${route.verifiedRoute || 'a different route'}`
+      : route.matches === true
+        ? `Route verified: ${route.verifiedRoute || route.label}`
+        : `Configured: ${route.label}`
+    : 'No dedicated route configured';
+  const items = [
+    overviewRow('Session partition', overviewValue(session.partition, 'Unavailable'), session.partition),
+    overviewRow('Saved sign-in state', overviewValue(session.persistence)),
+    overviewRow('Identity summary', overviewValue(identity.summary)),
+    overviewRow('User agent', overviewValue(identity.userAgent), identity.userAgent),
+    overviewRow('Languages', overviewValue(identity.acceptLanguages)),
+    overviewRow('Locale / timezone', `${overviewValue(identity.locale)} / ${overviewValue(identity.timezone)}`),
+    overviewRow('Viewport / colour scheme', `${overviewValue(identity.viewport)} / ${overviewValue(identity.colorScheme)}`),
+    overviewRow('Route source', routeSource),
+    overviewRow('Network route', routeStatus),
+    overviewRow(
+      'Public IP',
+      route.publicIp
+        ? `${route.publicIp}${route.publicIpCheckedAt ? ` · checked ${new Date(route.publicIpCheckedAt).toLocaleTimeString()}` : ''}`
+        : 'Not checked'
+    )
+  ];
+  return `<details class="account-disclosure account-overview" data-account-id="${escapeHtml(account.id)}"><summary>Session details</summary><dl class="managed-details account-overview-details">${items.join('')}</dl><p class="account-overview-note">Poolside does not display passwords, cookies, or tokens. These are the configuration values and session facts it can safely verify.</p></details>`;
+}
+function screenHistory(account) {
+  const entries = Array.isArray(account.screenHistory) ? account.screenHistory : [];
+  if (!entries.length) return '';
+  const rows = entries
+    .map(entry => {
+      const state = captureLabel(entry.state);
+      const confidence = typeof entry.score === 'number' && entry.score > 0 ? ` · ${Math.round(entry.score * 100)}%` : '';
+      const time = entry.observedAt ? new Date(entry.observedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+      return `<li><span>${escapeHtml(state)}${confidence}</span><time datetime="${escapeHtml(entry.observedAt || '')}">${time}</time></li>`;
+    })
+    .join('');
+  return `<details class="account-disclosure screen-history" data-account-id="${escapeHtml(account.id)}"><summary>Recent screen changes <span class="count-pill">${entries.length}</span></summary><ol>${rows}</ol><p>Recorded locally while you inspect or use Live status. Repeated readings of the same screen are not listed.</p></details>`;
+}
+function visibleReadings(account) {
+  const readings = Object.values(account.visibleReadings || {}).filter(reading => Number.isSafeInteger(reading?.value));
+  if (!readings.length) return '';
+  const rows = readings
+    .map(reading => {
+      const seen = reading.observedAt ? new Date(reading.observedAt).toLocaleTimeString() : 'time unavailable';
+      const status = reading.statusLabel || 'Unstamped reading';
+      // An abbreviated figure ("3.23k") is the game's own rounding, so it is shown as approximate rather
+      // than as a balance that happens to end in zeros.
+      const shown = `${escapeHtml(reading.value.toLocaleString())}${reading.exact === false ? ' approx.' : ''}`;
+      return `<div><dt>${escapeHtml(reading.label)}</dt><dd>${shown} <small>· ${escapeHtml(status)} · ${escapeHtml(seen)}</small></dd></div>`;
+    })
+    .join('');
+  return `<section class="visible-readings"><h4>Last visible account readings</h4><dl class="managed-details">${rows}</dl><p>Read locally from this window's own screen. These values are display-only and may be inaccurate; verify them in the game.</p></section>`;
+}
+function managedCard(account, archived = false) {
+  const screen = account.gameScreen;
+  const screenState = screen?.state && screen.state !== 'unknown' ? screen.state.replaceAll('-', ' ') : 'not inspected';
+  const live = !isClosed(account);
+  return `<article class="managed-card ${archived ? 'archived' : ''}">
+    <div class="managed-card-heading"><span class="account-avatar ${account.role}">${escapeHtml(account.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(account.name)}</div><span class="account-role">${account.role === 'receiver' ? 'Receiving account' : 'Sending account'} · ${escapeHtml(statusLabel(account))}</span></div><div class="managed-actions">${archived ? `<button class="secondary" data-action="restore" data-id="${account.id}">Restore</button>` : `<button class="secondary" data-action="edit-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Edit</button><button class="secondary" data-action="account-preferences" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Session preferences</button><button class="secondary" data-action="archive" data-id="${account.id}" ${live ? 'disabled' : ''}>Archive</button>`}<button class="danger-button" data-action="delete-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Remove…</button></div></div>
+    ${account.note ? `<p class="account-note"><strong>Local note:</strong> ${escapeHtml(account.note)}</p>` : ''}
+    <dl class="managed-details"><div><dt>Browser profile</dt><dd>${escapeHtml(profileSummary(account))}</dd></div><div><dt>Current screen</dt><dd>${escapeHtml(screenState)}${typeof screen?.score === 'number' ? ` · ${Math.round(screen.score * 100)}% match` : ''}</dd></div><div><dt>Public IP check</dt><dd>${account.network?.status === 'checked' ? escapeHtml(account.network.ip) : 'Not checked'}</dd></div><div><dt>Created</dt><dd>${account.createdAt ? escapeHtml(new Date(account.createdAt).toLocaleDateString()) : 'Unknown'}</dd></div></dl>${visibleReadings(account)}${screenHistory(account)}${accountOverview(account)}
+  </article>`;
+}
+function renderManagedAccounts() {
+  const archived = state.archivedAccounts || [];
+  $('#manager-active-count').textContent = state.accounts.length;
+  $('#manager-archived-count').textContent = archived.length;
+  $('#managed-accounts').innerHTML = state.accounts.length
+    ? state.accounts.map(account => managedCard(account)).join('')
+    : '<div class="manager-empty">No active account slots. Restore an archived account or add a new one.</div>';
+  $('#archived-accounts').innerHTML = archived.length
+    ? archived.map(account => managedCard(account, true)).join('')
+    : '<div class="manager-empty">No archived account slots.</div>';
+}
+function openEditDialog(id) {
+  const account = state.accounts.find(candidate => candidate.id === id);
+  if (!account || !isClosed(account)) return;
+  $('#edit-account-id').value = account.id;
+  $('#edit-account-name').value = account.name;
+  $('#edit-account-note').value = account.note || '';
+  const receiverExists = state.accounts.some(candidate => candidate.id !== account.id && candidate.role === 'receiver');
+  $('#edit-account-role').value = account.role;
+  $('#edit-account-role').querySelector('option[value="receiver"]').disabled = receiverExists;
+  $('#edit-account-error').textContent = '';
+  showDialog('#edit-account-dialog', '#edit-account-name');
+}
+let accountPreferencesForm = null;
+function paintAccountPreferences(errors = {}) {
+  if (!accountPreferencesForm) return;
+  $('#account-preferences-fields').innerHTML = settingsFields(accountPreferencesForm, errors, 'account-');
+}
+async function openAccountPreferencesDialog(id) {
+  const account = state.accounts.find(candidate => candidate.id === id);
+  if (!account || !isClosed(account)) return;
+  const result = await call(() => poolside.accountPreferencesForm(id));
+  if (!result.ok) return;
+  accountPreferencesForm = result.value;
+  $('#account-preferences-id').value = id;
+  const presetSelect = $('#account-route-preset');
+  presetSelect.innerHTML = `<option value="">Use an account-specific route or workspace default</option>${(result.value.routePresets || []).map(preset => `<option value="${escapeHtml(preset.id)}">${escapeHtml(preset.name)} · ${escapeHtml(preset.spec)}</option>`).join('')}`;
+  presetSelect.value = result.value.routePresetId || '';
+  $('#account-preferences-title').textContent = `${account.name} session preferences`;
+  $('#account-preferences-status').textContent = 'Optional settings override the workspace defaults for this account.';
+  paintAccountPreferences();
+  showDialog('#account-preferences-dialog', '#account-preferences-fields :is(input, select, button)');
 }
 // The merged history, rendered with the activity feed's own markup so it inherits the same styling and cannot
 // drift from it: a transition shows the states it moved between, an activity entry shows its message.
@@ -169,6 +341,33 @@ function timelineRows(entries) {
 // controls' values, keyed by the same dotted path an error comes back with — so a field added to
 // `config-schema.cjs` appears here without an edit to this file, and an error marks the control that caused it.
 let settingsForm = null;
+
+const SETTINGS_HELP = {
+  table: 'A label for your preferred 1-on-1 table. Poolside remembers this preference; it does not enter a table for you.',
+  limit: 'A local reminder for the number of sessions you want to keep open. It does not affect the game.',
+  'identity.userAgent': 'The browser identification string a website sees. Leave blank to use the normal bundled browser value.',
+  'identity.acceptLanguages': 'Language preferences sent by the browser, such as en-CA, en.',
+  'identity.locale': 'Language and regional formatting used inside this browser window, such as en-CA.',
+  'identity.timezone': 'Time zone shown inside this browser window, using a name such as America/St_Johns.',
+  'identity.viewport': 'The browser page size in pixels, written as width and height by this form.',
+  'identity.colorScheme': 'Whether websites are told this browser prefers a light or dark appearance.',
+  'identity.quotaBytes': 'A warning ceiling for the browser cache. Poolside reports when it is exceeded; Chromium does not enforce it.',
+  'proxy.enabled': 'Turns the route below on for newly opened sessions. Leave it off to use your normal network connection.',
+  'proxy.spec': 'Optional proxy address in host:port or scheme://host:port form. It is applied to the isolated session only.',
+  'proxy.bypass': 'Optional hosts that should skip the route, separated with commas. Most people can leave this blank.',
+  'recovery.shopReturnDelaySeconds':
+    'How many seconds Poolside waits after confirming the shop before returning this browser window to the game. This does not affect gameplay.',
+  'recovery.backgroundThrottling':
+    'Keeps this browser window active when it is in the background. Turn this on only if the game pauses or freezes while you use another window.',
+  'recovery.repaintMitigation':
+    'Requests several display refreshes after the game page loads. It can help if a loaded game window appears blank or frozen.',
+  'recovery.monitorIntervalSeconds':
+    'How often, in seconds, live status reads this window\'s screen while you have it open and focused. It pauses automatically whenever this window is not the focused one.'
+};
+function settingHelp(path) {
+  const text = SETTINGS_HELP[path] || 'This is a local Poolside setting. It is checked before saving.';
+  return `<span class="info-dot" tabindex="0" data-tip="${escapeHtml(text)}" aria-label="Help for this setting">i</span>`;
+}
 
 /** One control, in whatever shape its descriptor asked for. */
 function settingsControl(field, message) {
@@ -199,18 +398,19 @@ function settingsControl(field, message) {
 }
 
 /** The whole form: one fieldset per declared group, one label per control. */
-function settingsFields(form, errors = {}) {
+function settingsFields(form, errors = {}, idPrefix = '') {
   return (form.groups || [])
     .map(
       group =>
         `<fieldset class="settings-group"><legend>${escapeHtml(group.label)}</legend>${(group.fields || [])
-          .map(field => {
+          .map(sourceField => {
+            const field = { ...sourceField, id: `${idPrefix}${sourceField.id}` };
             const message = errors[field.path];
             const required = field.required ? ' <span class="muted">(required)</span>' : '';
             const problem = message
               ? `<span class="field-error" id="${escapeHtml(field.id)}-error" role="alert">${escapeHtml(message)}</span>`
               : '';
-            return `<label class="settings-field" for="${escapeHtml(field.id)}"><span>${escapeHtml(field.label)}${required}</span>${settingsControl(field, message)}${problem}</label>`;
+            return `<label class="settings-field" for="${escapeHtml(field.id)}"><span>${escapeHtml(field.label)}${settingHelp(field.path)}${required}</span>${settingsControl(field, message)}${problem}</label>`;
           })
           .join('')}</fieldset>`
     )
@@ -240,7 +440,39 @@ function eventRows(events) {
       .join('') || '<p class="muted">Activity will appear here as you use the workspace.</p>'
   );
 }
+function openAccountDisclosureIds() {
+  return new Set(
+    [...document.querySelectorAll('.account-disclosure[open]')]
+      .map(node => `${node.classList.contains('screen-history') ? 'history' : 'session'}:${node.dataset.accountId}`)
+      .filter(id => !id.endsWith(':'))
+  );
+}
+function restoreAccountDisclosureIds(ids) {
+  for (const value of ids) {
+    const [kind, id] = value.split(':');
+    const selector = kind === 'history' ? '.screen-history' : '.account-overview';
+    document.querySelector(`${selector}[data-account-id="${id}"]`)?.setAttribute('open', '');
+  }
+}
+let activityFilter = 'all';
+function filteredActivity(entries) {
+  if (activityFilter === 'warning') return entries.filter(entry => entry.level === 'warning');
+  if (activityFilter === 'session') return entries.filter(entry => entry.source === 'session');
+  return entries;
+}
+function renderRoutePresets() {
+  const presets = state.routePresets || [];
+  $('#route-preset-list').innerHTML = presets.length
+    ? presets
+        .map(
+          preset =>
+            `<div class="route-preset"><strong>${escapeHtml(preset.name)}</strong><span>${escapeHtml(preset.enabled ? preset.spec : `${preset.spec} · disabled`)}${preset.bypass ? ` · bypass ${escapeHtml(preset.bypass)}` : ''}</span><button class="text-button" data-route-preset-delete="${escapeHtml(preset.id)}">Remove</button></div>`
+        )
+        .join('')
+    : '<p class="muted">No saved route presets yet.</p>';
+}
 function render(next) {
+  const openDetails = openAccountDisclosureIds();
   state = next;
   const open = state.accounts.filter(a => !isClosed(a)).length;
   $('#account-count').textContent = state.accounts.length;
@@ -248,6 +480,18 @@ function render(next) {
   $('#nav-count').textContent = state.accounts.length;
   $('#section-count').textContent = state.accounts.length;
   $('#window-hint').textContent = open ? 'Independent saved profiles' : 'Ready when you are';
+  const inspected = state.accounts.filter(
+    account => account.gameScreen && account.gameScreen.state && account.gameScreen.state !== 'inspecting'
+  );
+  const recognized = inspected.filter(account => account.gameScreen.state !== 'unknown');
+  $('#inspection-status').textContent = !open ? 'Waiting' : !inspected.length ? 'Ready' : recognized.length ? 'Observed' : 'Unknown';
+  $('#inspection-hint').textContent = !open
+    ? 'Open a game window to inspect its screen'
+    : !inspected.length
+      ? 'Use Inspect game to read one screen locally'
+      : recognized.length
+        ? `${recognized.length} current screen${recognized.length === 1 ? '' : 's'} recognized locally`
+        : 'The last inspected screen could not be recognized';
   $('#receiver-name').textContent = state.accounts.find(a => a.role === 'receiver')?.name || 'Not selected';
   $('#sender-count').textContent = state.accounts.filter(a => a.role === 'sender').length;
   $('#table-value').textContent = state.settings.table;
@@ -256,30 +500,66 @@ function render(next) {
   $('#close-all').disabled = !open;
   $('#arrange').disabled = !open;
   $('#recent-events').innerHTML = eventRows(state.events.slice(0, 3));
-  $('#all-events').innerHTML = eventRows(state.events);
+  $('#all-events').innerHTML = eventRows(state.events.slice(0, 50));
+  const history = state.activityHistory || {};
+  $('#activity-history-note').textContent = history.saved
+    ? `${history.entries || 0} redacted activity message${history.entries === 1 ? '' : 's'} saved locally (up to ${history.limit}). Browser contents, passwords, cookies and tokens are never added.`
+    : 'Activity is available for this app session. No passwords or tokens are recorded.';
   // The timeline is the two histories *merged*: session transitions and activity entries in one order, which is
   // what makes a failure readable as a sequence rather than as two lists (ADR-0016).
   const timeline = (state.timeline && state.timeline.entries) || [];
-  $('#timeline').innerHTML = timeline.length
-    ? `<div class="section-heading"><h2>Timeline <span class="count-pill">${timeline.length}</span></h2><span class="muted">transitions and activity, oldest first</span></div>${timelineRows(timeline.slice(-12).reverse())}`
-    : eventRows([]);
+  const visibleActivity = filteredActivity(timeline).slice().reverse().slice(0, 10);
+  $('#activity-visible-count').textContent = visibleActivity.length;
+  $('#timeline').innerHTML = visibleActivity.length
+    ? timelineRows(visibleActivity)
+    : '<p class="muted">No recent entries match this filter.</p>';
   renderAccounts();
+  renderManagedAccounts();
+  renderRoutePresets();
+  restoreAccountDisclosureIds(openDetails);
 }
 document.addEventListener('click', async event => {
+  const copy = event.target.closest('button.copy-overview');
+  if (copy) {
+    try {
+      await navigator.clipboard.writeText(copy.dataset.copy || '');
+      toast('Copied to the clipboard.');
+    } catch {
+      toast('Could not copy this value.', true);
+    }
+    return;
+  }
+
   const button = event.target.closest('button');
   if (!button || button.disabled) return;
   if (button.dataset.view) view(button.dataset.view);
   if (button.classList.contains('add-account')) openDialog();
-  if (button.dataset.action === 'diagnostics-preview') {
+  if (['diagnostics-preview', 'diagnostics-save', 'diagnostics-open-folder', 'activity-history-clear'].includes(button.dataset.action)) {
     // Its own branch, before the account-action chain: that chain ends in `poolside.open(id)` as the fallback,
     // so an action with no account would silently try to open one.
     await call(async () => {
-      const preview = await poolside.diagnosticsPreview();
-      if (preview.ok) {
-        const s = preview.value.payload.summary;
-        toast(`Diagnostics payload: ${preview.value.entries} timeline entries, ${s.accounts} account(s), no names, addresses or paths.`);
+      const action = button.dataset.action;
+      if (action === 'activity-history-clear') {
+        const result = await poolside.clearActivityHistory();
+        if (result.ok) toast('Saved activity history erased from this PC.');
+        return result;
       }
-      return preview;
+      const saving = action === 'diagnostics-save';
+      const opening = action === 'diagnostics-open-folder';
+      const result = opening
+        ? await poolside.diagnosticsOpenFolder()
+        : saving
+          ? await poolside.diagnosticsSave()
+          : await poolside.diagnosticsPreview();
+      if (result.ok) {
+        if (opening) toast('Opened the local diagnostics folder.');
+        else if (saving) toast(`Redacted diagnostics saved locally: ${result.value.fileName} (${result.value.entries} timeline entries).`);
+        else {
+          const s = result.value.payload.summary;
+          toast(`Diagnostics payload: ${result.value.entries} timeline entries, ${s.accounts} account(s), no names, addresses or paths.`);
+        }
+      }
+      return result;
     });
     return;
   }
@@ -288,27 +568,50 @@ document.addEventListener('click', async event => {
     await call(() =>
       action === 'inspect'
         ? poolside.inspect(id)
-        : action === 'return-game'
-          ? poolside.returnGame(id)
-          : action === 'check-ip'
-            ? poolside.checkIP(id)
-            : action === 'check-route'
-              ? poolside.checkRoute(id)
-              : action === 'delete-profile'
-                ? poolside.deleteProfile(id)
-                : action === 'archive'
-                  ? poolside.archive(id)
-                  : action === 'close'
-                    ? poolside.close(id)
-                    : poolside.open(id)
+        : action === 'reload'
+          ? poolside.reload(id)
+          : action === 'monitor'
+            ? state.accounts.find(account => account.id === id)?.monitoring
+              ? poolside.stopMonitor(id)
+              : poolside.startMonitor(id)
+            : action === 'return-game'
+              ? poolside.returnGame(id)
+              : action === 'check-ip'
+                ? poolside.checkIP(id)
+                : action === 'check-route'
+                  ? poolside.checkRoute(id)
+                  : action === 'delete-profile'
+                    ? poolside.deleteProfile(id)
+                    : action === 'archive'
+                      ? poolside.archive(id)
+                      : action === 'restore'
+                        ? poolside.restore(id)
+                        : action === 'delete-account'
+                          ? poolside.deleteAccount(id)
+                          : action === 'edit-account'
+                            ? (openEditDialog(id), Promise.resolve({ ok: true }))
+                            : action === 'account-preferences'
+                              ? (openAccountPreferencesDialog(id), Promise.resolve({ ok: true }))
+                              : action === 'close'
+                                ? poolside.close(id)
+                                : poolside.open(id)
     );
   }
+});
+// Subscribe and paint before the element-by-element wiring below. A missing node used to abort the
+// whole script and leave an empty workspace with no accounts, which read as "everything was deleted".
+// Keeping the render path first means the workspace still paints even if one control fails to wire.
+poolside.subscribe(render);
+call(() => poolside.get()).then(result => {
+  if (result.ok) loadSettingsForm();
 });
 $('.brand').addEventListener('click', event => {
   event.preventDefault();
   view('sessions');
 });
 $('#cancel-dialog').addEventListener('click', () => $('#account-dialog').close());
+$('#cancel-edit-dialog').addEventListener('click', () => $('#edit-account-dialog').close());
+$('#cancel-account-preferences-dialog').addEventListener('click', () => $('#account-preferences-dialog').close());
 $('#account-form').addEventListener('submit', async event => {
   event.preventDefault();
   const button = event.submitter;
@@ -318,6 +621,56 @@ $('#account-form').addEventListener('submit', async event => {
   if (result.ok) $('#account-dialog').close();
   else $('#account-error').textContent = result.error;
 });
+$('#edit-account-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  const result = await call(() =>
+    poolside.update({
+      id: $('#edit-account-id').value,
+      name: $('#edit-account-name').value,
+      role: $('#edit-account-role').value,
+      note: $('#edit-account-note').value
+    })
+  );
+  button.disabled = false;
+  if (result.ok) $('#edit-account-dialog').close();
+  else $('#edit-account-error').textContent = result.error;
+});
+async function saveAccountPreferences(reset = false) {
+  const values = {};
+  if (!reset) {
+    for (const control of $('#account-preferences-fields').querySelectorAll('[data-path]')) {
+      values[control.dataset.path] = control.type === 'checkbox' ? String(control.checked) : control.value;
+    }
+  }
+  const result = await call(() =>
+    poolside.saveAccountPreferences({
+      id: $('#account-preferences-id').value,
+      values,
+      routePresetId: reset ? '' : $('#account-route-preset').value,
+      reset
+    })
+  );
+  if (!result.ok) return;
+  const verdict = result.value;
+  if (verdict.form) accountPreferencesForm = verdict.form;
+  const errors = {};
+  for (const problem of verdict.errors || []) if (problem.path) errors[problem.path] = problem.message;
+  paintAccountPreferences(errors);
+  if (!verdict.saved) {
+    $('#account-preferences-status').textContent = 'Not saved. Correct the marked field.';
+    const invalid = $('#account-preferences-fields').querySelector('[aria-invalid="true"]');
+    if (invalid) invalid.focus();
+    return;
+  }
+  $('#account-preferences-status').textContent = reset ? 'Workspace defaults will be used for this account.' : 'Session preferences saved.';
+}
+$('#account-preferences-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  await saveAccountPreferences();
+});
+$('#reset-account-preferences').addEventListener('click', () => saveAccountPreferences(true));
 $('#settings-form').addEventListener('submit', async event => {
   event.preventDefault();
   // Only the controls are sent, keyed by their declared path; a blank control is omitted by the mapper, so this
@@ -353,11 +706,219 @@ $('#settings-form').addEventListener('submit', async event => {
     ? 'Saved. A stored value this form does not own was unusable and has been left out.'
     : 'Preferences saved on this device.';
 });
+$('#route-preset-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const result = await call(() =>
+    poolside.addRoutePreset({
+      name: $('#route-preset-name').value,
+      spec: $('#route-preset-spec').value,
+      bypass: $('#route-preset-bypass').value,
+      enabled: $('#route-preset-enabled').checked
+    })
+  );
+  if (result.ok) $('#route-preset-form').reset();
+});
+$('#route-preset-list').addEventListener('click', async event => {
+  const button = event.target.closest('[data-route-preset-delete]');
+  if (!button) return;
+  const result = await call(() => poolside.deleteRoutePreset(button.dataset.routePresetDelete));
+  if (result.ok) toast('Saved route preset removed.');
+});
+$('#activity-filter').addEventListener('change', event => {
+  activityFilter = event.target.value;
+  render(state);
+});
 $('#open-all').addEventListener('click', () => call(() => poolside.openAll()));
 $('#close-all').addEventListener('click', () => call(() => poolside.closeAll()));
 $('#arrange').addEventListener('click', () => call(() => poolside.arrange()));
 $('#search').addEventListener('input', renderAccounts);
-poolside.subscribe(render);
-call(() => poolside.get()).then(result => {
-  if (result.ok) loadSettingsForm();
+
+let captureLab = { samples: [], states: [] };
+const captureLabel = value => String(value || 'unknown').replaceAll('-', ' ');
+const capturePercent = value => (Number.isFinite(value) ? `${Math.round(value * 100)}%` : '—');
+const captureDuration = value => (Number.isFinite(value) ? `${Math.round(value)} ms` : '—');
+function captureMetrics(evaluation) {
+  return [
+    ['Samples', evaluation.samples],
+    ['Evidence', `${evaluation.labelsReady || 0}/${evaluation.labelsAvailable}`],
+    ['Benchmark', evaluation.benchmark?.samples || 0],
+    ['Benchmark match', capturePercent(evaluation.benchmark?.agreement)],
+    ['Benchmark F1', capturePercent(evaluation.benchmark?.macroF1)],
+    ['Capture median', captureDuration(evaluation.timing?.surface?.medianMs)],
+    ['OCR median', captureDuration(evaluation.timing?.recognition?.medianMs)],
+    ['Review needed', evaluation.reviewNeeded || 0, 'review']
+  ]
+    .map(([label, value, action]) =>
+      action
+        ? `<button class="capture-metric actionable" type="button" data-capture-filter="${action}"><span>${label}</span><strong>${escapeHtml(value)}</strong><small>Open queue</small></button>`
+        : `<div class="capture-metric"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`
+    )
+    .join('');
+}
+function captureBenchmarkReport(evaluation) {
+  const benchmark = evaluation.benchmark || {};
+  if (!benchmark.samples)
+    return '<p class="muted capture-report-empty">No benchmark samples yet. Set aside a reviewed, non-sensitive capture to begin a separate local check.</p>';
+  const rows = (benchmark.labels || [])
+    .filter(label => label.recall !== null || label.precision !== null)
+    .map(
+      label =>
+        `<tr><th scope="row">${escapeHtml(captureLabel(label.expectedState))}</th><td>${capturePercent(label.precision)}</td><td>${capturePercent(label.recall)}</td><td>${capturePercent(label.f1)}</td></tr>`
+    )
+    .join('');
+  const summary = `Based on ${benchmark.samples} separate benchmark sample${benchmark.samples === 1 ? '' : 's'}; ${benchmark.unknown || 0} returned unknown (${capturePercent(benchmark.unknown)}).`;
+  return rows
+    ? `<div class="capture-report"><p>${escapeHtml(summary)}</p><table><thead><tr><th>Screen label</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : `<p class="muted capture-report-empty">${escapeHtml(summary)} No recognized label has enough data for per-label measures yet.</p>`;
+}
+function filteredCaptureSamples() {
+  const expectedState = $('#capture-filter-state').value;
+  const cohort = $('#capture-filter-cohort').value;
+  const result = $('#capture-filter-result').value;
+  return captureLab.samples.filter(sample => {
+    if (expectedState && sample.expectedState !== expectedState) return false;
+    if (cohort && sample.cohort !== cohort) return false;
+    if (result === 'review' && (sample.expectedState === sample.observedState || sample.reviewedAt)) return false;
+    if (result === 'match' && sample.expectedState !== sample.observedState) return false;
+    return true;
+  });
+}
+function populateCaptureFilters() {
+  const filter = $('#capture-filter-state');
+  const selected = filter.value;
+  filter.innerHTML = `<option value="">All screen labels</option>${(captureLab.states || [])
+    .map(value => `<option value="${escapeHtml(value)}">${escapeHtml(captureLabel(value))}</option>`)
+    .join('')}`;
+  if ((captureLab.states || []).includes(selected)) filter.value = selected;
+}
+function captureCoverage(evaluation) {
+  return evaluation.labels
+    .map(label => {
+      const sampleNoun = `sample${label.count === 1 ? '' : 's'}`;
+      const detail =
+        label.evidenceStatus === 'ready'
+          ? `${label.count} ${sampleNoun} · review-ready · ${label.reviewNeeded || 0} need review`
+          : label.count
+            ? `${label.count} ${sampleNoun} · needs ${label.samplesNeeded} more · ${label.reviewNeeded || 0} need review`
+            : `Needs ${label.samplesNeeded || evaluation.minimumEvidencePerLabel || 1} distinct samples`;
+      return `<div class="capture-coverage-row ${label.evidenceStatus || (label.count ? 'limited' : 'missing')}"><span>${escapeHtml(captureLabel(label.expectedState))}</span><strong>${escapeHtml(detail)}</strong></div>`;
+    })
+    .join('');
+}
+function renderCaptureLab() {
+  const select = $('#capture-account');
+  const selectedAccount = select.value;
+  const open = state.accounts.filter(account => !isClosed(account));
+  select.innerHTML = open.length
+    ? open.map(account => `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}</option>`).join('')
+    : '<option value="">Open a game window first</option>';
+  if (open.some(account => account.id === selectedAccount)) select.value = selectedAccount;
+  select.disabled = !open.length;
+  const stateSelect = $('#capture-state');
+  const selectedState = stateSelect.value;
+  stateSelect.innerHTML = (captureLab.states || [])
+    .map(value => `<option value="${escapeHtml(value)}">${escapeHtml(captureLabel(value))}</option>`)
+    .join('');
+  if (captureLab.states.includes(selectedState)) stateSelect.value = selectedState;
+  const evaluation = captureLab.evaluation || {
+    samples: captureLab.samples.length,
+    labelsWithEvidence: 0,
+    labelsAvailable: 0,
+    labelsReady: 0,
+    minimumEvidencePerLabel: 3,
+    agreement: null,
+    disagreements: 0,
+    benchmark: { samples: 0, agreement: null },
+    labels: []
+  };
+  populateCaptureFilters();
+  $('#capture-count').textContent = evaluation.samples;
+  $('#capture-metrics').innerHTML = captureMetrics(evaluation);
+  $('#capture-coverage').innerHTML = captureCoverage(evaluation);
+  $('#capture-benchmark-report').innerHTML = captureBenchmarkReport(evaluation);
+  const samples = filteredCaptureSamples();
+  $('#capture-visible-count').textContent = `${samples.length} of ${captureLab.samples.length} shown`;
+  $('#capture-samples').innerHTML = samples.length
+    ? samples
+        .map(
+          sample =>
+            `<article class="managed-card"><div class="managed-card-heading"><div><div class="account-name">${escapeHtml(captureLabel(sample.expectedState))}</div><span class="account-role">Expected screen · ${escapeHtml(new Date(sample.capturedAt).toLocaleString())}</span></div><div class="capture-sample-actions"><button class="secondary" data-capture-action="preview" data-id="${sample.id}" ${sample.imageAvailable ? '' : 'disabled'}>View image</button>${sample.expectedState !== sample.observedState && !sample.reviewedAt ? `<button class="secondary" data-capture-action="mark-reviewed" data-id="${sample.id}">Mark reviewed</button>` : ''}<button class="secondary" data-capture-action="set-cohort" data-id="${sample.id}" data-cohort="${sample.cohort === 'benchmark' ? 'evidence' : 'benchmark'}">${sample.cohort === 'benchmark' ? 'Use as evidence' : 'Set aside'}</button><button class="danger-button" data-capture-action="delete" data-id="${sample.id}">Delete…</button></div></div><dl class="managed-details"><div><dt>Detector result</dt><dd>${escapeHtml(captureLabel(sample.observedState))} · ${Math.round(Number(sample.score || 0) * 100)}%</dd></div><div><dt>Review</dt><dd>${sample.expectedState === sample.observedState ? 'OCR matched your label' : sample.reviewedAt ? `Reviewed ${new Date(sample.reviewedAt).toLocaleDateString()}` : 'Needs your decision'}</dd></div><div><dt>Capture set</dt><dd>${sample.cohort === 'benchmark' ? 'Benchmark' : 'Evidence'}</dd></div><div><dt>Capture size</dt><dd>${sample.width && sample.height ? `${sample.width} × ${sample.height}` : 'Unknown'}</dd></div><div><dt>Timing</dt><dd>${sample.timing ? `Capture ${captureDuration(sample.timing.surfaceMs)} · OCR ${captureDuration(sample.timing.recognitionMs)} · Total ${captureDuration(sample.timing.totalMs)}` : 'Not measured'}</dd></div><div><dt>OCR pass</dt><dd>${escapeHtml(sample.source || 'unknown')}</dd></div></dl></article>`
+        )
+        .join('')
+    : `<div class="manager-empty">${captureLab.samples.length ? 'No samples match the current filters.' : 'No local samples yet. Open a game window and capture a screen you have labeled.'}</div>`;
+}
+async function loadCaptureLab() {
+  const result = await call(() => poolside.captureList());
+  if (!result.ok) return;
+  captureLab = result.value;
+  renderCaptureLab();
+}
+async function openCapturePreview(id) {
+  const result = await call(() => poolside.captureImage(id));
+  if (!result.ok) return;
+  const sample = captureLab.samples.find(entry => entry.id === id);
+  $('#capture-preview-title').textContent = `${captureLabel(sample?.expectedState)} sample`;
+  $('#capture-preview-detail').textContent =
+    `Expected ${captureLabel(sample?.expectedState)}; detected ${captureLabel(sample?.observedState)} at ${Math.round(Number(sample?.score || 0) * 100)}%.`;
+  $('#capture-preview-image').src = `data:image/png;base64,${result.value.png}`;
+  showDialog('#capture-preview-dialog', '#cancel-capture-preview');
+}
+$('#capture-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  $('#capture-status').textContent = 'Capturing and evaluating locally…';
+  const result = await call(() =>
+    poolside.captureRecord({
+      id: $('#capture-account').value,
+      expectedState: $('#capture-state').value,
+      cohort: $('#capture-benchmark').checked ? 'benchmark' : 'evidence',
+      confirmedSafe: $('#capture-confirmed').checked
+    })
+  );
+  button.disabled = false;
+  if (!result.ok) {
+    $('#capture-status').textContent = 'No sample was saved.';
+    return;
+  }
+  $('#capture-status').textContent =
+    `Saved. Detector reported ${captureLabel(result.value.state)} at ${Number.isFinite(result.value.score) ? Math.round(result.value.score * 100) + '%' : 'an unavailable confidence'}.`;
+  $('#capture-confirmed').checked = false;
+  $('#capture-benchmark').checked = false;
+  await loadCaptureLab();
 });
+$('#capture-metrics').addEventListener('click', event => {
+  const button = event.target.closest('button[data-capture-filter]');
+  if (!button) return;
+  $('#capture-filter-result').value = button.dataset.captureFilter;
+  renderCaptureLab();
+  document.querySelector('.capture-samples')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#capture-samples').addEventListener('click', async event => {
+  const button = event.target.closest('button[data-capture-action]');
+  if (!button || button.disabled) return;
+  event.stopPropagation();
+  if (button.dataset.captureAction === 'preview') return openCapturePreview(button.dataset.id);
+  if (button.dataset.captureAction === 'mark-reviewed') {
+    const result = await call(() => poolside.captureReview(button.dataset.id));
+    if (result.ok) {
+      toast('Sample marked as reviewed.');
+      await loadCaptureLab();
+    }
+    return;
+  }
+  if (button.dataset.captureAction === 'set-cohort') {
+    const result = await call(() => poolside.captureSetCohort({ id: button.dataset.id, cohort: button.dataset.cohort }));
+    if (result.ok) await loadCaptureLab();
+    return;
+  }
+  const result = await call(() => poolside.captureDelete(button.dataset.id));
+  if (result.ok) {
+    toast('The local capture image and its record were deleted.');
+    await loadCaptureLab();
+  }
+});
+for (const id of ['capture-filter-state', 'capture-filter-cohort', 'capture-filter-result']) {
+  $(`#${id}`).addEventListener('change', () => renderCaptureLab());
+}
+$('#cancel-capture-preview').addEventListener('click', () => $('#capture-preview-dialog').close());

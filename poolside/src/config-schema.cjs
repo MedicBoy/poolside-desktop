@@ -19,10 +19,8 @@ const { parseProxySpec, normaliseBypass } = require('./proxy.cjs');
 /** The configuration shape's own version, independent of the workspace document version. */
 const SCHEMA_VERSION = 1;
 
-/**
- * Venue list. Data, not control flow: a new table is a line here, and nothing branches on a table name.
- */
-const TABLES = ['Bangkok', 'Rome', 'Seoul'];
+const { TABLES } = require('./table-list.cjs');
+const { RECOVERY, RECOVERY_FIELDS } = require('./recovery-settings.cjs');
 
 const LIMIT_MIN = 1;
 const LIMIT_MAX = 100;
@@ -43,7 +41,11 @@ const LABELS = {
   quotaBytes: 'Storage ceiling',
   enabled: 'Route enabled',
   spec: 'Route',
-  bypass: 'Bypass list'
+  bypass: 'Bypass list',
+  recovery: 'Reliability',
+  shopReturnDelaySeconds: 'Shop return delay',
+  backgroundThrottling: 'Keep background page active',
+  repaintMitigation: 'Refresh display after loading'
 };
 
 /**
@@ -108,7 +110,7 @@ const PROXY = {
 };
 
 /** @type {Record<string, Record<string, FieldSpec>>} */
-const SECTIONS = { identity: IDENTITY, proxy: PROXY };
+const SECTIONS = { identity: IDENTITY, proxy: PROXY, recovery: RECOVERY };
 
 /**
  * Workspace-wide settings.
@@ -145,7 +147,8 @@ const SETTINGS = {
  */
 const ACCOUNT = {
   identity: { kind: /** @type {'section'} */ ('section'), section: 'identity', label: LABELS.identity },
-  proxy: { kind: /** @type {'section'} */ ('section'), section: 'proxy', label: LABELS.proxy }
+  proxy: { kind: /** @type {'section'} */ ('section'), section: 'proxy', label: LABELS.proxy },
+  recovery: { kind: /** @type {'section'} */ ('section'), section: 'recovery', label: LABELS.recovery }
 };
 
 /** The declared names of one section, in declaration order. */
@@ -162,6 +165,7 @@ function describeSchema() {
     account: fields(ACCOUNT),
     identity: fields(IDENTITY),
     proxy: fields(PROXY),
+    recovery: [...RECOVERY_FIELDS],
     tables: [...TABLES],
     limit: { min: LIMIT_MIN, max: LIMIT_MAX, default: LIMIT_DEFAULT }
   };
@@ -178,6 +182,8 @@ module.exports = {
   ACCOUNT,
   IDENTITY,
   PROXY,
+  RECOVERY,
+  RECOVERY_FIELDS,
   SECTIONS,
   fields,
   describeSchema
