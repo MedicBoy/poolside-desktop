@@ -387,17 +387,31 @@
                 <div id="settings-fields"></div>
               </form>
               <section class="route-presets">
-                <h2>Saved route presets</h2>
-                <p class="muted">Reusable network configurations. Assign one to an account from its Session preferences.</p>
+                <h2>Network location for each account</h2>
+                <p class="muted">
+                  Give accounts their own way out to the internet, so each one looks like it is somewhere else. Paste the address your
+                  provider gave you — the whole line, exactly as it arrived — name it, save it, then tick the accounts that should use it.
+                  An account with no location of its own uses whatever is set above.
+                </p>
                 <form id="route-preset-form" class="route-preset-form">
-                  <input id="route-preset-name" placeholder="Preset name" required maxlength="40" /><input
+                  <input id="route-preset-name" placeholder="Name it — for example London-1" required maxlength="40" /><input
                     id="route-preset-spec"
-                    placeholder="host:port or socks5://host:port"
+                    placeholder="Paste the address here — it can be host:port, user:pass@host:port, or the line your provider gave you"
                     required
-                  /><input id="route-preset-bypass" placeholder="Optional bypass list" /><label
-                    ><input id="route-preset-enabled" type="checkbox" checked /> Enabled</label
-                  ><button class="secondary" type="submit">Save route preset</button>
+                  /><button class="secondary" type="submit">Save location</button>
                 </form>
+                <details class="route-presets-advanced">
+                  <summary>Advanced (most people never need this)</summary>
+                  <p class="muted">
+                    Leave these alone unless you know why you need them. "Skip it for" keeps listed addresses off the location — useful for
+                    a local printer or a work server, not for the game.
+                  </p>
+                  <div class="route-preset-form">
+                    <input id="route-preset-bypass" placeholder="Skip it for these addresses (optional)" /><label
+                      ><input id="route-preset-enabled" type="checkbox" checked /> Save it switched on</label
+                    >
+                  </div>
+                </details>
                 <div id="route-preset-list"></div>
               </section>
               <button class="primary" type="submit" form="settings-form">Save preferences</button>

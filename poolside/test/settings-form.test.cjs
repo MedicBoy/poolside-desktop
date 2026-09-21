@@ -118,7 +118,7 @@ test('a value the control cannot hold is refused by name, not coerced', () => {
       'table',
       'Preferred table must be one of: Bangkok, London, Sydney, Moscow, Tokyo, Las Vegas, Jakarta, Toronto, Cairo, Mumbai, Seoul, Rome, Paris, Berlin, Dubai, Shanghai.'
     ],
-    [{ 'proxy.enabled': 'maybe' }, 'proxy.enabled', 'Route enabled must be on or off.']
+    [{ 'proxy.enabled': 'maybe' }, 'proxy.enabled', 'Use this location for every account must be on or off.']
   ];
   for (const [values, path, message] of cases) {
     assert.deepEqual(formValues.readForm('settings', values).errors, [{ path, message }], JSON.stringify(values));

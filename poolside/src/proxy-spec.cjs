@@ -13,6 +13,25 @@ function parseProxySpec(spec) {
   if (/^direct$/i.test(trimmed)) {
     return { ok: true, mode: 'direct', proxyRules: '', expectedTarget: null, label: 'Direct connection' };
   }
+  // The line providers hand out. Webshare, for one, downloads `host:port:user:pass`, and asking someone to
+  // rearrange the line their provider gave them is the kind of small chore that makes a feature feel
+  // broken. Detected before the general form because it has an extra colon, and only when the second part
+  // is a port, so `host:port` and `user:pass@host:port` are untouched.
+  const providerLine = /^([^\s:/@]+):(\d{1,5}):([^\s:@]+):([^\s@]+)$/.exec(trimmed);
+  if (providerLine) {
+    const [, host, rawPort, username, password] = providerLine;
+    const port = Number(rawPort);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return { ok: false, error: `port ${rawPort} is out of range` };
+    const target = `${host}:${port}`;
+    return {
+      ok: true,
+      mode: 'fixed_servers',
+      proxyRules: target,
+      expectedTarget: target,
+      label: `http proxy at ${target}`,
+      credentials: { username, password }
+    };
+  }
   const match = /^(?:([a-z0-9]+):\/\/)?(?:([^\s:@]+):([^\s@]+)@)?([^\s:/@]+)(?::(\d{1,5}))?$/i.exec(trimmed);
   if (!match) return { ok: false, error: 'a route is not host:port, user:pass@host:port, or one of those forms with a scheme' };
   const [, rawScheme, rawUsername, rawPassword, host, rawPort] = match;
