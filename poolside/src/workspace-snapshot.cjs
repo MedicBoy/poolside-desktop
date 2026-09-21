@@ -80,6 +80,26 @@ function matchParticipantView(participant) {
   };
 }
 
+/**
+ * A session's WebRTC policy, or null when there is no live window to ask.
+ *
+ * The snapshot is built on every state change — while windows are opening and closing — so a window that
+ * has gone between two lines must read as "no window" rather than throwing out of the snapshot and taking
+ * whatever asked for it down with it.
+ * @param {{window?: any}|null|undefined} group
+ */
+function webRTCPolicyOf(group) {
+  try {
+    const window = group && group.window;
+    if (!window || typeof window.isDestroyed !== 'function' || window.isDestroyed()) return null;
+    const contents = window.webContents;
+    if (!contents || contents.isDestroyed()) return null;
+    return contents.getWebRTCIPHandlingPolicy();
+  } catch {
+    return null;
+  }
+}
+
 function matchesView() {
   const view = dashboardView(matchState.current);
   const decorate = match => ({ ...match, participants: match.participants.map(matchParticipantView) });
@@ -121,10 +141,7 @@ function buildSnapshot(activityHistory) {
       monitoring: Boolean(group && group.monitoring),
       // The session's own WebRTC policy, so the row that explains a session's network can say whether
       // anything is still able to step around the route. Null when there is no live window to ask.
-      webRTC:
-        group && group.window && typeof group.window.isDestroyed === 'function' && !group.window.isDestroyed()
-          ? group.window.webContents.getWebRTCIPHandlingPolicy()
-          : null,
+      webRTC: webRTCPolicyOf(group),
       monitorIntervalSeconds: resolveRecovery(account).monitorIntervalSeconds,
       screenHistory: group && Array.isArray(group.screenHistory) ? group.screenHistory : [],
       screenAttention: group && group.screenAttention?.message ? group.screenAttention : null,

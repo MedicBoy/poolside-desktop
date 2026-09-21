@@ -62,7 +62,13 @@ jobs:
       - name: Run the packaged desktop self-test
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath (Join-Path (Get-Location) 'release\Poolside-win32-x64\Poolside.exe') -ArgumentList '--self-test' -WindowStyle Hidden -Wait -PassThru
+          # A packaged Windows application has no console here, so its output has to be redirected or a
+          # failure arrives as a bare exit code with nothing to diagnose. The first hosted failure of this
+          # step was exactly that: exit 1, no output. Redirect, print, then judge.
+          $stdout = Join-Path $env:RUNNER_TEMP 'poolside-self-test.out.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'poolside-self-test.err.log'
+          $process = Start-Process -FilePath (Join-Path (Get-Location) 'release\Poolside-win32-x64\Poolside.exe') -ArgumentList '--self-test' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          Get-Content -LiteralPath $stdout, $stderr -ErrorAction SilentlyContinue
           if ($process.ExitCode -ne 0) { throw "Packaged self-test failed with exit code $($process.ExitCode)." }
       - uses: actions/upload-artifact@v4
         if: always()
