@@ -17,6 +17,7 @@ const { createSessionConfig } = require('./session-config.cjs');
 const { messageOf } = require('./errors.cjs');
 const { resolveRecovery } = require('./recovery-settings.cjs');
 const { attachProxyAuthentication } = require('./proxy-auth.cjs');
+const { webRTCPolicyFor } = require('./webrtc-policy.cjs');
 const { createSessionActions } = require('./session-actions.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const store = require('./workspace.cjs');
@@ -92,6 +93,8 @@ function createSessionManager(deps) {
       backgroundThrottling: resolveRecovery(account).backgroundThrottling
     });
     attachProxyAuthentication(window.webContents, footprint.route);
+    // The route governs this session's web traffic; this stops WebRTC from stepping around it.
+    window.webContents.setWebRTCIPHandlingPolicy(webRTCPolicyFor(footprint.route));
     if (restore.adjusted) log(`${account.name}: window ${describeRestore(restore)}.`);
     // Every state change republishes; only a degradation is worth an activity-feed entry, or the
     // feed fills with launch/load/ready chatter.
