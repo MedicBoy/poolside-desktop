@@ -8,7 +8,10 @@ const requiredArchiveFiles = [
   '/docs/threat-model.md',
   '/docs/CAPABILITIES.md',
   '/docs/capabilities.json',
-  '/docs/release-evidence/README.md'
+  '/docs/release-evidence/README.md',
+  // The offline lab is a first-party tool that ships with the application, so a package
+  // without it is incomplete rather than merely unusual.
+  '/offline-lab/simulator.cjs'
 ];
 const allowedArchiveRoots = new Set([
   '.editorconfig',
@@ -22,6 +25,7 @@ const allowedArchiveRoots = new Set([
   'docs',
   'eslint.config.mjs',
   'node_modules',
+  'offline-lab',
   'package.json',
   'scripts',
   'src',

@@ -41,12 +41,13 @@ test('release inspection refuses a folder missing required packaged files', () =
 
 test('archive-content gate detects omitted product-truth and release-evidence documents', () => {
   const present = ['\\docs\\SBOM.cdx.json', '\\docs\\threat-model.md', '\\docs\\CAPABILITIES.md', '\\docs\\capabilities.json'];
-  assert.deepEqual(missingArchiveFiles(present), ['/docs/release-evidence/README.md']);
-  assert.deepEqual(missingArchiveFiles([...present, '\\docs\\release-evidence\\README.md']), []);
+  assert.deepEqual(missingArchiveFiles(present), ['/docs/release-evidence/README.md', '/offline-lab/simulator.cjs']);
+  assert.deepEqual(missingArchiveFiles([...present, '\\docs\\release-evidence\\README.md', '\\offline-lab\\simulator.cjs']), []);
 });
 
 test('archive-content gate refuses unrelated root files and local user data', () => {
-  assert.deepEqual(unsafeArchiveFiles(['\\src', '\\docs', '\\package.json']), []);
+  // The offline lab is a shipped first-party tool, not an unexpected root.
+  assert.deepEqual(unsafeArchiveFiles(['\\src', '\\docs', '\\package.json', '\\offline-lab']), []);
   assert.deepEqual(unsafeArchiveFiles(['\\test-output.log', '\\docs\\recognition-lab\\capture.png']), [
     '/test-output.log',
     '/docs/recognition-lab/capture.png'
