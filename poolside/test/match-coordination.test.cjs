@@ -112,6 +112,28 @@ test('the ledger never aliases the caller, and a dashboard view cannot be edited
   assert.equal(state.matches[0].state, 'active');
 });
 
+test('a match cannot outlive the process that was holding it', () => {
+  // Reported as "I am already in a match" with nothing open. At startup no window from an earlier run
+  // exists, so every match the ledger still calls active is recorded as interrupted, which frees the
+  // accounts and says what happened rather than leaving a phantom in progress.
+  let state = coordination.start(coordination.emptyState(), pair('a', 'b'));
+  state = coordination.start(state, pair('c', 'd', { matchId: 'id-cd' }));
+  state = coordination.complete(state, { matchId: 'id-ab', winner: 'a', now: AT + 1000 });
+  const interrupted = coordination.interrupt(state, { now: AT + 2000 });
+  assert.equal(interrupted.matches.filter(match => match.state === 'active').length, 0);
+  const live = interrupted.matches.find(match => match.matchId === 'id-cd');
+  assert.equal(live.state, 'cancelled');
+  assert.equal(live.reason, 'Poolside was closed while m2 was in progress, so it was recorded as interrupted.');
+  assert.equal(live.endedAt, new Date(AT + 2000).toISOString());
+  assert.equal(live.history.at(-1).event, 'interrupted');
+  assert.equal(interrupted.matches.find(match => match.matchId === 'id-ab').state, 'completed', 'a settled match is untouched');
+  // Nothing in progress means nothing to do, and the same document comes back rather than a copy.
+  assert.equal(coordination.interrupt(interrupted, { now: AT + 3000 }), interrupted);
+  // And the accounts are free again.
+  const restarted = coordination.start(interrupted, pair('a', 'b', { matchId: 'id-ab-again' }));
+  assert.equal(restarted.matches.filter(match => match.state === 'active').length, 1);
+});
+
 test('the ledger stays bounded and keeps the newest records', () => {
   let state = coordination.emptyState();
   for (let index = 0; index < coordination.LEDGER_LIMIT + 5; index++) {

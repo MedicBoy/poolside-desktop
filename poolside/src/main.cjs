@@ -156,6 +156,8 @@ const matches = createMatchService({
   publish,
   log
 });
+// The snapshot reconciles the ledger through the coordinator before reading it (see state.cjs).
+matchState.service = matches;
 const { confirmChange, confirmDestructive, chooseDirectory } = createNativeDialogs({
   dialog,
   dashboard: () => workspace.dashboard,

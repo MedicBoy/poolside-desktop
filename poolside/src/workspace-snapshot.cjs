@@ -105,9 +105,14 @@ function webRTCPolicyOf(group) {
 }
 
 function matchesView() {
-  const view = dashboardView(matchState.current);
+  // Every snapshot is also a look at the world: the coordinator reconciles the ledger first — a window that
+  // has closed, an account that has gone, a plan that has run out of time — so what the dashboard shows is
+  // what is actually true, not what was true when the operator last pressed something. The refresh publishes
+  // only when something changed, so this cannot loop.
+  const service = matchState.service;
+  const view = service && typeof service.refresh === 'function' ? service.refresh() : dashboardView(matchState.current);
   const decorate = match => ({ ...match, participants: match.participants.map(matchParticipantView) });
-  const runs = runsView(matchState.current);
+  const runs = view.runs || runsView(matchState.current);
   const decorateRun = run => ({
     ...run,
     participants: run.participants.map(participant => ({

@@ -46,7 +46,12 @@ const sessionStores = new Map();
  * dashboard snapshot so a match appears and settles while the app is running. It is held here rather
  * than in the workspace document because a match belongs to two accounts and to a session in progress,
  * not to one account record — and because that document's schema is a release artifact of its own.
- * @type {{current: {format: string, sequence: number, matches: any[]}}}
+ *
+ * The composition root also attaches the coordinator itself as `service`, so the snapshot can ask it to
+ * reconcile the ledger before reading it: a window that has closed, an account that has gone or a plan that
+ * has run out of time are all things the ledger has to catch up with, and a snapshot is taken far more often
+ * than the operator presses anything. Absent until it is filled in, so a startup snapshot still works.
+ * @type {{current: {format: string, sequence: number, matches: any[]}, service?: any}}
  */
 const matchState = { current: emptyState() };
 

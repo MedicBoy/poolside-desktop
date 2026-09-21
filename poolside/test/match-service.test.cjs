@@ -30,7 +30,8 @@ function harness(overrides = {}) {
           },
     participant: overrides.participant || null,
     journal: {
-      read: () => coordination.emptyState(),
+      // A ledger left behind by a previous run, when a test wants one.
+      read: () => overrides.initial || coordination.emptyState(),
       write: state => {
         if (overrides.failWrite) throw new Error('disk is full');
         writes.push(state);
@@ -42,6 +43,7 @@ function harness(overrides = {}) {
     ready: overrides.ready || null,
     setTimer: (callback, delay) => ({ callback, delay, unref: () => {} }),
     clearTimer: () => {},
+    dropoutGraceMs: overrides.dropoutGraceMs,
     makeId: (() => {
       let index = 0;
       return () => `match-${++index}`;
@@ -99,6 +101,83 @@ test('reading the ledger cancels a match whose participant has left the workspac
   assert.match(logs.at(-1).message, /Bob is no longer an active account/);
 });
 
+test('a match left in progress by a previous run is interrupted when the ledger is opened', async () => {
+  // The operator's report: "I am already in a match" with nothing open. Nothing from a previous run of the
+  // program can still be in progress, because the windows went with the process that held them.
+  const initial = coordination.start(coordination.emptyState(), {
+    first: 'a',
+    second: 'b',
+    accounts: [
+      { id: 'a', name: 'Alice' },
+      { id: 'b', name: 'Bob' }
+    ],
+    now: Date.parse('2026-09-21T12:00:00.000Z'),
+    matchId: 'from-last-run'
+  });
+  const { service, logs, writes } = harness({ initial });
+  const view = service.view();
+  assert.equal(view.totals.active, 0, 'nothing is in progress at startup');
+  assert.equal(view.totals.cancelled, 1);
+  assert.equal(service.state().matches[0].reason, 'Poolside was closed while m1 was in progress, so it was recorded as interrupted.');
+  assert.match(logs[0].message, /recorded as interrupted/);
+  assert.equal(logs[0].kind, 'warning');
+  assert.ok(writes.length, 'the interruption is written, not only held in memory');
+  // And the accounts are free again: the whole point of settling it rather than leaving it.
+  const started = await service.start({ first: 'a', second: 'b', load: false });
+  assert.equal(started.totals.active, 1);
+  assert.equal(started.active[0].handle, 'm2');
+});
+
+test('a run can be paused and resumed, and a paused run starts nothing', async () => {
+  const { service, logs } = harness();
+  const started = await service.startRun({ first: 'a', second: 'b', plan: { table: 'Rome', matchLimit: 3 }, load: false });
+  const running = /** @type {any} */ (started.runs.active);
+  const runId = running.runId;
+  // The run takes an identity of its own, then the match takes the next one.
+  service.complete({ matchId: started.active[0].matchId, winner: 'a' });
+
+  const paused = service.pauseRun({ runId, reason: '' });
+  assert.equal(/** @type {any} */ (paused.runs.active).state, 'paused');
+  assert.equal(/** @type {any} */ (paused.runs.active).progress.completed, 1);
+  assert.match(logs.at(-1).message, /r1 paused: Paused by the operator\./);
+  await assert.rejects(
+    () => service.start({ first: 'a', second: 'b', load: false }),
+    /r1 is paused\. Resume it before starting the next match, or stop the run\./
+  );
+
+  const resumed = service.resumeRun({ runId });
+  assert.equal(/** @type {any} */ (resumed.runs.active).state, 'active');
+  assert.match(logs.at(-1).message, /r1 resumed\./);
+  const next = await service.start({ first: 'a', second: 'b', load: false });
+  assert.equal(next.totals.active, 1);
+  assert.equal(next.active[0].runId, runId, 'the next match still belongs to the run');
+});
+
+test('a match whose session has gone is cancelled as a dropout, but only after the grace period', async () => {
+  const open = { a: true, b: true };
+  const { service, logs, advanceClock, accounts, match } = harness({
+    participant: id => ({ open: open[id] === true, status: open[id] === true ? 'ready' : 'closed', footprint: null }),
+    dropoutGraceMs: 5000
+  });
+  assert.equal(accounts.length, 3);
+  await service.start({ first: 'a', second: 'b', load: false });
+  open.b = false;
+  service.refresh();
+  assert.equal(match().state, 'active', 'a session that has only just gone is not a dropout yet');
+  advanceClock(2000);
+  open.b = true;
+  service.refresh();
+  assert.equal(match().state, 'active', 'a window that comes back is a blink, not a dropout');
+  open.b = false;
+  service.refresh();
+  advanceClock(9000);
+  service.refresh();
+  assert.equal(match().state, 'cancelled');
+  assert.match(match().reason, /Bob's session has been closed for 9 seconds, so m1 was cancelled as a dropout\./);
+  assert.match(logs.map(entry => entry.message).join(' '), /cancelled as a dropout/);
+  assert.equal(service.view().totals.active, 0);
+});
+
 test('a refused operation says why and changes nothing', async () => {
   const { service, writes } = harness();
   await assert.rejects(() => service.start({ first: 'a', second: 'a', load: false }), /two different accounts/);
@@ -126,6 +205,8 @@ test('the dashboard surface exposes the match and run channels and passes input 
     'match:pairing',
     'match:start',
     'match:state',
+    'run:pause',
+    'run:resume',
     'run:start',
     'run:stop'
   ]);

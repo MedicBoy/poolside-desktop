@@ -50,6 +50,8 @@ test('a run records the plan, the pair and the roles it is between', () => {
     cancelled: 0,
     active: 0,
     consecutiveFailures: 0,
+    consecutiveUnconfirmed: 0,
+    pausedMs: 0,
     elapsedMs: 0,
     remainingMs: 60 * 60000
   });
@@ -154,6 +156,87 @@ test('stopping a run by hand is recorded with the reason, and a run cannot be en
   // The default wording is used when the operator stops it without saying why.
   const { state: again, runId: second } = opened();
   assert.equal(runs.view(runs.stop(again, { runId: second, now: AT }), AT).recent[0].reason, 'Stopped by the operator.');
+});
+
+test('a paused run starts nothing, keeps its pair, and does not spend its own clock', () => {
+  const { state: openedState, runId } = opened();
+  // Something is in progress when the pause arrives: a pause is not a cancel, so it is left alone.
+  const withMatch = began(openedState, runId, 'm1');
+  const held = runs.pause(withMatch, { runId, now: AT + 60000 });
+  assert.equal(active(held, AT + 60000).state, 'paused');
+  assert.equal(active(held, AT + 60000).paused, true);
+  assert.equal(held.matches[0].state, 'active', 'the match in progress was not interrupted');
+  assert.match(active(held, AT + 60000).reason, /Paused by the operator\. No further match will be started\./);
+  assert.throws(
+    () => runs.binding(held, { first: 'a', second: 'b' }),
+    /r1 is paused\. Resume it before starting the next match, or stop the run\./
+  );
+  assert.throws(
+    () => runs.start(held, { first: 'a', second: 'b', accounts: ACCOUNTS, plan: PLAN, now: AT + 70000, runId: 'run-2' }),
+    /r1 is paused\. Resume it or stop it before starting another run\./
+  );
+  assert.throws(() => runs.pause(held, { runId, now: AT + 70000 }), /r1 is already paused\./);
+
+  // Two minutes on hold, then resumed: the plan's clock does not count the pause.
+  const going = runs.resume(held, { runId, now: AT + 180000 });
+  assert.equal(active(going).state, 'active');
+  assert.equal(runs.binding(going, { first: 'b', second: 'a' }).runId, runId, "the pair is still the run's pair");
+  assert.equal(runs.countersFor(going, runId, AT + 240000).elapsedMs, 240000 - 120000);
+  assert.equal(runs.countersFor(going, runId, AT + 240000).pausedMs, 120000);
+  assert.throws(() => runs.resume(going, { runId, now: AT + 250000 }), /r1 is not paused\./);
+  assert.throws(() => runs.resume(runs.stop(going, { runId, now: AT + 250000 }), { runId, now: AT + 260000 }), /has already ended/);
+});
+
+test('a paused run is not ended by its own plan, but is ended when a participant leaves', () => {
+  const { state: openedState, runId } = opened({ ...PLAN, matchLimit: 10, stopAfterMinutes: 30 });
+  const held = runs.pause(openedState, { runId, now: AT + 1000 });
+  // Well past the time limit: a pause freezes what the plan measures, so nothing fires.
+  assert.deepEqual(runs.enforce(held, { accounts: ACCOUNTS, now: AT + 90 * 60000 }).ended, []);
+  // Someone archiving an account is different: there is nobody left to play with.
+  const left = runs.enforce(held, { accounts: ACCOUNTS.filter(account => account.id !== 'b'), now: AT + 90 * 60000 });
+  assert.equal(left.ended[0].outcome, 'participants');
+});
+
+test('stopping a paused run banks the pause, so the record says how long the plan really ran', () => {
+  const { state: openedState, runId } = opened();
+  const held = runs.pause(openedState, { runId, now: AT + 30000 });
+  const stopped = runs.stop(held, { runId, reason: 'the tables were busy', now: AT + 90000 });
+  const run = runs.view(stopped, AT + 90000).recent[0];
+  assert.equal(run.state, 'ended');
+  assert.equal(run.outcome, 'stopped');
+  assert.equal(run.progress.pausedMs, 60000);
+  assert.equal(run.progress.elapsedMs, 30000, 'the 60 seconds on hold are not part of the run');
+});
+
+test('a run of results without a confirmed pairing stops, so the operator is asked to look', () => {
+  const { state: openedState, runId } = opened({ ...PLAN, matchLimit: 10, stopAfterFailures: 0, stopAfterUnconfirmed: 2 });
+  let state = began(openedState, runId, 'm1');
+  state = coordination.complete(state, { matchId: 'm1', winner: 'a', now: AT + 1000 });
+  assert.deepEqual(runs.enforce(state, { accounts: ACCOUNTS, now: AT + 1000 }).ended, [], 'one unconfirmed result is a retry');
+  state = began(state, runId, 'm2', AT + 2000);
+  state = coordination.complete(state, { matchId: 'm2', winner: 'b', now: AT + 3000 });
+  const outcome = runs.enforce(state, { accounts: ACCOUNTS, now: AT + 3000 });
+  assert.equal(outcome.ended[0].outcome, 'unconfirmed');
+  assert.match(outcome.ended[0].reason, /2 matches in a row ended without a confirmed pairing, and the plan stops after 2\./);
+  assert.equal(outcome.ended[0].outcomeLabel, 'Stopped: results without a confirmed pairing');
+  // A confirmed pairing in the middle is what resets the streak, which is the difference between "this keeps
+  // failing" and "this worked once and then did not".
+  let streak = opened({ ...PLAN, matchLimit: 10, stopAfterFailures: 0, stopAfterUnconfirmed: 2 }).state;
+  const runId2 = runs.activeRun(streak).runId;
+  streak = began(streak, runId2, 'm3');
+  streak = coordination.recordPairing(streak, {
+    matchId: 'm3',
+    pairing: {
+      verdict: 'paired',
+      label: 'Same entry seen on both accounts',
+      reason: 'Both accounts paid.',
+      checkedAt: new Date(AT).toISOString()
+    },
+    now: AT + 1000
+  });
+  streak = coordination.complete(streak, { matchId: 'm3', winner: 'a', now: AT + 2000 });
+  assert.deepEqual(runs.enforce(streak, { accounts: ACCOUNTS, now: AT + 2000 }).ended, []);
+  assert.equal(runs.countersFor(streak, runId2, AT + 2000).consecutiveUnconfirmed, 0);
 });
 
 test('a stored run is re-validated, and one whose plan cannot be read is dropped', () => {

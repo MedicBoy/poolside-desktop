@@ -140,7 +140,11 @@ function start(state, { first, second, accounts, now = Date.now(), matchId, runI
   const participants = [participantFor(accounts, first), participantFor(accounts, second)];
   for (const participant of participants) {
     const busy = activeMatchFor(current, participant.id);
-    if (busy) throw new Error(`${participant.name} is already in an active match.`);
+    // The refusal names the match, because the operator's next move is to find that card and settle it.
+    if (busy)
+      throw new Error(
+        `${participant.name} is already in an active match (${busy.handle}). Cancel ${busy.handle} on the match card to start another.`
+      );
   }
   const sequence = current.sequence + 1;
   const record = {
@@ -207,6 +211,27 @@ function reconcile(state, accounts, now = Date.now()) {
   return changed ? { ...state, matches } : state;
 }
 
+/**
+ * A match cannot outlive the process that was holding it.
+ *
+ * The windows belong to the process, so when the application starts there is no session behind anything the
+ * ledger still calls "in progress" — and a match left active blocks both of its accounts from ever being
+ * paired again, with nothing on screen to explain why. Rather than leaving that to be discovered, every
+ * match still in progress at startup is recorded as interrupted, which is what happened: the app was closed
+ * while the match was being played.
+ * @param {any} state @param {{now?: number}} [options]
+ */
+function interrupt(state, { now = Date.now() } = {}) {
+  const running = state.matches.some(match => match.state === 'active');
+  if (!running) return state;
+  const matches = state.matches.map(match => {
+    if (match.state !== 'active') return match;
+    const detail = `Poolside was closed while ${match.handle} was in progress, so it was recorded as interrupted.`;
+    return { ...moved(match, 'cancelled', 'interrupted', detail, now), reason: detail, endedAt: stamp(now) };
+  });
+  return { ...state, matches };
+}
+
 function matchView(match) {
   return {
     handle: match.handle,
@@ -251,6 +276,7 @@ module.exports = {
   complete,
   cancel,
   reconcile,
+  interrupt,
   requestReadiness,
   settleReadiness,
   recordPairing,

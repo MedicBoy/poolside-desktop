@@ -11,6 +11,9 @@ const runPlan = require('./run-plan.cjs');
 const { createBarrier } = require('./match-barrier.cjs');
 const { createRunKeeper } = require('./match-runs.cjs');
 const { createPairingChecker } = require('./match-pairing.cjs');
+const { createDropoutWatcher } = require('./match-dropout.cjs');
+const { createMatchLedger } = require('./match-ledger.cjs');
+const { createMatchLifecycle } = require('./match-lifecycle.cjs');
 const { createParticipantLoader } = require('./match-participants.cjs');
 const { text, ID_LIMIT } = require('./match-record.cjs');
 
@@ -25,7 +28,7 @@ function participantReady({ open, status }) {
 }
 
 /**
- * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, observe?: ((id: string) => any)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, runCheckMs?: number, pairingWindowMs?: number, pairingCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
+ * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, observe?: ((id: string) => any)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, runCheckMs?: number, pairingWindowMs?: number, pairingCheckMs?: number, dropoutGraceMs?: number, dropoutCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
  */
 function createMatchService({
   accounts,
@@ -46,6 +49,8 @@ function createMatchService({
   runCheckMs = 30000,
   pairingWindowMs,
   pairingCheckMs = 5000,
+  dropoutGraceMs = 15000,
+  dropoutCheckMs = 5000,
   setTimer = (callback, delay) => setInterval(callback, delay),
   clearTimer = timer => clearInterval(timer)
 }) {
@@ -54,29 +59,10 @@ function createMatchService({
     return Array.isArray(accounts) ? accounts : [];
   }
 
-  function persist(state) {
-    if (!journal) return state;
-    try {
-      return journal.write(state);
-    } catch (error) {
-      log(`The match ledger could not be saved: ${error instanceof Error ? error.message : String(error)}`, 'warning');
-      return state;
-    }
-  }
-
-  function commit(state, message) {
-    store.current = persist(state);
-    if (message) log(message);
-    publish();
-    return serviceView();
-  }
-
-  /** What the dashboard and the IPC replies see: the matches, plus the run in progress and recent runs. */
-  function serviceView() {
-    return { ...coordination.dashboardView(store.current), runs: runs.view() };
-  }
-
-  store.current = journal ? journal.read() : coordination.emptyState();
+  // The ledger of record. Everything that changes it goes through here, so the file and the dashboard cannot
+  // drift apart.
+  const ledger = createMatchLedger({ store, journal, log, publish, now });
+  const { persist, commit } = ledger;
 
   // The barrier: when this match may be released, and when release must be withdrawn. It owns the check
   // loop and the monotonic marks; the rules live in `match-barrier.cjs` and `match-preflight.cjs`.
@@ -128,6 +114,23 @@ function createMatchService({
     clearTimer
   });
 
+  // A participant whose session is gone. Cancelling goes through the coordinator's own cancel, so a dropout
+  // is recorded, counted against the run's plan and published like any other match with no result.
+  const dropouts = createDropoutWatcher({
+    store,
+    participant,
+    cancel: (matchId, reason) => lifecycle.cancel({ matchId, reason }),
+    log,
+    now,
+    graceMs: dropoutGraceMs,
+    checkMs: dropoutCheckMs,
+    setTimer,
+    clearTimer
+  });
+
+  // Settling a match: record the result, then let the run's plan judge it, in one write.
+  const lifecycle = createMatchLifecycle({ store, commit, runs, now });
+
   /**
    * Cancel anything whose participant has left the workspace. Called before every read, so the ledger
    * cannot show a match in progress between an account that is no longer there.
@@ -147,7 +150,8 @@ function createMatchService({
     // cannot show a run that its own plan has already ended.
     runs.enforce();
     pairing.checkReleased();
-    return serviceView();
+    dropouts.watch();
+    return ledger.view();
   }
 
   /** @param {{matchId: string}} input */
@@ -165,7 +169,7 @@ function createMatchService({
     await participants.proveExits(matchId);
     barrier.advance();
     pairing.checkReleased();
-    return { ...serviceView(), load: results };
+    return { ...ledger.view(), load: results };
   }
 
   /**
@@ -201,7 +205,7 @@ function createMatchService({
     await participants.proveExits(opened.matchId);
     barrier.advance();
     pairing.checkReleased();
-    return { ...serviceView(), load: results };
+    return { ...ledger.view(), load: results };
   }
 
   /**
@@ -211,7 +215,7 @@ function createMatchService({
    */
   function checkPairing({ matchId }) {
     const verdict = pairing.check(text(matchId, ID_LIMIT), { force: true });
-    return { ...serviceView(), pairing: verdict };
+    return { ...ledger.view(), pairing: verdict };
   }
 
   /**
@@ -243,26 +247,18 @@ function createMatchService({
     return view;
   }
 
-  function complete({ matchId, winner }) {
-    const next = coordination.complete(store.current, { matchId, winner, now: now() });
-    const settled = next.matches.find(match => match.matchId === matchId);
-    return settle(next, settled ? `${settled.handle}: ${settled.winnerName} recorded as the winner.` : null);
+  /** Hold a run where it is: the match being played is left alone and no further match is started. */
+  function pauseRun({ runId, reason }) {
+    const held = runs.pause({ runId: text(runId, ID_LIMIT), reason });
+    const view = commit(held.state, `${held.run.handle} paused: ${held.run.reason}`);
+    runs.syncPoll();
+    return view;
   }
 
-  function cancel({ matchId, reason }) {
-    const next = coordination.cancel(store.current, { matchId, reason, now: now() });
-    const settled = next.matches.find(match => match.matchId === matchId);
-    return settle(next, settled ? `${settled.handle}: ${settled.reason}` : null);
-  }
-
-  /**
-   * Record a settled match and judge the run plans against it in one write: the result and the run it ends
-   * reach the file and the dashboard together, so there is no moment where a run is over and does not say so.
-   */
-  function settle(next, message) {
-    const outcome = runs.judge(next);
-    const view = commit(outcome.state, message);
-    runs.announce(outcome.ended);
+  /** Let a paused run continue, with the time it spent paused taken out of the plan's clock. */
+  function resumeRun({ runId }) {
+    const going = runs.resume({ runId: text(runId, ID_LIMIT) });
+    const view = commit(going.state, `${going.run.handle} resumed.`);
     runs.syncPoll();
     return view;
   }
@@ -272,15 +268,18 @@ function createMatchService({
     barrier.dispose();
     runs.dispose();
     pairing.dispose();
+    dropouts.dispose();
   }
 
   return {
     start,
     startRun,
     stopRun,
+    pauseRun,
+    resumeRun,
     checkPairing,
-    complete,
-    cancel,
+    complete: lifecycle.complete,
+    cancel: lifecycle.cancel,
     load,
     refresh,
     advance: barrier.advance,

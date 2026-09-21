@@ -241,7 +241,8 @@ test('the run plan is a labelled form over the account selects, and a run can be
   assert.match(renderer, /poolside\.startRun\(\{/);
   assert.match(renderer, /plan: \{/);
   assert.match(renderer, /data-action="run-stop"/);
-  assert.match(renderer, /poolside\.stopRun\(\{ runId: button\.dataset\.run \}\)/);
+  // Stop, pause and resume all address the same run by its id, chosen by the action on the button.
+  assert.match(renderer, /poolside\.stopRun\(\{ runId \}\)/);
   assert.match(css, /\.run-panel\s*\{/);
   assert.match(css, /\.run-bounds\s*\{/);
 });
@@ -262,4 +263,23 @@ test('the match card reports what the pairing evidence amounted to and can be as
   for (const verdict of ['paired', 'agreed', 'incomplete', 'mismatch']) {
     assert.match(css, new RegExp(`\\.match-pairing\\.${verdict}`));
   }
+});
+
+test('a run can be paused and resumed from its card, and a match with nothing open says so', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  // Pause and stop are different promises, and the panel says which is which.
+  assert.match(html, /<em>Pause<\/em> holds the run where it is/);
+  assert.match(html, /both sessions stay open and independent/);
+  assert.match(renderer, /data-action="run-pause"/);
+  assert.match(renderer, /data-action="run-resume"/);
+  assert.match(renderer, /poolside\.pauseRun\(\{ runId \}\)/);
+  assert.match(renderer, /poolside\.resumeRun\(\{ runId \}\)/);
+  assert.match(renderer, /min paused, not counted/);
+  // The state the operator reported as a contradiction: a match in progress with nothing open behind it.
+  assert.match(renderer, /const stuck = matches\.active\.find\(/);
+  assert.match(renderer, /has nothing open behind it — cancel it below to free/);
+  assert.match(renderer, /No session is open for this match, so it is not really in progress\./);
+  assert.match(css, /\.match-empty\s*\{/);
 });

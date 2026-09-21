@@ -771,6 +771,17 @@ function matchCard(match, actionable) {
   const [first, second] = match.participants || [];
   const needsLoad =
     actionable && (match.readiness?.verdict === 'blocked' || (match.participants || []).some(participant => !participant.open));
+  // A match the ledger calls in progress while no session is behind it is the one state that reads as a
+  // contradiction to the operator — "I am already in a match" with nothing open. Say what is true and what
+  // to do about it rather than leaving them to work it out from a counter.
+  const empty = actionable && (match.participants || []).length > 0 && (match.participants || []).every(participant => !participant.open);
+  const note = empty
+    ? `<small class="match-meta match-empty">No session is open for this match, so it is not really in progress. Cancel it to free ${(
+        match.participants || []
+      )
+        .map(participant => participant.name)
+        .join(' and ')}, or load both profiles to carry on with it.</small>`
+    : '';
   const outcome =
     match.state === 'completed'
       ? `${match.winnerName || 'A participant'} recorded as the winner`
@@ -796,6 +807,7 @@ function matchCard(match, actionable) {
         <span class="match-handle">${escapeHtml(match.handle)}</span>
       </div>
       <small class="match-meta">${escapeHtml(outcome)} · ${escapeHtml(MATCH_LABELS[match.state] || match.state)} · ${escapeHtml(matchWhen(match))}</small>
+      ${note}
       ${matchReadiness(match)}
       ${matchPairing(match, actionable)}
       ${matchSessions(match)}
@@ -821,12 +833,16 @@ function paintRunTable() {
 }
 function runProgress(run) {
   const progress = run.progress || {};
-  const elapsed = `${Math.round((progress.elapsedMs || 0) / 60000)} min`;
-  return [
+  const minutesOf = ms => Math.round((ms || 0) / 60000);
+  const elapsed = `${minutesOf(progress.elapsedMs)} min`;
+  const parts = [
     `${progress.completed || 0} of ${run.plan.matchLimit} with a result`,
     `${progress.cancelled || 0} with no result${progress.consecutiveFailures ? ` (${progress.consecutiveFailures} in a row)` : ''}`,
     run.plan.stopAfterMinutes > 0 ? `${elapsed} of ${run.plan.stopAfterMinutes} min` : `${elapsed} so far`
-  ].join(' · ');
+  ];
+  if (progress.consecutiveUnconfirmed) parts.push(`${progress.consecutiveUnconfirmed} without a confirmed pairing`);
+  if (progress.pausedMs) parts.push(`${minutesOf(progress.pausedMs)} min paused, not counted`);
+  return parts.join(' · ');
 }
 // What the session itself is showing, as an observation rather than a claim: the target table being visible
 // is reported, never required, and "no reading" stays different from "the table is not on screen".
@@ -853,7 +869,14 @@ function runCard(run, actionable) {
     : '';
   const actions =
     actionable && active
-      ? `<div class="match-actions"><button class="text-button" data-action="run-stop" data-run="${escapeHtml(run.runId)}">Stop run</button></div>`
+      ? `<div class="match-actions">
+            ${
+              run.paused
+                ? `<button class="secondary" data-action="run-resume" data-run="${escapeHtml(run.runId)}">Resume run</button>`
+                : `<button class="secondary" data-action="run-pause" data-run="${escapeHtml(run.runId)}">Pause run</button>`
+            }
+            <button class="text-button" data-action="run-stop" data-run="${escapeHtml(run.runId)}">Stop run</button>
+          </div>`
       : '';
   return `<article class="match-card run-card ${escapeHtml(run.state)}">
       <div class="match-card-head">
@@ -879,12 +902,21 @@ function renderMatches() {
   const first = $('#match-first').value;
   const second = $('#match-second').value;
   $('#match-start').disabled = !first || !second || first === second;
+  // A match the ledger calls in progress that no session is behind: say so here, where the operator is
+  // looking when the start is refused, rather than only on the card further down the panel.
+  const stuck = matches.active.find(
+    match => (match.participants || []).length && match.participants.every(participant => !participant.open)
+  );
   $('#match-hint').textContent =
     state.accounts.length < 2
       ? 'Match coordination needs two accounts in the workspace.'
       : first && first === second
         ? 'Choose two different accounts.'
-        : `${totals.recorded || 0} local record${totals.recorded === 1 ? '' : 's'}: ${totals.completed || 0} completed, ${totals.cancelled || 0} cancelled, ${totals.active || 0} in progress.`;
+        : `${totals.recorded || 0} local record${totals.recorded === 1 ? '' : 's'}: ${totals.completed || 0} completed, ${totals.cancelled || 0} cancelled, ${totals.active || 0} in progress.${
+            stuck
+              ? ` ${stuck.handle} has nothing open behind it — cancel it below to free ${stuck.participants.map(participant => participant.name).join(' and ')}.`
+              : ''
+          }`;
   $('#match-active').innerHTML = matches.active.length
     ? matches.active.map(match => matchCard(match, true)).join('')
     : '<p class="muted">No match in progress.</p>';
@@ -893,7 +925,9 @@ function renderMatches() {
     : '<p class="muted">No results recorded yet.</p>';
   $('#run-start').disabled = !first || !second || first === second || Boolean(runs.active);
   $('#run-hint').textContent = runs.active
-    ? `${runs.active.handle} is in progress: ${runs.active.describe}. Start match adds the next match to it.`
+    ? runs.active.paused
+      ? `${runs.active.handle} is paused: no further match will be started, and the time it spends paused does not count against the plan. The match in progress is not affected. Resume it when you are ready.`
+      : `${runs.active.handle} is in progress: ${runs.active.describe}. Start match adds the next match to it.`
     : !first || !second || first === second
       ? 'Choose two different accounts above, then start a run with them.'
       : `A run would be between ${state.accounts.find(a => a.id === first).name} and ${state.accounts.find(a => a.id === second).name}, using the plan above.`;
@@ -1030,11 +1064,27 @@ document.addEventListener('click', async event => {
     });
     return;
   }
-  if (button.dataset.action === 'run-stop') {
-    // Stopping a run is the one action that ends a plan early, so it says what happened: the run is over,
-    // and a match it was still holding has been cancelled with the reason.
-    const result = await call(() => poolside.stopRun({ runId: button.dataset.run }));
-    if (result.ok) toast('Run stopped. A match it was still holding has been cancelled.');
+  if (['run-stop', 'run-pause', 'run-resume'].includes(button.dataset.action)) {
+    // Three different things, said as three different things: pausing keeps the run and the match being
+    // played and starts nothing further; resuming lets it continue; stopping ends the plan and cancels a
+    // match it was still holding.
+    const runId = button.dataset.run;
+    const action = button.dataset.action;
+    const result = await call(() =>
+      action === 'run-pause'
+        ? poolside.pauseRun({ runId })
+        : action === 'run-resume'
+          ? poolside.resumeRun({ runId })
+          : poolside.stopRun({ runId })
+    );
+    if (!result.ok) return;
+    toast(
+      action === 'run-pause'
+        ? 'Run paused. The match in progress is not affected; nothing new will be started until you resume.'
+        : action === 'run-resume'
+          ? 'Run resumed. The time it spent paused does not count against the plan.'
+          : 'Run stopped. A match it was still holding has been cancelled.'
+    );
     return;
   }
   if (button.dataset.action === 'match-pairing') {

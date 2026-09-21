@@ -2075,6 +2075,10 @@ dialog p {
 .match-pairing.mismatch {
   color: var(--pink);
 }
+/* A match the ledger calls in progress with no session behind it: the operator's next move is to clear it. */
+.match-empty {
+  color: var(--amber);
+}
 .match-subheading {
   margin: 20px 0 0;
 }

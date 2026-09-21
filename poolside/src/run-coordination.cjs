@@ -10,10 +10,8 @@
 
 const coordination = require('./match-coordination.cjs');
 const runPlan = require('./run-plan.cjs');
+const runViewModule = require('./run-view.cjs');
 const { RUN_LEDGER_LIMIT, RUN_HISTORY_LIMIT, ID_LIMIT, NAME_LIMIT, TEXT_LIMIT, text, stamp } = require('./match-record.cjs');
-
-/** How many finished runs the dashboard shows. */
-const VIEW_LIMIT = 5;
 
 function step(event, detail, at) {
   return { at: stamp(at), event, detail: text(detail, TEXT_LIMIT) };
@@ -24,16 +22,31 @@ function find(state, handleOrId) {
   return (state.runs || []).find(run => run.runId === wanted || run.handle === wanted) || null;
 }
 
-/** The run in progress, or null. One at a time: a second plan would make "the run" ambiguous everywhere. */
+/**
+ * The run that has not ended — running or paused — or null. One at a time: a second plan would make "the
+ * run" ambiguous everywhere. A paused run still owns its pair, which is why this is not filtered to `active`.
+ */
 function activeRun(state) {
-  return (state.runs || []).find(run => run.state === 'active') || null;
+  return (state.runs || []).find(run => run.state !== 'ended') || null;
 }
 
-/** @param {{runs: any[], matches: any[]}} state @param {string} runId @param {number} now */
+/** @param {any} run */
+function paused(run) {
+  return Boolean(run && run.state === 'paused');
+}
+
+/** @param {any} state @param {string} runId @param {number} now */
 function countersFor(state, runId, now) {
   const run = find(state, runId);
   if (!run) throw new Error('That run is not in the local ledger.');
-  return runPlan.counters({ matches: state.matches, runId: run.runId, startedAt: Date.parse(run.startedAt), now });
+  return runPlan.counters({
+    matches: state.matches,
+    runId: run.runId,
+    startedAt: Date.parse(run.startedAt),
+    now,
+    pausedMs: run.pausedMs,
+    pausedAt: run.pausedAt ? Date.parse(run.pausedAt) : null
+  });
 }
 
 /** The run a match belongs to, or null. */
@@ -52,6 +65,7 @@ function runOf(state, matchId) {
 function binding(state, { first, second }) {
   const run = activeRun(state);
   if (!run) return { runId: null, run: null };
+  if (paused(run)) throw new Error(`${run.handle} is paused. Resume it before starting the next match, or stop the run.`);
   const ids = run.participants.map(entry => entry.id);
   if (!ids.includes(first) || !ids.includes(second))
     throw new Error(
@@ -77,6 +91,7 @@ function participant(account) {
  */
 function start(state, { first, second, accounts, plan: submitted, now = Date.now(), runId }) {
   const running = activeRun(state);
+  if (paused(running)) throw new Error(`${running.handle} is paused. Resume it or stop it before starting another run.`);
   if (running)
     throw new Error(
       `${running.handle} is already in progress (${running.participants.map(entry => entry.name).join(' vs ')}). Stop it before starting another.`
@@ -102,6 +117,8 @@ function start(state, { first, second, accounts, plan: submitted, now = Date.now
     reason: '',
     startedAt: stamp(now),
     endedAt: null,
+    pausedAt: null,
+    pausedMs: 0,
     history: []
   };
   if (!record.runId) throw new Error('A run identity could not be created.');
@@ -121,13 +138,17 @@ function start(state, { first, second, accounts, plan: submitted, now = Date.now
 function end(state, { runId, outcome, reason, now = Date.now() }) {
   const run = find(state, runId);
   if (!run) throw new Error('That run is not in the local ledger.');
-  if (run.state !== 'active') throw new Error('That run has already ended.');
+  if (run.state === 'ended') throw new Error('That run has already ended.');
+  // Stopping a paused run banks the pause first, so the record of how long the plan actually ran survives.
+  const pausedMs = Math.max(0, run.pausedMs || 0) + (run.pausedAt ? Math.max(0, now - Date.parse(run.pausedAt)) : 0);
   const ended = {
     ...run,
     state: 'ended',
     outcome,
     reason: text(reason, TEXT_LIMIT) || (outcome === 'limit' ? 'The plan was completed.' : 'The run was stopped.'),
     endedAt: stamp(now),
+    pausedAt: null,
+    pausedMs,
     history: [...run.history, step('ended', reason, now)].slice(-RUN_HISTORY_LIMIT)
   };
   let next = { ...state, runs: state.runs.map(candidate => (candidate.runId === run.runId ? ended : candidate)) };
@@ -141,19 +162,62 @@ function end(state, { runId, outcome, reason, now = Date.now() }) {
   return next;
 }
 
+/**
+ * Pause the run. Nothing in progress is interrupted: the match being played is settled by the operator as
+ * usual, and the pause means the run will not start another one. That is the safe boundary — a pause is not
+ * a cancel, and cancelling a match the operator is in the middle of is what `stop` is for.
+ * @param {any} state @param {{runId: string, reason?: string, now?: number}} input
+ */
+function pause(state, { runId, reason, now = Date.now() }) {
+  const run = find(state, runId);
+  if (!run) throw new Error('That run is not in the local ledger.');
+  if (run.state === 'ended') throw new Error(`That run has already ended (${run.handle}: ${run.reason}).`);
+  if (run.state === 'paused') throw new Error(`${run.handle} is already paused.`);
+  const detail = text(reason, TEXT_LIMIT) || 'Paused by the operator. No further match will be started.';
+  const held = {
+    ...run,
+    state: 'paused',
+    pausedAt: stamp(now),
+    reason: detail,
+    history: [...run.history, step('paused', detail, now)].slice(-RUN_HISTORY_LIMIT)
+  };
+  return { ...state, runs: state.runs.map(candidate => (candidate.runId === run.runId ? held : candidate)) };
+}
+
+/** Resume a paused run, banking the time it was paused so the plan's clock does not count it. */
+function resume(state, { runId, now = Date.now() }) {
+  const run = find(state, runId);
+  if (!run) throw new Error('That run is not in the local ledger.');
+  if (run.state === 'ended') throw new Error(`That run has already ended (${run.handle}: ${run.reason}).`);
+  if (run.state !== 'paused') throw new Error(`${run.handle} is not paused.`);
+  const pausedMs = Math.max(0, run.pausedMs || 0) + Math.max(0, now - Date.parse(run.pausedAt));
+  const detail = `Resumed after ${Math.max(0, Math.round(pausedMs / 1000))} seconds paused.`;
+  const going = {
+    ...run,
+    state: 'active',
+    pausedAt: null,
+    pausedMs,
+    reason: '',
+    history: [...run.history, step('resumed', detail, now)].slice(-RUN_HISTORY_LIMIT)
+  };
+  return { ...state, runs: state.runs.map(candidate => (candidate.runId === run.runId ? going : candidate)) };
+}
+
 /** Stop the run by hand. @param {any} state @param {{runId: string, reason?: string, now?: number}} input */
 function stop(state, { runId, reason, now = Date.now() }) {
   const run = find(state, runId);
   if (!run) throw new Error('That run is not in the local ledger.');
-  if (run.state !== 'active') throw new Error(`That run has already ended (${run.handle}: ${run.reason}).`);
+  if (run.state === 'ended') throw new Error(`That run has already ended (${run.handle}: ${run.reason}).`);
   return end(state, { runId: run.runId, outcome: 'stopped', reason: text(reason, TEXT_LIMIT) || 'Stopped by the operator.', now });
 }
 
 /**
- * Apply every active run's plan to what has happened, and end the ones that are over.
+ * Apply every run's plan to what has happened, and end the ones that are over.
  *
  * Called after anything that could change the answer — a match settling, a read of the dashboard, or the
  * run's own check — so the stop is enforced by the program rather than noticed by the operator afterwards.
+ * A paused run is exempt from its plan, because a pause freezes what the plan measures; it is not exempt
+ * from a participant leaving the workspace, which makes the run impossible whatever the operator wanted.
  * @param {any} state
  * @param {{accounts?: any[]|null, now?: number}} input
  * @returns {{state: any, ended: any[]}}
@@ -162,13 +226,21 @@ function enforce(state, { accounts = null, now = Date.now() } = {}) {
   let next = state;
   /** @type {any[]} */
   const ended = [];
-  for (const run of (state.runs || []).filter(candidate => candidate.state === 'active')) {
+  for (const run of (state.runs || []).filter(candidate => candidate.state !== 'ended')) {
     const available = Array.isArray(accounts)
       ? accounts.filter(account => account && account.archived !== true).map(account => account.id)
       : null;
     const missing = available ? run.participants.find(entry => !available.includes(entry.id)) : null;
-    const counts = runPlan.counters({ matches: state.matches, runId: run.runId, startedAt: Date.parse(run.startedAt), now });
-    const judgement = runPlan.verdict(run.plan, counts);
+    const counts = runPlan.counters({
+      matches: state.matches,
+      runId: run.runId,
+      startedAt: Date.parse(run.startedAt),
+      now,
+      pausedMs: run.pausedMs,
+      pausedAt: run.pausedAt ? Date.parse(run.pausedAt) : null
+    });
+    /** @type {any} */
+    const judgement = run.state === 'paused' ? { continue: true } : runPlan.verdict(run.plan, counts);
     // A participant leaving the workspace stops the run whatever the plan says: there is nobody left to
     // play the next match with, and the counters cannot continue.
     const stop = missing
@@ -178,64 +250,34 @@ function enforce(state, { accounts = null, now = Date.now() } = {}) {
         : null;
     if (stop) {
       next = end(next, { runId: run.runId, outcome: stop.outcome, reason: stop.reason, now });
-      ended.push(
-        runView(
-          next.runs.find(candidate => candidate.runId === run.runId),
-          runPlan.counters({ matches: next.matches, runId: run.runId, startedAt: Date.parse(run.startedAt), now })
-        )
-      );
+      const endedRun = next.runs.find(candidate => candidate.runId === run.runId);
+      ended.push(runViewModule.runView(endedRun, runViewModule.counters(next, endedRun, now)));
     }
   }
   return { state: next, ended };
-}
-
-function runView(run, counts) {
-  return {
-    handle: run.handle,
-    runId: run.runId,
-    participants: run.participants.map(entry => ({ ...entry })),
-    plan: { ...run.plan },
-    state: run.state,
-    outcome: run.outcome,
-    outcomeLabel: run.outcome ? runPlan.OUTCOMES[run.outcome] || run.outcome : null,
-    reason: run.reason,
-    startedAt: run.startedAt,
-    endedAt: run.endedAt,
-    progress: {
-      played: counts.played,
-      completed: counts.completed,
-      cancelled: counts.cancelled,
-      active: counts.active,
-      consecutiveFailures: counts.consecutiveFailures,
-      elapsedMs: counts.elapsedMs,
-      remainingMs: run.plan.stopAfterMinutes > 0 ? Math.max(0, run.plan.stopAfterMinutes * 60000 - counts.elapsedMs) : null
-    },
-    describe: runPlan.describe(run.plan),
-    bounds: runPlan.bounds(run.plan),
-    history: run.history.slice(-4).map(entry => ({ ...entry }))
-  };
-}
-
-/** The dashboard-safe projection: the run in progress, and the most recent ones that ended. */
-function view(state, now = Date.now()) {
-  const counts = run => runPlan.counters({ matches: state.matches, runId: run.runId, startedAt: Date.parse(run.startedAt), now });
-  const runs = state.runs || [];
-  const active = runs.find(run => run.state === 'active');
-  return {
-    active: active ? runView(active, counts(active)) : null,
-    recent: runs
-      .filter(run => run.state !== 'active')
-      .slice(0, VIEW_LIMIT)
-      .map(run => runView(run, counts(run)))
-  };
 }
 
 /** The run, or a refusal that says what happened to it. @param {any} state @param {string} runId */
 function requireActive(state, runId) {
   const run = find(state, runId);
   if (!run) throw new Error('That run is not in the local ledger.');
-  if (run.state !== 'active') throw new Error(`${run.handle} has ended: ${run.reason}`);
+  if (run.state === 'ended') throw new Error(`${run.handle} has ended: ${run.reason}`);
   return run;
 }
 
-module.exports = { start, stop, end, enforce, view, binding, activeRun, runOf, find, countersFor, requireActive, VIEW_LIMIT };
+module.exports = {
+  start,
+  stop,
+  pause,
+  resume,
+  end,
+  enforce,
+  view: runViewModule.view,
+  binding,
+  activeRun,
+  runOf,
+  find,
+  countersFor,
+  requireActive,
+  VIEW_LIMIT: runViewModule.VIEW_LIMIT
+};

@@ -211,6 +211,48 @@ async function runMatchChecks(ctx, assert) {
   );
   for (const partitionSession of matchPartitions) partitionSession.protocol.unhandle('https');
   for (const id of matchAccountIds) assert.equal(sessions.has(id), false, 'each window this check opened was closed again');
+
+  // --- A match with no session behind it is cleared, not left blocking ------------------------------
+  // The operator's report, in their words: "I just tried to start a match and it says I am already in a
+  // match. I have nothing open at the moment." Both windows are closed at this point, so a match started now
+  // has no session behind it — the exact state that must not survive. The coordinator watches for it and
+  // cancels it as a dropout once the grace period has passed, which is what frees the accounts again.
+  const dropout = await dashboard.webContents.executeJavaScript(`(async () => {
+    const state = await poolside.get();
+    const ids = state.value.accounts.map(account => account.id);
+    const started = await poolside.startMatch({ first: ids[0], second: ids[1], load: false });
+    if (!started.ok) return { error: started.error };
+    const matchId = started.value.active[0].matchId;
+    // Live session state comes from the snapshot, not from the reply: the reply is the ledger, and whether a
+    // window is open is process state that the dashboard view resolves.
+    const first = (await poolside.get()).value.matches.active.find(match => match.matchId === matchId);
+    const open = first.participants.map(entry => entry.open);
+    const until = Date.now() + 45000;
+    let settled = null;
+    while (Date.now() < until) {
+      settled = (await poolside.get()).value.matches.recent.find(match => match.matchId === matchId) || null;
+      if (settled) break;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    const after = await poolside.get();
+    return {
+      open,
+      cancelled: Boolean(settled),
+      reason: settled ? settled.reason : '',
+      active: after.value.matches.totals.active,
+      freed: (await poolside.startMatch({ first: ids[0], second: ids[1], load: false })).ok
+    };
+  })()`);
+  assert.deepEqual(dropout.open, [false, false], 'neither participant has a window behind it, as the operator reported');
+  assert.equal(dropout.cancelled, true, `the match with no session was not cleared: ${dropout.reason}`);
+  assert.match(dropout.reason, /session has been closed for \d+ seconds, so m\d+ was cancelled as a dropout\./);
+  assert.equal(dropout.active, 0, 'nothing is left in progress once the match with no session behind it is cleared');
+  assert.equal(dropout.freed, true, 'and the same two accounts can be paired again straight away');
+  // Leave the ledger as the suite found it: cancel the match this check started.
+  await dashboard.webContents.executeJavaScript(`(async () => {
+    const state = await poolside.get();
+    for (const match of state.value.matches.active) await poolside.cancelMatch({ matchId: match.matchId });
+  })()`);
 }
 
 module.exports = { runMatchChecks };

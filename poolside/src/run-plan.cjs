@@ -15,10 +15,11 @@ const { TABLES } = require('./table-list.cjs');
 const BOUNDS = {
   matchLimit: { min: 1, max: 50 },
   stopAfterFailures: { min: 0, max: 25 },
+  stopAfterUnconfirmed: { min: 0, max: 25 },
   stopAfterMinutes: { min: 0, max: 600 }
 };
 
-const DEFAULTS = { matchLimit: 5, stopAfterFailures: 3, stopAfterMinutes: 90 };
+const DEFAULTS = { matchLimit: 5, stopAfterFailures: 3, stopAfterUnconfirmed: 3, stopAfterMinutes: 90 };
 
 /**
  * One whole number, inside its bound, or the fallback when the caller left it out.
@@ -36,7 +37,7 @@ function whole(value, bound, fallback, label) {
  * A submitted plan, typed and bounded. The target table is checked against the same list the rest of the
  * application uses, so a plan cannot aim at a table the program could not name.
  * @param {any} input
- * @returns {{table: string, matchLimit: number, stopAfterFailures: number, stopAfterMinutes: number}}
+ * @returns {{table: string, matchLimit: number, stopAfterFailures: number, stopAfterUnconfirmed: number, stopAfterMinutes: number}}
  */
 function plan(input) {
   const source = input && typeof input === 'object' ? input : {};
@@ -51,6 +52,12 @@ function plan(input) {
       DEFAULTS.stopAfterFailures,
       'The number of matches in a row with no result'
     ),
+    stopAfterUnconfirmed: whole(
+      source.stopAfterUnconfirmed,
+      BOUNDS.stopAfterUnconfirmed,
+      DEFAULTS.stopAfterUnconfirmed,
+      'The number of matches in a row without a confirmed pairing'
+    ),
     stopAfterMinutes: whole(source.stopAfterMinutes, BOUNDS.stopAfterMinutes, DEFAULTS.stopAfterMinutes, 'The time limit in minutes')
   };
 }
@@ -62,24 +69,36 @@ function plan(input) {
  * `consecutiveFailures` is the run of most recent matches that ended with no recorded result. The ledger is
  * newest first, so the count walks from the front and stops at the first match that a result was recorded
  * for. A match still in progress does not break the run: it has not failed yet.
- * @param {{matches: any[], runId: string, startedAt: number, now: number}} input
+ * @param {{matches: any[], runId: string, startedAt: number, now: number, pausedMs?: number, pausedAt?: number|null}} input
  */
-function counters({ matches, runId, startedAt, now }) {
+function counters({ matches, runId, startedAt, now, pausedMs = 0, pausedAt = null }) {
   const mine = (Array.isArray(matches) ? matches : []).filter(match => match && match.runId === runId);
   let consecutiveFailures = 0;
   for (const match of mine) {
     if (match.state === 'cancelled') consecutiveFailures++;
     else if (match.state === 'completed') break;
   }
+  // A match that settled without a pairing being confirmed is the other way an attempt can come to nothing:
+  // a result was recorded, but nothing in the two screens' own readings ties the accounts to the same table.
+  let consecutiveUnconfirmed = 0;
+  for (const match of mine) {
+    if (match.state === 'active') continue;
+    if (match.pairing && match.pairing.verdict === 'paired') break;
+    consecutiveUnconfirmed++;
+  }
   const completed = mine.filter(match => match.state === 'completed').length;
   const cancelled = mine.filter(match => match.state === 'cancelled').length;
+  // Time spent paused does not count against the plan: a pause exists because the operator had to step away.
+  const paused = Math.max(0, pausedMs) + (pausedAt ? Math.max(0, now - pausedAt) : 0);
   return {
     played: mine.length,
     completed,
     cancelled,
     active: mine.filter(match => match.state === 'active').length,
     consecutiveFailures,
-    elapsedMs: Math.max(0, now - startedAt)
+    consecutiveUnconfirmed,
+    pausedMs: paused,
+    elapsedMs: Math.max(0, now - startedAt - paused)
   };
 }
 
@@ -95,9 +114,9 @@ function plural(count, one, many) {
  * Whether this run may go on. The order is deliberate: a plan that reached its match limit has finished,
  * which is a better answer than reporting a time bound that happened to cross at the same moment; the
  * failure bound is a statement about the matches themselves; the clock is last.
- * @param {{table: string, matchLimit: number, stopAfterFailures: number, stopAfterMinutes: number}} value
- * @param {{completed: number, consecutiveFailures: number, elapsedMs: number}} counts
- * @returns {{continue: true} | {continue: false, outcome: 'limit'|'failures'|'duration', reason: string}}
+ * @param {{table: string, matchLimit: number, stopAfterFailures: number, stopAfterUnconfirmed: number, stopAfterMinutes: number}} value
+ * @param {{completed: number, consecutiveFailures: number, consecutiveUnconfirmed: number, elapsedMs: number}} counts
+ * @returns {{continue: true} | {continue: false, outcome: 'limit'|'failures'|'unconfirmed'|'duration', reason: string}}
  */
 function verdict(value, counts) {
   if (counts.completed >= value.matchLimit)
@@ -112,6 +131,12 @@ function verdict(value, counts) {
       outcome: 'failures',
       reason: `${plural(counts.consecutiveFailures, 'match', 'matches')} in a row ended with no result, and the plan stops after ${value.stopAfterFailures}.`
     };
+  if (value.stopAfterUnconfirmed > 0 && counts.consecutiveUnconfirmed >= value.stopAfterUnconfirmed)
+    return {
+      continue: false,
+      outcome: 'unconfirmed',
+      reason: `${plural(counts.consecutiveUnconfirmed, 'match', 'matches')} in a row ended without a confirmed pairing, and the plan stops after ${value.stopAfterUnconfirmed}.`
+    };
   if (value.stopAfterMinutes > 0 && counts.elapsedMs >= value.stopAfterMinutes * 60000)
     return {
       continue: false,
@@ -124,11 +149,14 @@ function verdict(value, counts) {
 /** The plan in one sentence, for the card and the activity log. */
 function describe(value) {
   const stops = [];
-  if (value.stopAfterFailures > 0) stops.push(`after ${plural(value.stopAfterFailures, 'match', 'matches')} in a row with no result`);
-  if (value.stopAfterMinutes > 0) stops.push(`after ${plural(value.stopAfterMinutes, 'minute', 'minutes')}`);
+  if (value.stopAfterFailures > 0) stops.push(`${plural(value.stopAfterFailures, 'match', 'matches')} in a row with no result`);
+  if (value.stopAfterUnconfirmed > 0)
+    stops.push(`${plural(value.stopAfterUnconfirmed, 'match', 'matches')} in a row without a confirmed pairing`);
+  if (value.stopAfterMinutes > 0) stops.push(plural(value.stopAfterMinutes, 'minute', 'minutes'));
+  const joined = stops.length > 1 ? `${stops.slice(0, -1).join(', ')} or ${stops[stops.length - 1]}` : stops[0];
   return [
     `Up to ${plural(value.matchLimit, 'match', 'matches')} with a recorded result on ${value.table}`,
-    stops.length ? `stopping ${stops.join(' or ')}` : 'with no other stop condition'
+    stops.length ? `stopping after ${joined}` : 'with no other stop condition'
   ].join(', ');
 }
 
@@ -139,6 +167,9 @@ function bounds(value) {
     value.stopAfterFailures > 0
       ? `stop after ${plural(value.stopAfterFailures, 'match', 'matches')} in a row with no result`
       : 'no limit on matches in a row with no result',
+    value.stopAfterUnconfirmed > 0
+      ? `stop after ${plural(value.stopAfterUnconfirmed, 'match', 'matches')} in a row without a confirmed pairing`
+      : 'no retry limit on matches without a confirmed pairing',
     value.stopAfterMinutes > 0 ? `stop after ${plural(value.stopAfterMinutes, 'minute', 'minutes')}` : 'no time limit'
   ];
 }
@@ -147,6 +178,7 @@ function bounds(value) {
 const OUTCOMES = {
   limit: 'Match limit reached',
   failures: 'Stopped: a run of matches with no result',
+  unconfirmed: 'Stopped: results without a confirmed pairing',
   duration: 'Stopped: the time limit was reached',
   stopped: 'Stopped by the operator',
   participants: 'Stopped: a participant left the workspace'

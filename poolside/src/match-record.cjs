@@ -27,7 +27,7 @@ const ID_LIMIT = 64;
 const STATES = ['active', 'completed', 'cancelled'];
 /** The readiness barrier: a match is released only when every participant is ready. */
 const READINESS_VERDICTS = ['preparing', 'ready', 'blocked'];
-const RUN_STATES = ['active', 'ended'];
+const RUN_STATES = ['active', 'paused', 'ended'];
 /** What ended a run. `limit` is the plan finishing; the rest are stops. */
 const RUN_OUTCOMES = ['limit', 'failures', 'duration', 'stopped', 'participants'];
 const ROLES = ['receiver', 'sender'];
@@ -208,6 +208,8 @@ function cleanRun(value) {
   }
   const endedAt = text(source.endedAt, 40);
   const outcome = RUN_OUTCOMES.includes(source.outcome) ? source.outcome : null;
+  const pausedAt = text(source.pausedAt, 40);
+  const pausedMs = Number.isInteger(source.pausedMs) && source.pausedMs >= 0 ? source.pausedMs : 0;
   return {
     handle,
     runId,
@@ -218,6 +220,10 @@ function cleanRun(value) {
     reason: text(source.reason, TEXT_LIMIT),
     startedAt,
     endedAt: state === 'ended' && Number.isFinite(Date.parse(endedAt)) ? endedAt : null,
+    // A paused run keeps the time it has already spent paused, so resuming cannot lose it and the plan's
+    // clock stays honest across a restart.
+    pausedAt: state === 'paused' && Number.isFinite(Date.parse(pausedAt)) ? pausedAt : null,
+    pausedMs,
     history: cleanRunHistory(source.history)
   };
 }

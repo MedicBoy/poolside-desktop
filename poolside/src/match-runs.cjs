@@ -33,11 +33,12 @@ function createRunKeeper({
 
   /**
    * A run with a time limit has to be checked by the clock, not by the operator. A run with no time limit
-   * needs no timer: its stop conditions are all decided by matches settling.
+   * needs no timer: its stop conditions are all decided by matches settling. A paused run needs no timer
+   * either — its clock is not running, so there is nothing for the clock to reach.
    */
   function syncPoll() {
     const active = runs.activeRun(store.current);
-    const timed = Boolean(active && active.plan.stopAfterMinutes > 0);
+    const timed = Boolean(active && active.state === 'active' && active.plan.stopAfterMinutes > 0);
     if (timed && !poll) {
       poll = setTimer(() => {
         try {
@@ -100,6 +101,18 @@ function createRunKeeper({
     return { state, run: runs.find(state, runId) };
   }
 
+  /** Hold the run where it is: no further match is started, and the one in progress is left alone. */
+  function pause({ runId, reason }) {
+    const state = runs.pause(store.current, { runId, reason, now: now() });
+    return { state, run: runs.find(state, runId) };
+  }
+
+  /** Let the run continue, with the time it spent paused taken out of the plan's clock. */
+  function resume({ runId }) {
+    const state = runs.resume(store.current, { runId, now: now() });
+    return { state, run: runs.find(state, runId) };
+  }
+
   /** Stop the check. Used when the app is shutting down and by tests. */
   function dispose() {
     if (poll) clearTimer(poll);
@@ -109,6 +122,8 @@ function createRunKeeper({
   return {
     start,
     stop,
+    pause,
+    resume,
     judge,
     enforce,
     announce,
