@@ -253,9 +253,10 @@ test('a participant that loaded on the wrong route blocks release, and says whic
       verified: { ok: true, matches: false, route: { label: 'Direct connection' } }
     }
   };
+  const exits = { a: { checked: true, ip: '203.0.113.1' }, b: { checked: true, ip: '203.0.113.1' } };
   const { service, match, logs } = harness({
     openSession: true,
-    participant: id => ({ open: true, status: 'ready', footprint: footprints[id] })
+    participant: id => ({ open: true, status: 'ready', footprint: footprints[id], exit: exits[id] })
   });
   await service.start({ first: 'a', second: 'b' });
   assert.equal(match().readiness.verdict, 'preparing', 'one participant on the wrong route is not releasable');
@@ -264,9 +265,10 @@ test('a participant that loaded on the wrong route blocks release, and says whic
 
   // Fix the route and the match releases on the next check.
   footprints.b.verified = { ok: true, matches: true, route: { label: 'Proxy 5.6.7.8:8080' } };
+  exits.b = { checked: true, ip: '203.0.113.2' };
   service.advance();
   assert.equal(match().readiness.verdict, 'ready');
-  assert.match(logs.map(entry => entry.message).join(' '), /Alice and Bob are ready/);
+  assert.match(logs.map(entry => entry.message).join(' '), /Alice and Bob are ready, leaving through different exits\./);
 });
 
 test('a blocked match names the check that failed, not just the participant', async () => {

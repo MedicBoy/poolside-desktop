@@ -38,9 +38,12 @@ test('a route that could not be read is not quietly treated as fine', () => {
 });
 
 test('a participant is releasable only when the session loaded and the route holds', () => {
-  const ready = participantPreflight({ open: true, status: 'ready', footprint: { route: CONFIGURED, verified: matching } });
+  const ready = participantPreflight(
+    { open: true, status: 'ready', footprint: { route: CONFIGURED, verified: matching } },
+    { checked: true, ip: '203.0.113.7' }
+  );
   assert.equal(ready.ok, true);
-  assert.equal(ready.detail, 'Loaded on the configured route.');
+  assert.equal(ready.detail, 'Loaded on the configured route and the exit was read.');
 
   const blockedByRoute = participantPreflight({ open: true, status: 'ready', footprint: { route: CONFIGURED, verified: mismatched } });
   assert.equal(blockedByRoute.ok, false, 'a loaded session on the wrong route must not be released');
@@ -61,8 +64,31 @@ test('a participant is releasable only when the session loaded and the route hol
 
 test('the verdict is stated as data, so a blocked match can name the failing check', () => {
   const verdict = participantPreflight({ open: true, status: 'ready', footprint: { route: CONFIGURED, verified: mismatched } });
-  assert.deepEqual(Object.keys(verdict).sort(), ['detail', 'loaded', 'ok', 'route', 'session']);
+  assert.deepEqual(Object.keys(verdict).sort(), ['detail', 'exit', 'loaded', 'ok', 'route', 'session']);
   assert.equal(verdict.loaded, true);
   assert.equal(verdict.route.required, true);
   assert.equal(verdict.route.ok, false);
+});
+
+test('a configured route is not released until the address it leaves through has been read', () => {
+  const footprint = { route: CONFIGURED, verified: matching };
+  const unread = participantPreflight({ open: true, status: 'ready', footprint });
+  assert.equal(unread.ok, false, 'the route may be honoured and still leave nowhere useful');
+  assert.match(unread.detail, /The exit address could not be read\./);
+  assert.equal(unread.exit.required, true);
+  assert.equal(unread.exit.checked, false);
+
+  const failed = participantPreflight({ open: true, status: 'ready', footprint }, { checked: false, error: 'IP check failed.' });
+  assert.equal(failed.ok, false);
+  assert.match(failed.detail, /could not be read: IP check failed\./);
+
+  const read = participantPreflight({ open: true, status: 'ready', footprint }, { checked: true, ip: '203.0.113.9' });
+  assert.equal(read.ok, true);
+  assert.equal(read.exit.ip, '203.0.113.9', 'the address is available to show on the card');
+  assert.equal(read.detail.includes('203.0.113.9'), false, 'the address must not appear in the text a blocked match records');
+  // With no route configured nothing is requested, which is what keeps an offline check offline.
+  const direct = participantPreflight({ open: true, status: 'ready', footprint: { route: DIRECT, verified: null } });
+  assert.equal(direct.ok, true);
+  assert.equal(direct.exit.required, false);
+  assert.equal(direct.exit.ip, null);
 });

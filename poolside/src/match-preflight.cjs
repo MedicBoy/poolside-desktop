@@ -42,11 +42,16 @@ function routeVerdict(footprint) {
 /**
  * The full verdict for one participant.
  * @param {{open: boolean, status: string, footprint?: any}} session
+ * @param {{checked?: boolean, ip?: string|null, error?: string|null}|null} [exit] the address this
+ *   session leaves through, when it has been read. Held in memory by the caller and never persisted:
+ *   the app's own rule is that addresses are shown but not written down, so the verdict carries the
+ *   value for display and keeps it out of `detail`, which is what reaches the ledger.
  */
-function participantPreflight(session) {
+function participantPreflight(session, exit = null) {
   const open = Boolean(session && session.open);
   const status = session && typeof session.status === 'string' ? session.status : 'closed';
   const route = routeVerdict(session && session.footprint);
+  const exitVerdict = exitVerdictFor(route, exit);
   const loaded = open && status === 'ready';
   const detail = !open
     ? 'The window is closed.'
@@ -54,10 +59,34 @@ function participantPreflight(session) {
       ? `The session is ${status}.`
       : route.ok
         ? route.required
-          ? 'Loaded on the configured route.'
+          ? exitVerdict.ok
+            ? 'Loaded on the configured route and the exit was read.'
+            : exitVerdict.detail
           : 'Loaded with no route configured.'
         : route.detail;
-  return { session: { open, status }, loaded, route, ok: loaded && route.ok, detail };
+  return { session: { open, status }, loaded, route, exit: exitVerdict, ok: loaded && route.ok && exitVerdict.ok, detail };
 }
 
-module.exports = { participantPreflight, routeVerdict };
+/**
+ * Whether the address this session leaves through is known. A route is what makes it worth checking: the
+ * exit address is the proof that the route is doing anything at all, so a configured route with an
+ * unreadable exit is not releasable. With no route configured there is nothing to prove, and the app
+ * makes no request — which is also what keeps an offline check offline.
+ * @param {{required: boolean}} route @param {{checked?: boolean, ip?: string|null, error?: string|null}|null} exit
+ */
+function exitVerdictFor(route, exit) {
+  if (!route.required)
+    return { required: false, checked: false, ip: null, ok: true, detail: 'No route is configured, so no exit was read.' };
+  if (!exit || exit.checked !== true || typeof exit.ip !== 'string' || !exit.ip)
+    return {
+      required: true,
+      checked: false,
+      ip: null,
+      ok: false,
+      detail: `The exit address could not be read${exit && exit.error ? `: ${exit.error}` : ''}.`
+    };
+  // The address itself is deliberately absent from the detail: this text is what a blocked match records.
+  return { required: true, checked: true, ip: exit.ip, ok: true, detail: 'The exit address was read.' };
+}
+
+module.exports = { participantPreflight, routeVerdict, exitVerdictFor };

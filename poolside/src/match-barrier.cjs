@@ -44,7 +44,8 @@ function createBarrier({
   function verdictFor(id) {
     if (typeof participant === 'function') {
       try {
-        return participantPreflight(participant(id));
+        const state = participant(id) || {};
+        return participantPreflight(state, state.exit || null);
       } catch (error) {
         return { ok: false, detail: `The participant could not be inspected: ${error instanceof Error ? error.message : String(error)}` };
       }
@@ -113,7 +114,17 @@ function createBarrier({
       }
       if (readiness.verdict === 'preparing' && allReady) {
         const mark = requested.get(match.matchId);
-        const reason = `${states.map(entry => entry.name).join(' and ')} are ready.`;
+        // Say whether the participants share an exit. The addresses themselves stay on the cards: this
+        // text is written to the ledger, and the application's rule is that addresses are not.
+        const exits = states.map(entry => entry.exit && entry.exit.ip).filter(Boolean);
+        const checked = states.filter(entry => entry.exit && entry.exit.checked === true).length;
+        const shared =
+          checked > 0 && exits.length === checked
+            ? new Set(exits).size === 1
+              ? ', leaving through the same exit'
+              : ', leaving through different exits'
+            : '';
+        const reason = `${states.map(entry => entry.name).join(' and ')} are ready${shared}.`;
         next = coordination.settleReadiness(next, {
           matchId: match.matchId,
           verdict: 'ready',

@@ -1,25 +1,24 @@
 // Poolside composition root.
-const { app, BrowserWindow, ipcMain, dialog, session, safeStorage, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, safeStorage, screen, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const model = require('./model.cjs');
-const { checkPublicIP } = require('./network.cjs');
-const { SHOP_PROBE } = require('./shop-recovery.cjs');
 const { createScreenReaderPool } = require('./screen-reader-pool.cjs');
 const { createScreenReader } = require('./game-screen.cjs');
 const { createTableVisualMatcher } = require('./table-visual.cjs');
 const workspaceStore = require('./workspace.cjs');
-const { log, save, load, publish, getAccount, rememberWindowGeometry } = workspaceStore;
+const { log, save, load, publish, getAccount } = workspaceStore;
 const { sessions, workspace, matchState } = require('./state.cjs');
-const { createSessionManager, GAME_URL } = require('./windows.cjs');
-const { createSessionFsm } = require('./session-fsm.cjs');
+const { createSessionManager } = require('./windows.cjs');
 const { createObservationServices } = require('./observation-services.cjs');
 const { createTableNavigationService } = require('./table-navigation-service.cjs');
 const { createTableNavigationJournal } = require('./table-navigation-journal.cjs');
 const { createCaptureLab } = require('./capture-lab.cjs');
 const { createMatchJournal } = require('./match-journal.cjs');
 const { createMatchService, participantReady } = require('./match-service.cjs');
+const { createAccountIpCheck } = require('./network-ipc.cjs');
+const { buildSelfTestContext } = require('./self-test-context.cjs');
 const { createActivityJournal } = require('./activity-journal.cjs');
 const { createIpc } = require('./ipc.cjs');
 const { createProfileManager } = require('./profile-manager.cjs');
@@ -113,6 +112,9 @@ const tableNavigation = createTableNavigationService({
 // Local match coordination. The ledger sits beside the other local journals, and the accounts in the
 // workspace are its participants, so archiving an account mid-match cancels that match instead of
 // leaving a match in progress that nobody can settle.
+// One implementation of "read the address this session leaves through": the manual Check IP action and
+// the barrier's proof that a configured route is doing something both use it.
+const checkAccountIP = createAccountIpCheck({ sessions, getAccount, publish, log });
 const matches = createMatchService({
   accounts: () => workspace.data.accounts,
   store: matchState,
@@ -133,8 +135,17 @@ const matches = createMatchService({
   participant: id => {
     const group = sessions.get(id);
     const open = Boolean(group && group.window && typeof group.window.isDestroyed === 'function' && !group.window.isDestroyed());
-    return { open, status: open && group && group.fsm ? group.fsm.state : 'closed', footprint: group ? group.footprint : null };
+    const network = group ? group.network : null;
+    return {
+      open,
+      status: open && group && group.fsm ? group.fsm.state : 'closed',
+      footprint: group ? group.footprint : null,
+      // The reason a failed read failed is in the activity log; this shape is what the barrier needs to
+      // decide, and it deliberately carries no address of its own beyond the one the card already shows.
+      exit: network ? { checked: network.status === 'checked', ip: network.ip || null, error: null } : null
+    };
   },
+  probeExit: id => checkAccountIP(id),
   monotonic: () => performance.now(),
   publish,
   log
@@ -152,6 +163,7 @@ const ipc = createIpc({
   monitor,
   tableNavigation,
   matches,
+  checkAccountIP,
   profiles: profileManager,
   captureLab,
   diagnosticsRoot: app.getPath('userData'),
@@ -211,30 +223,6 @@ async function runGameCheck() {
   });
 }
 
-function selfTestContext() {
-  return {
-    app,
-    BrowserWindow,
-    session,
-    model,
-    fs,
-    checkPublicIP,
-    log,
-    attachRecovery: (id, group) => windows.attachRecoveryFor(id, group),
-    createSessionFsm,
-    rememberWindowGeometry,
-    profiles: profileManager,
-    crypto: safeStorage,
-    store: workspaceStore,
-    workspace,
-    sessions,
-    GAME_URL,
-    SHOP_PROBE,
-    monitor,
-    screenReaders
-  };
-}
-
 let quitting = false;
 let quitSaved = false;
 
@@ -263,7 +251,17 @@ app
     // Decode local Evidence logos after first paint, so the first table inspection does not pay
     // the one-time image feature cost. An unreadable sample is skipped by the matcher.
     if (!testing) setImmediate(() => tableMatcher.warm().catch(() => {}));
-    if (selfTest) await require('./self-test.cjs').runSelfTest(selfTestContext());
+    if (selfTest)
+      await require('./self-test.cjs').runSelfTest(
+        buildSelfTestContext({
+          profileManager,
+          safeStorage,
+          workspaceStore,
+          windows,
+          monitor,
+          screenReaders
+        })
+      );
     if (gameCheck) await runGameCheck();
   })
   .catch(error => {

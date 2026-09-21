@@ -8,6 +8,7 @@
 const crypto = require('node:crypto');
 const coordination = require('./match-coordination.cjs');
 const { createBarrier } = require('./match-barrier.cjs');
+const { routeVerdict } = require('./match-preflight.cjs');
 
 /**
  * Whether a participant is actually ready to be released: its own window is up AND its session
@@ -20,7 +21,7 @@ function participantReady({ open, status }) {
 }
 
 /**
- * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
+ * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
  */
 function createMatchService({
   accounts,
@@ -29,6 +30,7 @@ function createMatchService({
   log,
   openSession = null,
   participant = null,
+  probeExit = null,
   journal = null,
   now = () => Date.now(),
   makeId = () => crypto.randomUUID(),
@@ -142,8 +144,32 @@ function createMatchService({
       })
     );
     barrier.noteRequest(matchId);
+    await proveExits(matchId);
     barrier.advance();
     return { ...coordination.dashboardView(store.current), load: results };
+  }
+
+  /**
+   * Read the address each participant leaves through — but only where a route is configured, because that
+   * is the only case where the address proves something (that the route is doing what it says). With no
+   * route there is nothing to prove and nothing is requested, which is also what keeps the offline checks
+   * offline. A failure here is not fatal on its own: the barrier sees no exit and decides.
+   * @param {string} matchId
+   */
+  async function proveExits(matchId) {
+    if (typeof probeExit !== 'function' || typeof participant !== 'function') return;
+    const match = store.current.matches.find(candidate => candidate.matchId === matchId);
+    if (!match || match.state !== 'active') return;
+    await Promise.all(
+      match.participants.map(async entry => {
+        try {
+          if (!routeVerdict(participant(entry.id) && participant(entry.id).footprint).required) return;
+          await probeExit(entry.id);
+        } catch (error) {
+          log(`${entry.name}: the exit address could not be read (${error instanceof Error ? error.message : String(error)}).`, 'warning');
+        }
+      })
+    );
   }
 
   async function start({ first, second, load: shouldLoad = true }) {
@@ -167,6 +193,7 @@ function createMatchService({
       return view;
     }
     const results = await openParticipants(opened.matchId);
+    await proveExits(opened.matchId);
     barrier.advance();
     return { ...coordination.dashboardView(store.current), load: results };
   }
