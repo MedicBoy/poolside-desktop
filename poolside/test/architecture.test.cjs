@@ -71,7 +71,9 @@ const PURE_MODULES = [
   'table-navigation-service.cjs',
   'run-plan.cjs',
   'run-coordination.cjs',
-  'match-runs.cjs'
+  'match-runs.cjs',
+  'match-pairing.cjs',
+  'pairing-evidence.cjs'
 ];
 
 const ENTRY_POINTS = ['main.cjs', 'self-test.cjs'];

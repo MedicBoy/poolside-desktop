@@ -31,6 +31,8 @@ const RUN_STATES = ['active', 'ended'];
 /** What ended a run. `limit` is the plan finishing; the rest are stops. */
 const RUN_OUTCOMES = ['limit', 'failures', 'duration', 'stopped', 'participants'];
 const ROLES = ['receiver', 'sender'];
+/** What a pairing claim may be. The wording lives with the rules in `pairing-evidence.cjs`. */
+const PAIRING_VERDICTS = ['paired', 'agreed', 'mismatch', 'incomplete'];
 
 /** @param {unknown} value @param {number} max */
 function text(value, max) {
@@ -107,6 +109,37 @@ function cleanReadiness(value) {
   };
 }
 
+/**
+ * A recorded pairing verdict, or null.
+ *
+ * Only the evidence that can be re-read is kept: the verdict, the words, when it was judged, and — when
+ * they exist — the table and the entry both screens agreed on. No image, no address, no raw screen text.
+ * @param {unknown} value
+ */
+function cleanPairing(value) {
+  if (!value || typeof value !== 'object') return null;
+  const source = /** @type {any} */ (value);
+  const verdict = PAIRING_VERDICTS.includes(source.verdict) ? source.verdict : null;
+  const label = text(source.label, 80);
+  const reason = text(source.reason, TEXT_LIMIT);
+  const checkedAt = text(source.checkedAt, 40);
+  if (!verdict || !label || !reason || !Number.isFinite(Date.parse(checkedAt))) return null;
+  const table = text(source.table, 40);
+  const currency = text(source.currency, 20);
+  const amount = Number.isInteger(source.amount) && source.amount > 0 ? source.amount : null;
+  const windowMs = Number.isInteger(source.windowMs) && source.windowMs > 0 ? source.windowMs : null;
+  return {
+    verdict,
+    label,
+    reason,
+    checkedAt,
+    table: table || null,
+    currency: currency || null,
+    amount: amount !== null && currency ? amount : null,
+    windowMs
+  };
+}
+
 function cleanMatch(value) {
   if (!value || typeof value !== 'object') return null;
   const handle = text(value.handle, 24);
@@ -132,6 +165,7 @@ function cleanMatch(value) {
     startedAt,
     endedAt: Number.isFinite(Date.parse(endedAt)) ? endedAt : null,
     readiness: cleanReadiness(value.readiness),
+    pairing: cleanPairing(value.pairing),
     history: cleanHistory(value.history)
   };
 }
@@ -222,6 +256,7 @@ module.exports = {
   ID_LIMIT,
   STATES,
   READINESS_VERDICTS,
+  PAIRING_VERDICTS,
   RUN_STATES,
   RUN_OUTCOMES,
   text,
@@ -232,6 +267,7 @@ module.exports = {
   cleanHistory,
   cleanRunHistory,
   cleanReadiness,
+  cleanPairing,
   cleanMatch,
   cleanRun,
   cleanState

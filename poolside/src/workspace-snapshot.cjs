@@ -139,10 +139,14 @@ function runScreenView(id, targetTable) {
   const screen = group && group.gameScreen ? group.gameScreen : null;
   if (!screen || typeof screen !== 'object') return null;
   const tables = Array.isArray(screen.visibleTables) ? screen.visibleTables : [];
+  // "Identified" means the local visual matcher recognised this table's own screen from reviewed Evidence.
+  // The list of names on a table-selection screen is a weaker fact and is reported as its own field, because
+  // "Rome is listed" and "Rome is the table you are on" are not the same statement.
   return {
     state: typeof screen.state === 'string' ? screen.state : null,
     observedAt: screen.observedAt || null,
-    onTarget: tables.includes(targetTable)
+    identified: Boolean(screen.tableMatch && screen.tableMatch.table === targetTable),
+    listed: tables.includes(targetTable)
   };
 }
 
@@ -225,6 +229,7 @@ module.exports = {
   buildSnapshot,
   profileView,
   footprintView,
+  runScreenView,
   publicAccount,
   publicSettings,
   tableNavigationView,

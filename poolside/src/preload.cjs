@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('poolside', {
   startRun: input => ipcRenderer.invoke('run:start', input),
   stopRun: input => ipcRenderer.invoke('run:stop', input),
   loadMatchSessions: input => ipcRenderer.invoke('match:load', input),
+  checkMatchPairing: input => ipcRenderer.invoke('match:pairing', input),
   completeMatch: input => ipcRenderer.invoke('match:complete', input),
   cancelMatch: input => ipcRenderer.invoke('match:cancel', input),
   captureList: () => ipcRenderer.invoke('capture:list'),

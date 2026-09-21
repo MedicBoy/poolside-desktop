@@ -1,7 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { buildAccountOverview } = require('../src/account-overview.cjs');
-const { footprintView, publicAccount, publicSettings } = require('../src/workspace-snapshot.cjs');
+const { footprintView, publicAccount, publicSettings, runScreenView } = require('../src/workspace-snapshot.cjs');
+const { sessions } = require('../src/state.cjs');
 const { publicRoutePreset } = require('../src/proxy-public.cjs');
 
 const account = {
@@ -81,4 +82,32 @@ test('workspace configuration and saved presets expose no proxy credentials acro
   assert.equal(serialised.includes('nicho'), false);
   assert.equal(serialised.includes('hunter2'), false);
   assert.equal(safePreset.spec, 'http proxy at proxy.example:3128 · credentials set');
+});
+
+test('the run card is told whether a table is identified, merely listed, or not seen at all', () => {
+  // "Rome is one of the names on this screen" and "Rome is the table you are on" are different statements,
+  // and a table-selection screen lists venues — so the weaker one is reported as its own field.
+  const id = '22222222-2222-4222-8222-222222222222';
+  /** @param {any} gameScreen */
+  const screen = (gameScreen = null) => {
+    sessions.set(id, /** @type {any} */ ({ window: { isDestroyed: () => false }, gameScreen }));
+    return /** @type {any} */ (runScreenView(id, 'Rome'));
+  };
+  assert.equal(screen(null), null, 'a session with no reading is reported as no reading');
+  assert.equal(screen({ state: 'inspecting' }).identified, false);
+  const listed = screen({ state: 'table-selection', observedAt: '2026-09-21T12:00:00.000Z', visibleTables: ['Rome', 'Tokyo'] });
+  assert.equal(listed.identified, false);
+  assert.equal(listed.listed, true);
+  const identified = screen({
+    state: 'table-selection',
+    observedAt: '2026-09-21T12:00:00.000Z',
+    visibleTables: ['Rome', 'Tokyo'],
+    tableMatch: { table: 'Rome', method: 'local-evidence' }
+  });
+  assert.equal(identified.identified, true);
+  // And a different table being identified is not the target being on screen.
+  const other = screen({ state: 'table-selection', observedAt: '2026-09-21T12:00:00.000Z', tableMatch: { table: 'Tokyo' } });
+  assert.equal(other.identified, false);
+  assert.equal(other.listed, false);
+  sessions.delete(id);
 });

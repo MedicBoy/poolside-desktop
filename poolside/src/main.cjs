@@ -146,6 +146,12 @@ const matches = createMatchService({
     };
   },
   probeExit: id => checkAccountIP(id),
+  // Pairing evidence comes from what each session's own screen reader last reported. Null is a session with
+  // no reading yet, which the rules report as a missing reading rather than as disagreement.
+  observe: id => {
+    const group = sessions.get(id);
+    return group && group.gameScreen ? group.gameScreen : null;
+  },
   monotonic: () => performance.now(),
   publish,
   log

@@ -123,6 +123,7 @@ test('the dashboard surface exposes the match and run channels and passes input 
     'match:cancel',
     'match:complete',
     'match:load',
+    'match:pairing',
     'match:start',
     'match:state',
     'run:start',

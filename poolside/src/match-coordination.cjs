@@ -99,6 +99,18 @@ function settleReadiness(state, { matchId, verdict, reason, releasedAt, skewMs =
   return replaced(state, moved({ ...match, readiness }, match.state, verdict === 'ready' ? 'released' : 'blocked', detail, now));
 }
 
+/**
+ * Record what the two screens amount to. The checker writes this only when the verdict changes, so the
+ * ledger holds evidence rather than a heartbeat.
+ * @param {any} state
+ * @param {{matchId: string, pairing: any, now?: number}} input
+ */
+function recordPairing(state, { matchId, pairing, now = Date.now() }) {
+  const match = activeMatch(state, matchId);
+  const detail = `${pairing.label}: ${pairing.reason}`;
+  return replaced(state, moved({ ...match, pairing: { ...pairing } }, match.state, 'pairing-evidence', detail, now));
+}
+
 function locate(state, handleOrId) {
   const wanted = text(handleOrId, ID_LIMIT);
   const match = state.matches.find(candidate => candidate.matchId === wanted || candidate.handle === wanted);
@@ -208,6 +220,7 @@ function matchView(match) {
     startedAt: match.startedAt,
     endedAt: match.endedAt,
     readiness: match.readiness ? { ...match.readiness } : null,
+    pairing: match.pairing ? { ...match.pairing } : null,
     history: match.history.slice(-4).map(item => ({ ...item }))
   };
 }
@@ -240,6 +253,7 @@ module.exports = {
   reconcile,
   requestReadiness,
   settleReadiness,
+  recordPairing,
   dashboardView,
   cleanState,
   emptyState,

@@ -2063,6 +2063,18 @@ dialog p {
 .match-readiness.blocked {
   color: var(--pink);
 }
+/* Pairing evidence: green only for the strongest verdict the local reader can reach, amber while it is
+   still short of evidence, and pink when the two screens actively disagree. */
+.match-pairing.paired {
+  color: var(--mint);
+}
+.match-pairing.agreed,
+.match-pairing.incomplete {
+  color: var(--amber);
+}
+.match-pairing.mismatch {
+  color: var(--pink);
+}
 .match-subheading {
   margin: 20px 0 0;
 }

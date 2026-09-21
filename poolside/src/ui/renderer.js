@@ -754,6 +754,19 @@ function matchReadiness(match) {
         : `Waiting for ${blocking.map(entry => `${entry.name}: ${entry.detail || 'not ready'}`).join('; ') || 'the profiles'}`;
   return `<small class="match-meta match-readiness ${readiness.verdict}">${escapeHtml(detail)}</small>`;
 }
+// Pairing evidence: what the two sessions' own screen readings amounted to. A connecting screen says nothing
+// about which match it is connecting to, so the verdict is allowed to be "not enough evidence" — and that is
+// what it says rather than claiming a pairing the evidence does not support.
+function matchPairing(match, actionable) {
+  if (match.readiness?.verdict !== 'ready') return '';
+  const pairing = match.pairing;
+  const detail = pairing ? `${pairing.label} — ${pairing.reason}` : 'Not judged yet.';
+  const verdict = pairing ? pairing.verdict : 'incomplete';
+  const action = actionable
+    ? `<button class="text-button" data-action="match-pairing" data-match="${escapeHtml(match.matchId)}">Check pairing evidence</button>`
+    : '';
+  return `<small class="match-meta match-pairing ${escapeHtml(verdict)}">Pairing evidence: ${escapeHtml(detail)}</small><div class="match-actions">${action}</div>`;
+}
 function matchCard(match, actionable) {
   const [first, second] = match.participants || [];
   const needsLoad =
@@ -784,6 +797,7 @@ function matchCard(match, actionable) {
       </div>
       <small class="match-meta">${escapeHtml(outcome)} · ${escapeHtml(MATCH_LABELS[match.state] || match.state)} · ${escapeHtml(matchWhen(match))}</small>
       ${matchReadiness(match)}
+      ${matchPairing(match, actionable)}
       ${matchSessions(match)}
       ${match.reason ? `<small class="match-meta">${escapeHtml(match.reason)}</small>` : ''}
       ${actions}
@@ -818,8 +832,9 @@ function runProgress(run) {
 // is reported, never required, and "no reading" stays different from "the table is not on screen".
 function runParticipantLine(entry, targetTable) {
   if (!entry.screen) return 'no screen reading yet';
-  if (entry.screen.onTarget) return `showing ${targetTable}`;
-  return `${entry.screen.state || 'screen not recognized'} — ${targetTable} not seen yet`;
+  if (entry.screen.identified) return `showing ${targetTable}`;
+  if (entry.screen.listed) return `${targetTable} is listed on the screen`;
+  return `${entry.screen.state || 'screen not recognized'} — ${targetTable} not identified yet`;
 }
 function runCard(run, actionable) {
   const active = run.state === 'active';
@@ -1020,6 +1035,15 @@ document.addEventListener('click', async event => {
     // and a match it was still holding has been cancelled with the reason.
     const result = await call(() => poolside.stopRun({ runId: button.dataset.run }));
     if (result.ok) toast('Run stopped. A match it was still holding has been cancelled.');
+    return;
+  }
+  if (button.dataset.action === 'match-pairing') {
+    // Asking again is what the operator does after looking at both windows. The reply says what the screens
+    // amount to now, including when the answer is still "not enough evidence".
+    const result = await call(() => poolside.checkMatchPairing({ matchId: button.dataset.match }));
+    if (!result.ok) return;
+    const pairing = result.value?.pairing;
+    toast(pairing ? `${pairing.label}: ${pairing.reason}` : 'Pairing evidence is not available yet.');
     return;
   }
   if (['match-load', 'match-complete', 'match-cancel'].includes(button.dataset.action)) {

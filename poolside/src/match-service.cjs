@@ -10,6 +10,7 @@ const coordination = require('./match-coordination.cjs');
 const runPlan = require('./run-plan.cjs');
 const { createBarrier } = require('./match-barrier.cjs');
 const { createRunKeeper } = require('./match-runs.cjs');
+const { createPairingChecker } = require('./match-pairing.cjs');
 const { createParticipantLoader } = require('./match-participants.cjs');
 const { text, ID_LIMIT } = require('./match-record.cjs');
 
@@ -24,7 +25,7 @@ function participantReady({ open, status }) {
 }
 
 /**
- * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, runCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
+ * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, observe?: ((id: string) => any)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, runCheckMs?: number, pairingWindowMs?: number, pairingCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
  */
 function createMatchService({
   accounts,
@@ -34,6 +35,7 @@ function createMatchService({
   openSession = null,
   participant = null,
   probeExit = null,
+  observe = null,
   journal = null,
   now = () => Date.now(),
   makeId = () => crypto.randomUUID(),
@@ -42,6 +44,8 @@ function createMatchService({
   readyDeadlineMs = 120000,
   readyCheckMs = 1000,
   runCheckMs = 30000,
+  pairingWindowMs,
+  pairingCheckMs = 5000,
   setTimer = (callback, delay) => setInterval(callback, delay),
   clearTimer = timer => clearInterval(timer)
 }) {
@@ -109,6 +113,21 @@ function createMatchService({
   // coordinating the pairing.
   const participants = createParticipantLoader({ store, publish, log, openSession, participant, probeExit });
 
+  // What the two screens amounted to. Judged only after release, and re-judged while it is still unproven,
+  // so the verdict improves by itself once the operator has looked at each window.
+  const pairing = createPairingChecker({
+    store,
+    persist,
+    publish,
+    log,
+    observe,
+    now,
+    windowMs: pairingWindowMs,
+    checkMs: pairingCheckMs,
+    setTimer,
+    clearTimer
+  });
+
   /**
    * Cancel anything whose participant has left the workspace. Called before every read, so the ledger
    * cannot show a match in progress between an account that is no longer there.
@@ -127,6 +146,7 @@ function createMatchService({
     // A run's clock is a stop condition like any other, so reading the state applies it: the dashboard
     // cannot show a run that its own plan has already ended.
     runs.enforce();
+    pairing.checkReleased();
     return serviceView();
   }
 
@@ -144,6 +164,7 @@ function createMatchService({
     barrier.noteRequest(matchId);
     await participants.proveExits(matchId);
     barrier.advance();
+    pairing.checkReleased();
     return { ...serviceView(), load: results };
   }
 
@@ -179,7 +200,18 @@ function createMatchService({
     const results = await participants.open(opened.matchId);
     await participants.proveExits(opened.matchId);
     barrier.advance();
+    pairing.checkReleased();
     return { ...serviceView(), load: results };
+  }
+
+  /**
+   * Judge this match's pairing evidence now, and say what it amounted to. This is the operator asking
+   * again after looking at both windows, so the answer is returned even when it has not changed.
+   * @param {{matchId: string}} input
+   */
+  function checkPairing({ matchId }) {
+    const verdict = pairing.check(text(matchId, ID_LIMIT), { force: true });
+    return { ...serviceView(), pairing: verdict };
   }
 
   /**
@@ -239,12 +271,14 @@ function createMatchService({
   function dispose() {
     barrier.dispose();
     runs.dispose();
+    pairing.dispose();
   }
 
   return {
     start,
     startRun,
     stopRun,
+    checkPairing,
     complete,
     cancel,
     load,

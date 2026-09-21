@@ -69,6 +69,36 @@ async function runMatchChecks(ctx, assert) {
     'every participant is reported ready at release'
   );
 
+  // --- Pairing evidence: two loaded profiles are not a pairing ------------------------------------------
+  // The suite loads the game fixture rather than the game, so neither session has a screen reading, and the
+  // answer has to be exactly that. This is the rule the roadmap states in words — two connecting screens are
+  // not proof — asserted against the real bridge rather than in a unit test alone.
+  const pairingFlow = await dashboard.webContents.executeJavaScript(`(async () => {
+    const state = await poolside.get();
+    const matchId = state.value.matches.active[0].matchId;
+    const recorded = state.value.matches.active[0].pairing;
+    const asked = await poolside.checkMatchPairing({ matchId });
+    const after = (await poolside.get()).value.matches.active[0];
+    return {
+      verdict: recorded ? recorded.verdict : null,
+      label: recorded ? recorded.label : null,
+      reason: recorded ? recorded.reason : null,
+      checkedAt: recorded ? recorded.checkedAt : null,
+      askedOk: asked.ok,
+      askedVerdict: asked.ok && asked.value.pairing ? asked.value.pairing.verdict : null,
+      stillUnproven: after.pairing ? after.pairing.verdict : null,
+      history: after.history.map(entry => entry.event)
+    };
+  })()`);
+  assert.equal(pairingFlow.verdict, 'incomplete', 'two loaded profiles with no screen reading are not a pairing');
+  assert.equal(pairingFlow.label, 'Not enough evidence yet');
+  assert.equal(pairingFlow.reason, 'No screen reading yet from Test receiver and Test sender.');
+  assert.ok(pairingFlow.checkedAt, 'the verdict is timestamped');
+  assert.equal(pairingFlow.askedOk, true, 'the evidence can be asked for again from the dashboard');
+  assert.equal(pairingFlow.askedVerdict, 'incomplete');
+  assert.equal(pairingFlow.stillUnproven, 'incomplete', 'asking again does not turn missing evidence into a pairing');
+  assert.ok(pairingFlow.history.includes('pairing-evidence'), 'the verdict is part of the match history');
+
   const matchFlow = await dashboard.webContents.executeJavaScript(`(async () => {
     const state = await poolside.get();
     const matchId = state.value.matches.active[0].matchId;

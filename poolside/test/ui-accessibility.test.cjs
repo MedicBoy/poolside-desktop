@@ -245,3 +245,21 @@ test('the run plan is a labelled form over the account selects, and a run can be
   assert.match(css, /\.run-panel\s*\{/);
   assert.match(css, /\.run-bounds\s*\{/);
 });
+
+test('the match card reports what the pairing evidence amounted to and can be asked again', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  // The rule the roadmap states in words: a connecting screen does not say which match it is connecting to,
+  // so the view says that rather than implying two loaded profiles are a pairing.
+  assert.match(html, /two of them are never counted as proof/);
+  assert.match(renderer, /function matchPairing\(match, actionable\)/);
+  assert.match(renderer, /Pairing evidence: \$\{escapeHtml\(detail\)\}/);
+  assert.match(renderer, /match\.readiness\?\.verdict !== 'ready'/);
+  assert.match(renderer, /data-action="match-pairing"/);
+  assert.match(renderer, /poolside\.checkMatchPairing\(\{ matchId: button\.dataset\.match \}\)/);
+  // Every verdict gets a colour, and the weakest one is not coloured like a result.
+  for (const verdict of ['paired', 'agreed', 'incomplete', 'mismatch']) {
+    assert.match(css, new RegExp(`\\.match-pairing\\.${verdict}`));
+  }
+});
