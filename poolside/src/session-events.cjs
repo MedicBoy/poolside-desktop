@@ -17,12 +17,14 @@
  * @param {() => void} deps.onClosed runs after the session is gone
  * @param {import('./types.cjs').LogFn} deps.log
  */
+const { windowTitleFor } = require('./window-title.cjs');
+
 function attachSessionEvents(deps) {
   const { window, group, fsm, supervision, accountName, beforeClose, onClosed, log } = deps;
 
   window.on('page-title-updated', event => {
     event.preventDefault();
-    window.setTitle(`Poolside · ${accountName}`);
+    window.setTitle(windowTitleFor(accountName, group.network && group.network.ip));
   });
 
   window.webContents.on('did-finish-load', () => {
