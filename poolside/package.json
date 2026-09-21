@@ -15,6 +15,7 @@
     "product:check": "node scripts/product-truth.cjs && node scripts/check-work-items.cjs",
     "test": "node --test test/*.test.cjs",
     "test:desktop": "electron . --self-test",
+    "test:desktop:repeat": "node scripts/repeat-self-test.cjs",
     "test:persistence": "node test/run-session-restart.cjs",
     "test:game": "electron . --game-check",
     "validate:corpus": "node scripts/validate-capture-corpus.cjs",

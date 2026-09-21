@@ -25,6 +25,7 @@ const { createIpc } = require('./ipc.cjs');
 const { createProfileManager } = require('./profile-manager.cjs');
 const { messageOf } = require('./errors.cjs');
 const { createNativeDialogs } = require('./native-dialogs.cjs');
+const selfTestWorkspace = require('./self-test-workspace.cjs');
 
 const UI_FILE = path.join(__dirname, 'ui', 'index.html');
 const UI_URL = pathToFileURL(UI_FILE).href;
@@ -35,7 +36,31 @@ const testing = selfTest || gameCheck;
 if (selfTest) [process.stdout, process.stderr].forEach(output => output.on('error', error => error && error.code === 'EPIPE'));
 
 app.setName('Poolside');
-if (testing) app.setPath('userData', path.join(app.getPath('temp'), `poolside-test-${process.pid}`));
+if (testing) {
+  // A unique directory per run: the process id alone used to repeat, and a run that inherited an earlier
+  // run's workspace failed its account checks for reasons that had nothing to do with the code.
+  const temporaryRoot = app.getPath('temp');
+  app.setPath('userData', path.join(temporaryRoot, selfTestWorkspace.rootName(Date.now(), process.pid)));
+  // Sweep what abandoned runs left behind, so the machine does not accumulate test profiles. Scoped to
+  // this prefix directly under the temp directory, so nothing outside it can be reached from here.
+  try {
+    const entries = fs
+      .readdirSync(temporaryRoot, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && selfTestWorkspace.isSelfTestRoot(entry.name))
+      .map(entry => ({ name: entry.name, modifiedMs: fs.statSync(path.join(temporaryRoot, entry.name)).mtimeMs }));
+    for (const name of selfTestWorkspace.staleRoots(entries, { now: Date.now() })) {
+      // One directory that cannot be removed — a profile still held open by a process that has not quite
+      // finished exiting — must not stop the sweep for the rest.
+      try {
+        fs.rmSync(path.join(temporaryRoot, name), { recursive: true, force: true });
+      } catch {
+        /* it will be old enough again next run */
+      }
+    }
+  } catch {
+    // A sweep that cannot run is not a reason to fail the suite.
+  }
+}
 if (!testing && !app.requestSingleInstanceLock()) app.exit(0);
 
 const profileManager = createProfileManager({
