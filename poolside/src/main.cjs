@@ -11,13 +11,15 @@ const { createScreenReader } = require('./game-screen.cjs');
 const { createTableVisualMatcher } = require('./table-visual.cjs');
 const workspaceStore = require('./workspace.cjs');
 const { log, save, load, publish, getAccount, rememberWindowGeometry } = workspaceStore;
-const { sessions, workspace } = require('./state.cjs');
+const { sessions, workspace, matchState } = require('./state.cjs');
 const { createSessionManager, GAME_URL } = require('./windows.cjs');
 const { createSessionFsm } = require('./session-fsm.cjs');
 const { createObservationServices } = require('./observation-services.cjs');
 const { createTableNavigationService } = require('./table-navigation-service.cjs');
 const { createTableNavigationJournal } = require('./table-navigation-journal.cjs');
 const { createCaptureLab } = require('./capture-lab.cjs');
+const { createMatchJournal } = require('./match-journal.cjs');
+const { createMatchService } = require('./match-service.cjs');
 const { createActivityJournal } = require('./activity-journal.cjs');
 const { createIpc } = require('./ipc.cjs');
 const { createProfileManager } = require('./profile-manager.cjs');
@@ -83,6 +85,16 @@ const tableNavigation = createTableNavigationService({
   log,
   journal: tableNavigationJournal
 });
+// Local match coordination. The ledger sits beside the other local journals, and the accounts in the
+// workspace are its participants, so archiving an account mid-match cancels that match instead of
+// leaving a match in progress that nobody can settle.
+const matches = createMatchService({
+  accounts: () => workspace.data.accounts,
+  store: matchState,
+  journal: createMatchJournal({ root: app.getPath('userData') }),
+  publish,
+  log
+});
 const { confirmChange, confirmDestructive, chooseDirectory } = createNativeDialogs({
   dialog,
   dashboard: () => workspace.dashboard,
@@ -95,6 +107,7 @@ const ipc = createIpc({
   inspector,
   monitor,
   tableNavigation,
+  matches,
   profiles: profileManager,
   captureLab,
   diagnosticsRoot: app.getPath('userData'),

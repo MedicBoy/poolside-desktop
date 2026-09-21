@@ -13,12 +13,13 @@ Build: 0.3.11 (development-preview). This is a development preview, not a produc
 | Capture Lab | available | fixture-proven | on | Local labelled captures and separate Evidence and Benchmark sets; samples are user-reviewed. |
 | Screen recognition | limited | fixture-proven | on | Local English-screen observations; representative live accuracy is not established. |
 | Table navigation | dry-run | fixture-proven | dry-run | Plans and observes manual steps; never sends game input. |
+| Match coordination | available | integration-proven | on | Pairs two of your own accounts into a match, records the result and keeps a bounded local ledger. It records what you decide: it does not pair accounts on the game service or verify a real match. |
 | Diagnostics export | limited | integration-proven | on | Local redacted activity/telemetry export with a refusing secret-shape scan; not a privacy proof. |
 | Workspace recovery | limited | fixture-proven | on | Preserves damaged primary data and detects recovery candidates; in-app restore choice is unfinished. |
 | Authentication verification | unavailable | designed | off | Sign-in occurs manually on the game website; Poolside does not verify account authentication. |
 | Live game input | unavailable | designed | off | No production pointer or keyboard input to the game; service-rule authorization is unresolved. |
 | Matchmaking and pairing | unavailable | designed | off | No multi-account match coordinator or opponent-pairing proof. |
-| Match outcome and balance accounting | unavailable | designed | off | No verified result or transfer ledger. |
+| Match outcome and balance accounting | unavailable | designed | off | Recorded results are operator-entered, not verified against the game; there is no balance or transfer accounting. |
 | Signed installer | unavailable | designed | off | Portable development package only; no signed installer or clean-VM qualification. |
 | Automatic updates and rollback | unavailable | designed | off | No updater, signed update metadata, or rollback transaction. |
 

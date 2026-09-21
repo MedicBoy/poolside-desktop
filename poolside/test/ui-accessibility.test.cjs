@@ -165,3 +165,21 @@ test('no form is nested inside another form, because the parser drops the inner 
   assert.equal(depth, 0, 'every opened form is closed');
   assert.equal(deepest, 1, 'a form nested inside another form is dropped by the HTML parser, so its controls stop existing');
 });
+
+test('match coordination is a navigable, labelled local record of who played whom', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  assert.match(html, /data-view="matches"/);
+  assert.match(html, /<section class="view hidden" id="view-matches">/);
+  assert.match(html, /id="match-first" aria-label="First account in the match"/);
+  assert.match(html, /id="match-second" aria-label="Second account in the match"/);
+  assert.match(html, /id="match-hint" class="muted" role="status"/);
+  assert.match(html, /Local records only/);
+  assert.match(renderer, /function renderMatches\(\)/);
+  assert.match(renderer, /renderMatches\(\);/);
+  assert.match(renderer, /data-action="match-complete"/);
+  assert.match(renderer, /data-action="match-cancel"/);
+  assert.match(renderer, /poolside\.startMatch\(/);
+  assert.match(renderer, /poolside\.completeMatch\(/);
+  assert.match(renderer, /'sessions', 'matches', 'activity'/);
+});

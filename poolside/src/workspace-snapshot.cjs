@@ -1,7 +1,7 @@
 // Build the dashboard-safe view of process and workspace state.
 
 const dashboardTelemetry = require('./dashboard-telemetry.cjs');
-const { events, sessions, workspace, profileReports } = require('./state.cjs');
+const { events, sessions, workspace, profileReports, matchState } = require('./state.cjs');
 const { view: timelineView } = require('./timeline-transfer.cjs');
 const { buildAccountOverview } = require('./account-overview.cjs');
 const { resolveRecovery } = require('./recovery-settings.cjs');
@@ -9,6 +9,7 @@ const { describeReadings } = require('./reading-status.cjs');
 const { publicRoutePreset } = require('./proxy-public.cjs');
 const { TABLES } = require('./table-list.cjs');
 const { buildCapabilityReport } = require('./capability-registry.cjs');
+const { dashboardView } = require('./match-coordination.cjs');
 
 /** Bounded because snapshots are broadcast on every state change. */
 const TIMELINE_VIEW_LIMIT = 100;
@@ -121,7 +122,9 @@ function buildSnapshot(activityHistory) {
     telemetry: dashboardTelemetry.build(accounts, { version: workspace.version, timeline: compiled }),
     readOnly: workspace.readOnly,
     version: workspace.version,
-    capabilityReport: buildCapabilityReport(workspace.version)
+    capabilityReport: buildCapabilityReport(workspace.version),
+    // Local match coordination: totals, the matches in progress, and the most recent results.
+    matches: dashboardView(matchState.current)
   };
 }
 

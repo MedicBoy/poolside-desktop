@@ -16,12 +16,13 @@ const workspaceBackup = require('./workspace-backup.cjs');
 const { registerCaptureLab } = require('./capture-lab-ipc.cjs');
 const { registerBackupIpc } = require('./backup-ipc.cjs');
 const { registerRoutePresetIpc } = require('./route-preset-ipc.cjs');
+const { registerMatchIpc } = require('./match-ipc.cjs');
 const { createAccountIpCheck } = require('./network-ipc.cjs');
 
 const PREFS_SAVED = 'Transfer preferences saved. Automation is not yet connected.';
 
 /**
- * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, monitor: any, tableNavigation: any, profiles: any, captureLab: any, diagnosticsRoot: string, dataRoot: string, openPath: (path: string) => Promise<string>, confirmChange: (title: string, detail: string, label?: string) => Promise<boolean>, confirmDestructive: (title: string, detail: string) => Promise<boolean>, chooseDirectory: (title: string, allowCreate: boolean) => Promise<string|null>}} deps
+ * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, monitor: any, tableNavigation: any, matches: any, profiles: any, captureLab: any, diagnosticsRoot: string, dataRoot: string, openPath: (path: string) => Promise<string>, confirmChange: (title: string, detail: string, label?: string) => Promise<boolean>, confirmDestructive: (title: string, detail: string) => Promise<boolean>, chooseDirectory: (title: string, allowCreate: boolean) => Promise<string|null>}} deps
  */
 function createIpc(deps) {
   const {
@@ -31,6 +32,7 @@ function createIpc(deps) {
     inspector,
     monitor,
     tableNavigation,
+    matches,
     profiles,
     captureLab,
     diagnosticsRoot,
@@ -141,6 +143,7 @@ function createIpc(deps) {
       return monitor.stop(id);
     });
     registerCaptureLab({ handle, inspector, captureLab });
+    registerMatchIpc({ handle, matches });
     registerAccountManagement({
       handle,
       model,

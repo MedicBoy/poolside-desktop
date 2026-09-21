@@ -259,7 +259,7 @@ async function call(fn) {
   }
 }
 function view(name) {
-  if (!['sessions', 'activity', 'accounts', 'capture-lab', 'settings', 'about'].includes(name)) return;
+  if (!['sessions', 'matches', 'activity', 'accounts', 'capture-lab', 'settings', 'about'].includes(name)) return;
   document.querySelectorAll('.view').forEach(el => el.classList.toggle('hidden', el.id !== `view-${name}`));
   document.querySelectorAll('.nav-item').forEach(el => {
     const active = el.dataset.view === name;
@@ -700,6 +700,67 @@ function renderCapabilityReport() {
     .map(([key, label]) => `<dt>${label}</dt><dd>${escapeHtml(support[key] || 'Not specified')}</dd>`)
     .join('');
 }
+const MATCH_LABELS = { active: 'In progress', completed: 'Completed', cancelled: 'Cancelled' };
+function matchWhen(match) {
+  const date = new Date(match.endedAt || match.startedAt);
+  return Number.isNaN(date.getTime()) ? 'an unknown time' : date.toLocaleString();
+}
+function matchCard(match, actionable) {
+  const [first, second] = match.participants || [];
+  const outcome =
+    match.state === 'completed'
+      ? `${match.winnerName || 'A participant'} recorded as the winner`
+      : match.state === 'cancelled'
+        ? 'No result recorded'
+        : 'In progress';
+  const actions =
+    actionable && first && second
+      ? `<div class="match-actions">
+            <button class="secondary" data-action="match-complete" data-match="${escapeHtml(match.matchId)}" data-winner="${escapeHtml(first.id)}">${escapeHtml(first.name)} won</button>
+            <button class="secondary" data-action="match-complete" data-match="${escapeHtml(match.matchId)}" data-winner="${escapeHtml(second.id)}">${escapeHtml(second.name)} won</button>
+            <button class="text-button" data-action="match-cancel" data-match="${escapeHtml(match.matchId)}">Cancel</button>
+          </div>`
+      : '';
+  return `<article class="match-card ${match.state}">
+      <div class="match-card-head">
+        <strong>${escapeHtml((match.participants || []).map(participant => participant.name).join(' vs '))}</strong>
+        <span class="match-handle">${escapeHtml(match.handle)}</span>
+      </div>
+      <small class="match-meta">${escapeHtml(outcome)} · ${escapeHtml(MATCH_LABELS[match.state] || match.state)} · ${escapeHtml(matchWhen(match))}</small>
+      ${match.reason ? `<small class="match-meta">${escapeHtml(match.reason)}</small>` : ''}
+      ${actions}
+    </article>`;
+}
+function paintMatchSelect(selector) {
+  const select = $(selector);
+  const previous = select.value;
+  select.innerHTML = ['<option value="">Choose an account…</option>']
+    .concat(state.accounts.map(account => `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}</option>`))
+    .join('');
+  if (state.accounts.some(account => account.id === previous)) select.value = previous;
+}
+function renderMatches() {
+  const matches = state.matches || { totals: {}, active: [], recent: [] };
+  const totals = matches.totals || {};
+  $('#match-total').textContent = totals.active || 0;
+  paintMatchSelect('#match-first');
+  paintMatchSelect('#match-second');
+  const first = $('#match-first').value;
+  const second = $('#match-second').value;
+  $('#match-start').disabled = !first || !second || first === second;
+  $('#match-hint').textContent =
+    state.accounts.length < 2
+      ? 'Match coordination needs two accounts in the workspace.'
+      : first && first === second
+        ? 'Choose two different accounts.'
+        : `${totals.recorded || 0} local record${totals.recorded === 1 ? '' : 's'}: ${totals.completed || 0} completed, ${totals.cancelled || 0} cancelled, ${totals.active || 0} in progress.`;
+  $('#match-active').innerHTML = matches.active.length
+    ? matches.active.map(match => matchCard(match, true)).join('')
+    : '<p class="muted">No match in progress.</p>';
+  $('#match-recent').innerHTML = matches.recent.length
+    ? matches.recent.map(match => matchCard(match, false)).join('')
+    : '<p class="muted">No results recorded yet.</p>';
+}
 function render(next) {
   const openDetails = openAccountDisclosureIds();
   state = next;
@@ -750,6 +811,7 @@ function render(next) {
   renderManagedAccounts();
   renderRoutePresets();
   renderCapabilityReport();
+  renderMatches();
   restoreAccountDisclosureIds(openDetails);
 }
 document.addEventListener('click', async event => {
@@ -825,6 +887,15 @@ document.addEventListener('click', async event => {
     });
     return;
   }
+  if (button.dataset.action === 'match-complete' || button.dataset.action === 'match-cancel') {
+    const matchId = button.dataset.match;
+    const completing = button.dataset.action === 'match-complete';
+    const result = await call(() =>
+      completing ? poolside.completeMatch({ matchId, winner: button.dataset.winner }) : poolside.cancelMatch({ matchId })
+    );
+    if (result.ok) toast(completing ? 'Result recorded in the local ledger.' : 'Match cancelled.');
+    return;
+  }
   if (button.dataset.action) {
     const { action, id } = button.dataset;
     if (action.startsWith('navigation-')) {
@@ -890,6 +961,12 @@ poolside.subscribe(render);
 call(() => poolside.get()).then(result => {
   if (result.ok) loadSettingsForm();
 });
+$('#match-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const result = await call(() => poolside.startMatch({ first: $('#match-first').value, second: $('#match-second').value }));
+  if (result.ok) toast('Match started. Record the result when it settles.');
+});
+for (const id of ['match-first', 'match-second']) $(`#${id}`).addEventListener('change', renderMatches);
 $('.brand').addEventListener('click', event => {
   event.preventDefault();
   view('sessions');

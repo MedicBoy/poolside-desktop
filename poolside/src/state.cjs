@@ -14,6 +14,8 @@
 //
 // The authority for cookie *data* is neither of these: it is the Chromium profile, per ADR-004.
 
+const { emptyState } = require('./match-coordination.cjs');
+
 /** @typedef {Map<string, import('./types.cjs').SessionGroup>} SessionMap */
 
 /** @type {SessionMap} */
@@ -39,6 +41,15 @@ const events = [];
  */
 const sessionStores = new Map();
 
+/**
+ * The local match ledger. Owned by `match-service.cjs`, which is its only writer, and read by the
+ * dashboard snapshot so a match appears and settles while the app is running. It is held here rather
+ * than in the workspace document because a match belongs to two accounts and to a session in progress,
+ * not to one account record — and because that document's schema is a release artifact of its own.
+ * @type {{current: {format: string, sequence: number, matches: any[]}}}
+ */
+const matchState = { current: emptyState() };
+
 const workspace = {
   /** @type {import('./types.cjs').WorkspaceData} */
   data: { version: 1, accounts: [], settings: { table: 'Bangkok', limit: 10 } },
@@ -53,4 +64,4 @@ const workspace = {
   version: '0.0.0'
 };
 
-module.exports = { sessions, events, sessionStores, workspace, profileReports };
+module.exports = { sessions, events, sessionStores, workspace, profileReports, matchState };

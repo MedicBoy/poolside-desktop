@@ -101,6 +101,47 @@ async function runSelfTest(ctx) {
   })()`);
   assert.deepEqual(ipControls, { buttons: 2, disabled: true, rejected: true });
 
+  // --- Local match coordination, driven through the real dashboard bridge ------------------------
+  // The ledger is the production successor to the offline simulator, so it is proven the way the rest
+  // of the app is: two real accounts, a real pairing, a real refusal, and a recorded result, all over
+  // IPC, with the capability report agreeing about what that buys the operator.
+  const matchFlow = await dashboard.webContents.executeJavaScript(`(async () => {
+    const before = await poolside.get();
+    const [first, second] = before.value.accounts.map(account => account.id);
+    const started = await poolside.startMatch({ first, second });
+    const refused = await poolside.startMatch({ first, second });
+    const settled = await poolside.completeMatch({ matchId: started.value.active[0].matchId, winner: second });
+    const refusedResult = await poolside.completeMatch({ matchId: started.value.active[0].matchId, winner: first });
+    const after = await poolside.get();
+    const capability = after.value.capabilityReport.capabilities.find(item => item.id === 'match-coordination');
+    return {
+      started: started.ok,
+      startedActive: started.value.totals.active,
+      refusedOk: refused.ok,
+      refusedError: refused.error,
+      settledOk: settled.ok,
+      settledCompleted: settled.value.totals.completed,
+      secondResultOk: refusedResult.ok,
+      ledger: after.value.matches.totals,
+      winner: after.value.matches.recent[0].winnerName,
+      capabilityMode: capability ? capability.mode : 'missing',
+      navigable: document.querySelectorAll('[data-view="matches"]').length,
+      logged: after.value.events.filter(event => /in progress|recorded as the winner/i.test(event.message)).length
+    };
+  })()`);
+  assert.equal(matchFlow.started, true, 'two accounts can be paired locally');
+  assert.equal(matchFlow.startedActive, 1);
+  assert.equal(matchFlow.refusedOk, false, 'an account cannot hold two matches at once');
+  assert.match(matchFlow.refusedError, /already in an active match/);
+  assert.equal(matchFlow.settledOk, true);
+  assert.equal(matchFlow.settledCompleted, 1);
+  assert.equal(matchFlow.secondResultOk, false, 'a settled match cannot record a second result');
+  assert.deepEqual(matchFlow.ledger, { recorded: 1, active: 0, completed: 1, cancelled: 0 });
+  assert.equal(matchFlow.winner, 'Test sender');
+  assert.equal(matchFlow.capabilityMode, 'available', 'the capability report agrees the coordinator exists');
+  assert.equal(matchFlow.navigable, 1, 'the coordinator has its own dashboard view');
+  assert.ok(matchFlow.logged >= 2, 'the pairing and the result both reached the activity history');
+
   // --- The configuration schema boundary, through the real IPC bridge ---------------------------
   const configBoundary = await dashboard.webContents.executeJavaScript(`(async () => {
     const refused = await poolside.saveSettings({ values: { table: 'Atlantis', limit: '10' } });

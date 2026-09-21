@@ -59,6 +59,14 @@
       "detail": "Plans and observes manual steps; never sends game input."
     },
     {
+      "id": "match-coordination",
+      "name": "Match coordination",
+      "mode": "available",
+      "validation": "integration-proven",
+      "flag": "on",
+      "detail": "Pairs two of your own accounts into a match, records the result and keeps a bounded local ledger. It records what you decide: it does not pair accounts on the game service or verify a real match."
+    },
+    {
       "id": "diagnostics",
       "name": "Diagnostics export",
       "mode": "limited",
@@ -104,7 +112,7 @@
       "mode": "unavailable",
       "validation": "designed",
       "flag": "off",
-      "detail": "No verified result or transfer ledger."
+      "detail": "Recorded results are operator-entered, not verified against the game; there is no balance or transfer accounting."
     },
     {
       "id": "signed-installer",
