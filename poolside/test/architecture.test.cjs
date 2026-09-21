@@ -73,7 +73,8 @@ const PURE_MODULES = [
   'run-coordination.cjs',
   'match-runs.cjs',
   'match-pairing.cjs',
-  'pairing-evidence.cjs'
+  'pairing-evidence.cjs',
+  'run-status.cjs'
 ];
 
 const ENTRY_POINTS = ['main.cjs', 'self-test.cjs'];

@@ -852,6 +852,23 @@ function runParticipantLine(entry, targetTable) {
   if (entry.screen.listed) return `${targetTable} is listed on the screen`;
   return `${entry.screen.state || 'screen not recognized'} — ${targetTable} not identified yet`;
 }
+// Where the run is and what to do about it, as the coordinator derived it. Rendered as a definition list
+// because it is exactly that: a short set of named facts someone reads at a glance mid-run.
+function runStatus(status) {
+  if (!status) return '';
+  const rows = [
+    ['Stage', status.stageLabel],
+    ['Attempt', `${status.attempt.number} · ${status.attempt.planned} in the plan`],
+    ['Release', status.release],
+    ['Screens', status.observations.map(entry => entry.line).join(' ')]
+  ];
+  if (status.pairing) rows.push(['Pairing', status.pairing.line]);
+  rows.push([status.stop ? 'Stopped' : 'Next stop', status.stop ? `${status.stop.label}. ${status.stop.reason}` : status.nextStop]);
+  rows.push(['Next', status.nextAction]);
+  return `<dl class="run-status ${escapeHtml(status.attention)}">${rows
+    .map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value || '—')}</dd>`)
+    .join('')}</dl>`;
+}
 function runCard(run, actionable) {
   const active = run.state === 'active';
   const participants = (run.participants || []).length
@@ -886,6 +903,7 @@ function runCard(run, actionable) {
       <small class="match-meta">${escapeHtml(run.describe)}</small>
       <ul class="run-bounds">${run.bounds.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
       <small class="match-meta">${escapeHtml(active ? runProgress(run) : `${runProgress(run)} · ${matchWhen(run)}`)}</small>
+      ${runStatus(run.status)}
       ${participants}
       ${outcome}
       ${actions}

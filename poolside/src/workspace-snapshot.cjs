@@ -11,6 +11,7 @@ const { TABLES } = require('./table-list.cjs');
 const { buildCapabilityReport } = require('./capability-registry.cjs');
 const { dashboardView } = require('./match-coordination.cjs');
 const { view: runsView } = require('./run-coordination.cjs');
+const { statusFor } = require('./run-status.cjs');
 const { participantReady } = require('./match-service.cjs');
 const { participantPreflight } = require('./match-preflight.cjs');
 
@@ -113,16 +114,22 @@ function matchesView() {
   const view = service && typeof service.refresh === 'function' ? service.refresh() : dashboardView(matchState.current);
   const decorate = match => ({ ...match, participants: match.participants.map(matchParticipantView) });
   const runs = view.runs || runsView(matchState.current);
-  const decorateRun = run => ({
-    ...run,
-    participants: run.participants.map(participant => ({
-      ...matchParticipantView(participant),
-      role: participant.role,
-      // What that session is showing, so the run card can say whether the target table is in front of the
-      // operator. Advisory: nothing about release is gated on it.
-      screen: runScreenView(participant.id, run.plan.table)
-    }))
-  });
+  const decorateRun = run => {
+    const decorated = {
+      ...run,
+      participants: run.participants.map(participant => ({
+        ...matchParticipantView(participant),
+        role: participant.role,
+        // What that session is showing, so the run card can say whether the target table is in front of the
+        // operator. Advisory: nothing about release is gated on it.
+        screen: runScreenView(participant.id, run.plan.table)
+      }))
+    };
+    // Where the run is and what to do next, derived from the run, the match in progress under it and the
+    // ages of the readings it rests on. Derived rather than stored, so it cannot disagree with them.
+    const under = view.active.find(match => match.runId === run.runId);
+    return { ...decorated, status: statusFor({ run: decorated, match: under ? decorate(under) : null, now: Date.now() }) };
+  };
   return {
     ...view,
     active: view.active.map(decorate),

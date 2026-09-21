@@ -283,3 +283,23 @@ test('a run can be paused and resumed from its card, and a match with nothing op
   assert.match(renderer, /No session is open for this match, so it is not really in progress\./);
   assert.match(css, /\.match-empty\s*\{/);
 });
+
+test('the run card reports the stage, the release, the reading ages and the next action', () => {
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  // The things the roadmap asks a run dashboard to show, each on its own labelled line.
+  assert.match(renderer, /function runStatus\(status\)/);
+  // Each fact gets its own name in front of it; "Next stop" is chosen at render time, so it is checked as a
+  // label rather than as the first element of a literal.
+  for (const label of ['Stage', 'Attempt', 'Release', 'Screens', 'Next']) {
+    assert.ok(renderer.includes("['" + label + "', "), label + ' should be a labelled line on the run card');
+  }
+  assert.ok(renderer.includes("'Next stop'"), 'the line that says what will stop the run next should be labelled');
+  assert.ok(renderer.includes("'Stopped'"), 'and so should the line that says what did stop it');
+  assert.match(renderer, /status\.pairing\.line/);
+  assert.match(renderer, /status\.nextStop/);
+  assert.match(renderer, /\$\{runStatus\(run\.status\)\}/);
+  // The line that needs the operator is coloured differently from the one that does not.
+  assert.match(css, /\.run-status\.act dd:last-of-type\s*\{/);
+  assert.match(css, /\.run-status\.watch dd:last-of-type\s*\{/);
+});

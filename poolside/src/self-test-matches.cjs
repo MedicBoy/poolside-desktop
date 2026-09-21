@@ -146,6 +146,17 @@ async function runMatchChecks(ctx, assert) {
     if (!started.ok) return { error: started.error };
     const runId = started.value.runs.active.runId;
     const joined = started.value.active[0].runId === runId;
+    // The run dashboard: where the run is, what its release state is, how old the readings are, what will
+    // stop it next and what to do now. Live session state comes from the snapshot, not from the reply, and the
+    // barrier releases on its own check loop — so this waits for the release the way the dashboard does,
+    // rather than assuming the first look already shows one.
+    const until = Date.now() + 15000;
+    let opening = null;
+    while (Date.now() < until) {
+      opening = (await poolside.get()).value.matches.runs.active.status;
+      if (opening && opening.stage !== 'preparing') break;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
     const record = async winner => {
       const live = (await poolside.get()).value.matches.active[0];
       return poolside.completeMatch({ matchId: live.matchId, winner });
@@ -160,6 +171,12 @@ async function runMatchChecks(ctx, assert) {
     const tidy = third.ok ? await poolside.cancelMatch({ matchId: third.value.active[0].matchId }) : null;
     return {
       joined,
+      openingStage: opening ? opening.stage : null,
+      openingStages: ['preparing', 'released', 'blocked'],
+      openingAction: opening ? opening.nextAction : null,
+      openingSkew: opening ? opening.skewMs : 'missing',
+      openingObserved: opening ? opening.observations.length : -1,
+      openingNextStop: opening ? opening.nextStop : null,
       oneOk: one.ok,
       afterOneActive: Boolean(afterOne),
       afterOneCompleted: afterOne ? afterOne.progress.completed : -1,
@@ -170,6 +187,9 @@ async function runMatchChecks(ctx, assert) {
       outcomeLabel: ended ? ended.outcomeLabel : null,
       reason: ended ? ended.reason : null,
       describe: ended ? ended.describe : null,
+      endedStage: ended && ended.status ? ended.status.stage : null,
+      endedStop: ended && ended.status ? ended.status.stop : null,
+      endedNext: ended && ended.status ? ended.status.nextAction : null,
       participants: ended ? ended.participants.map(entry => [entry.name, entry.role]) : [],
       thirdOk: third.ok,
       thirdRunId: third.ok ? third.value.active[0].runId : 'none',
@@ -178,6 +198,17 @@ async function runMatchChecks(ctx, assert) {
   })()`);
   assert.equal(runFlow.error, undefined, `the run could not be started: ${runFlow.error}`);
   assert.equal(runFlow.joined, true, 'the first match of a run belongs to the run');
+  // The run dashboard as the operator sees it: a stage, a release line, one reading per participant, what
+  // will stop the run next, and the one thing to do now.
+  assert.ok(runFlow.openingStages.includes(runFlow.openingStage), `unexpected run stage: ${runFlow.openingStage}`);
+  assert.equal(runFlow.openingObserved, 2, 'the status reports one screen reading per participant');
+  assert.ok(runFlow.openingAction && runFlow.openingAction.length > 20, 'the status says what to do next');
+  assert.match(runFlow.openingNextStop, /^Stops when: /);
+  // Both sessions are already open and ready from the match check above, so this releases without any help;
+  // the wait above is what makes the reading of the card deterministic rather than a race with the barrier.
+  assert.equal(runFlow.openingStage, 'released');
+  assert.ok(Number.isFinite(runFlow.openingSkew) && runFlow.openingSkew >= 0, `unexpected skew: ${runFlow.openingSkew}`);
+  assert.match(runFlow.openingAction, /Play this match/);
   assert.equal(runFlow.oneOk, true);
   assert.equal(runFlow.afterOneActive, true, 'one match is not the whole plan');
   assert.equal(runFlow.afterOneCompleted, 1);
@@ -192,6 +223,10 @@ async function runMatchChecks(ctx, assert) {
     ['Test receiver', 'receiver'],
     ['Test sender', 'sender']
   ]);
+  assert.equal(runFlow.endedStage, 'ended');
+  assert.equal(runFlow.endedStop.label, 'Match limit reached');
+  assert.match(runFlow.endedStop.reason, /2 matches with a recorded result/);
+  assert.match(runFlow.endedNext, /this run is over/);
   // The plan stops the run; it does not lock the pair out. A match started afterwards is a match on its own.
   assert.equal(runFlow.thirdOk, true);
   assert.equal(runFlow.thirdRunId, null);

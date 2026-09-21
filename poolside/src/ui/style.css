@@ -1987,6 +1987,34 @@ dialog p {
   font-size: 11.5px;
   color: var(--muted);
 }
+/* The run's status: what the operator reads mid-run, so the thing to do next is on its own line. */
+.run-status {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 6px 0 2px;
+  font-size: 11.5px;
+}
+.run-status dt {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  padding-top: 1px;
+}
+.run-status dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+/* "act" is the colour of something waiting on the operator; "watch" is something the program is doing on its
+   own; neither means the line is decoration. */
+.run-status.act dd:last-of-type {
+  color: var(--amber);
+}
+.run-status.watch dd:last-of-type {
+  color: var(--muted);
+}
 .run-outcome {
   color: var(--text);
 }
