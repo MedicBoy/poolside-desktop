@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-18
-- **Related:** ADR-0011 (operational scope boundaries — split out of this record), `test/fixtures/`,
+- **Related:** ADR-0011 (game automation implementation gaps), `test/fixtures/`,
   `test/classification.test.cjs`, `test/saved-session.test.cjs`, roadmap M3
 
 ## Context
@@ -14,10 +14,9 @@ HTTPS protocol fixtures (`protocol.handle`) instead of real accounts, which work
 blind spot: every screen-recognition fixture is a _positive_ example, so a classifier that answers too
 eagerly would still pass.
 
-The scope boundary that this record originally carried alongside the test strategy is now **ADR-0011**.
-The two were split because they are independent decisions, and because a future reader looking for an
-operational scope decision should not have to look inside a test-strategy record for it. Neither
-decision changed in the split.
+The unfinished game-automation work that this record originally carried alongside the test strategy
+is now tracked in **ADR-0011**. The subjects were split because implementation status and test strategy
+change independently.
 
 ## Decision
 
@@ -30,11 +29,9 @@ decision changed in the split.
    mid-load partials, dialogs, the shop page, wrong-aspect surfaces and non-English screens.
 4. Live validation is scheduled, scripted and recorded — never the only evidence, and never asserted
    in CI, because it depends on a third-party site that can change without notice.
-5. Synthetic input and synthetic device values are used **only** against fixtures and the
-   application's own UI. That is how the current tests work.
-
-Constraint 5 is the test-strategy face of ADR-0011: the boundary applies to what the suite is allowed
-to simulate, not only to what the product is allowed to ship.
+5. Current synthetic-input and device-value tests exercise fixtures and the application's own UI.
+   Production game-input and device-fingerprint integration are not implemented; ADR-0011 tracks the
+   missing components.
 
 ## Consequences
 
@@ -60,9 +57,8 @@ to simulate, not only to what the product is allowed to ship.
   make the suite fail whenever the site or the network misbehaves.
 - **Positive fixtures only.** Rejected: it cannot detect over-eager recognition, which is the failure
   the user actually experiences (a wrong state label is worse than no label).
-- **Boundary with no test-strategy consequence.** Rejected: leaving negative fixtures optional is
-  exactly how a recogniser becomes confidently wrong, and it would let the excluded elements back in
-  through the test suite.
+- **Positive and happy-path fixtures only.** Rejected: leaving negative fixtures optional is exactly
+  how a recogniser becomes confidently wrong and hides missing-state behavior.
 
 ## Enforcement
 

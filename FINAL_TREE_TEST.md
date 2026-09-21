@@ -10,37 +10,36 @@
 
 ### 1.1 Version control state
 
-| Item | Value |
-| --- | --- |
-| Repository root | `C:\Users\nicho\OneDrive\Desktop\Coding` |
-| Application root | `C:\Users\nicho\OneDrive\Desktop\Coding\poolside` |
-| Branch | `master` (trunk-based) |
-| **HEAD commit** | **`bf28e9564c962e40500005dc930c4b00892de5c1`** — *docs(handoff): note which commit the audit was taken at* |
-| Commit author | `nicho <nicho@localhost>` (repo-local identity; no global git identity exists on this machine) |
-| Commit date | Fri Sep 18 17:59:59 2026 -0230 |
-| Commits since release tag | 24 (tag `v0.1.0-session-foundation` = `3834705`) |
-| Tracked files (whole repo) | **235** |
+| Item                       | Value                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Repository root            | `C:\Users\nicho\OneDrive\Desktop\Coding`                                                                   |
+| Application root           | `C:\Users\nicho\OneDrive\Desktop\Coding\poolside`                                                          |
+| Branch                     | `master` (trunk-based)                                                                                     |
+| **HEAD commit**            | **`bf28e9564c962e40500005dc930c4b00892de5c1`** — _docs(handoff): note which commit the audit was taken at_ |
+| Commit author              | `nicho <nicho@localhost>` (repo-local identity; no global git identity exists on this machine)             |
+| Commit date                | Fri Sep 18 17:59:59 2026 -0230                                                                             |
+| Commits since release tag  | 24 (tag `v0.1.0-session-foundation` = `3834705`)                                                           |
+| Tracked files (whole repo) | **235**                                                                                                    |
 
 ### 1.2 Working tree status — stated exactly
 
 `git status --porcelain` was run natively. Its **complete, unabridged** output:
 
-```
-?? "Note from ChatGPT.txt"
-?? "PROJECT_HANDOFF - Copy.md"
-```
+The historical snapshot contained two untracked documentation files. Use the current `git status`
+output for the handoff rather than this dated inventory.
 
 Asserting this precisely rather than in summary form:
 
-| Assertion | Result |
-| --- | --- |
-| Modified tracked files | **0** |
-| Staged changes | **0** |
-| Deleted or renamed tracked files | **0** |
-| Untracked **code** files (anything under `poolside/src`, `poolside/test` or `poolside/docs`) | **0** |
-| Untracked files at the repo root | **2**, both non-code and both the user's own: `Note from ChatGPT.txt` (a note left in the root directory), and `PROJECT_HANDOFF - Copy.md` (a duplicate copy of the hand-off document produced in the previous session) |
+| Assertion                                                                                    | Result                                                                                  |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Modified tracked files                                                                       | **0**                                                                                   |
+| Staged changes                                                                               | **0**                                                                                   |
+| Deleted or renamed tracked files                                                             | **0**                                                                                   |
+| Untracked **code** files (anything under `poolside/src`, `poolside/test` or `poolside/docs`) | **0**                                                                                   |
+| Untracked files at the repo root                                                             | **2** non-code documentation files at the time of this audit; current status may differ |
 
-**So: the codebase is fully committed and the tracked tree is clean. Two loose non-code files sit at the repo root, deliberately left untracked rather than swept into a commit** — a `git add -A` that swept one of them into a milestone commit previously had to be amended, and that lesson is recorded in the project skill. Neither file is referenced by any source, test, or documentation in the project.
+**At the time of this audit, the codebase was fully committed and the tracked tree was clean.** Two
+loose non-code files were left at the repository root and were not referenced by source or tests.
 
 One further precision, because "100% clean deployment" can mean two different things: `poolside/release/` — the packaged Electron build — is **gitignored by design** (an earlier `.gitignore` pattern let ~1 GB of Electron binaries get tracked, which was corrected). It therefore does not appear in `git status` and is not part of the tracked tree. It exists on disk, was rebuilt after the last `src/` change, and is verified in §2.5.
 
@@ -48,37 +47,36 @@ One further precision, because "100% clean deployment" can mean two different th
 
 Counts below come from `git ls-files` (tracked) and `ls` (on-disk), both run natively:
 
-| Location | Count | Composition |
-| --- | --- | --- |
-| `poolside/src/` | **64 tracked** | 61 `*.cjs` modules + 3 UI assets (`ui/index.html`, `ui/renderer.js`, `ui/style.css`) |
-| `poolside/test/` | **35 tracked** | 25 `*.test.cjs` suites + 2 harness scripts (`run-session-restart.cjs`, `session-restart.cjs`) + 8 fixtures (7 PNG screens + `vision-corpus.json`) |
-| `poolside/docs/` | **19 tracked** | 17 architecture decision records (`0001`–`0017`) + the ADR index + `architecture.md` |
-| `poolside/` (root files) | remainder | `package.json`, `package-lock.json`, `README.md`, `CONTRIBUTING.md`, `eslint.config.mjs`, `tsconfig.json`, `.prettierrc.json`, `.gitignore` |
-| Repo root | remainder | `ROADMAP.md`, `BOUNDARIES.md`, `PROJECT_HANDOFF.md`, this document, review material |
+| Location                 | Count          | Composition                                                                                                                                       |
+| ------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `poolside/src/`          | **64 tracked** | 61 `*.cjs` modules + 3 UI assets (`ui/index.html`, `ui/renderer.js`, `ui/style.css`)                                                              |
+| `poolside/test/`         | **35 tracked** | 25 `*.test.cjs` suites + 2 harness scripts (`run-session-restart.cjs`, `session-restart.cjs`) + 8 fixtures (7 PNG screens + `vision-corpus.json`) |
+| `poolside/docs/`         | **19 tracked** | 17 architecture decision records (`0001`–`0017`) + the ADR index + `architecture.md`                                                              |
+| `poolside/` (root files) | remainder      | `package.json`, `package-lock.json`, `README.md`, `CONTRIBUTING.md`, `eslint.config.mjs`, `tsconfig.json`, `.prettierrc.json`, `.gitignore`       |
+| Repo root                | remainder      | `ROADMAP.md`, `INCOMPLETE_WORK.md`, `PROJECT_HANDOFF.md`, this document, review material                                                          |
 
-| Directory (tracked) | Files |
-| --- | ---: |
-| `recording-review` | 102 |
-| `poolside/src` | 61 |
-| `poolside/test` | 27 |
-| `poolside/docs/adr` | 18 |
-| `poolside` | 10 |
-| `poolside/test/fixtures` | 8 |
-| `(repository root)` | 5 |
-| `poolside/src/ui` | 3 |
-| `poolside/docs` | 1 |
-| **Total** | **235** |
-
+| Directory (tracked)      |   Files |
+| ------------------------ | ------: |
+| `recording-review`       |     102 |
+| `poolside/src`           |      61 |
+| `poolside/test`          |      27 |
+| `poolside/docs/adr`      |      18 |
+| `poolside`               |      10 |
+| `poolside/test/fixtures` |       8 |
+| `(repository root)`      |       5 |
+| `poolside/src/ui`        |       3 |
+| `poolside/docs`          |       1 |
+| **Total**                | **235** |
 
 ### 1.4 Structural assertions
 
-| Assertion | How it is held |
-| --- | --- |
-| Every `src/` module is reachable | `test/architecture.test.cjs` fails on a module unreferenced from source or tests — no dead files |
-| The local `require` graph is acyclic | `test/architecture.test.cjs` walks the whole graph and fails on any cycle |
-| 37 of 61 modules are declared pure | `PURE_MODULES` in the same suite; each is asserted to contain no `electron` import, so they stay unit-testable without a runtime |
-| No module exceeds 200 lines | `test/architecture.test.cjs`; see §2.4 |
-| Fixtures are real files, not fabricated at test time | `test/fixtures/` holds 7 recorded PNG screens plus the structured corpus, all tracked |
+| Assertion                                            | How it is held                                                                                                                   |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Every `src/` module is reachable                     | `test/architecture.test.cjs` fails on a module unreferenced from source or tests — no dead files                                 |
+| The local `require` graph is acyclic                 | `test/architecture.test.cjs` walks the whole graph and fails on any cycle                                                        |
+| 37 of 61 modules are declared pure                   | `PURE_MODULES` in the same suite; each is asserted to contain no `electron` import, so they stay unit-testable without a runtime |
+| No module exceeds 200 lines                          | `test/architecture.test.cjs`; see §2.4                                                                                           |
+| Fixtures are real files, not fabricated at test time | `test/fixtures/` holds 7 recorded PNG screens plus the structured corpus, all tracked                                            |
 
 ---
 
@@ -1675,12 +1673,12 @@ The summary block, reproduced from the end of that same stream:
 
 Precision matters here, because "257/257" and "desktop integration tests" are not the same measurement:
 
-| Suite | Command | Result | What it proves |
-| --- | --- | --- | --- |
-| Unit + architecture | `npm test` (inside `verify`) | **257 / 257 pass** | Pure logic: FSM transitions and deadlines, recovery policy arithmetic, identity grammar, route parsing, geometry, profile lifecycle, configuration parity, vision coordinates and corpus, timeline/telemetry/redaction, the generated settings form, and the architecture guards |
-| Desktop integration | `npm run test:desktop` | **8 / 8 scenarios pass** | Real Electron: cookie-jar isolation, real canvas capture through local OCR, per-session identity read back from `navigator`/`Intl`, profile lifecycle against real storage, live public-IP check, the settings contract through the real IPC bridge, the diagnostics payload scan, and the Activity timeline rendering |
-| Cross-restart persistence | `npm run test:persistence` | **2 / 2 pass** (seed + verify) | Two separate Electron processes: cookies, session cookies and `localStorage` survive a full restart, per account |
-| Packaged binary | `Poolside.exe --self-test` | **8 / 8 pass**, exit 0 | The same desktop scenarios against the *packaged* build |
+| Suite                     | Command                      | Result                         | What it proves                                                                                                                                                                                                                                                                                                         |
+| ------------------------- | ---------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit + architecture       | `npm test` (inside `verify`) | **257 / 257 pass**             | Pure logic: FSM transitions and deadlines, recovery policy arithmetic, identity grammar, route parsing, geometry, profile lifecycle, configuration parity, vision coordinates and corpus, timeline/telemetry/redaction, the generated settings form, and the architecture guards                                       |
+| Desktop integration       | `npm run test:desktop`       | **8 / 8 scenarios pass**       | Real Electron: cookie-jar isolation, real canvas capture through local OCR, per-session identity read back from `navigator`/`Intl`, profile lifecycle against real storage, live public-IP check, the settings contract through the real IPC bridge, the diagnostics payload scan, and the Activity timeline rendering |
+| Cross-restart persistence | `npm run test:persistence`   | **2 / 2 pass** (seed + verify) | Two separate Electron processes: cookies, session cookies and `localStorage` survive a full restart, per account                                                                                                                                                                                                       |
+| Packaged binary           | `Poolside.exe --self-test`   | **8 / 8 pass**, exit 0         | The same desktop scenarios against the _packaged_ build                                                                                                                                                                                                                                                                |
 
 **Total executed checks this run: 275 — 257 unit, 8 desktop, 2 persistence, 8 packaged.**
 
@@ -1719,99 +1717,102 @@ Measured with the ceiling test's own metric — `content.split('\n').length`, wh
 ```js
 const MAX_MODULE_LINES = 200;
 // ...
-test('no source module exceeds the modularity ceiling', () => {
+test("no source module exceeds the modularity ceiling", () => {
   const oversized = sourceFiles()
-    .map(name => ({ name, lines: read(name).split('\n').length }))
-    .filter(entry => entry.lines > MAX_MODULE_LINES);
-  assert.deepEqual(oversized, [], `modules over ${MAX_MODULE_LINES} lines must be split`);
+    .map((name) => ({ name, lines: read(name).split("\n").length }))
+    .filter((entry) => entry.lines > MAX_MODULE_LINES);
+  assert.deepEqual(
+    oversized,
+    [],
+    `modules over ${MAX_MODULE_LINES} lines must be split`,
+  );
 });
 ```
 
-| Metric | Value |
-| --- | --- |
-| Modules measured | **61** |
-| Modules over the ceiling | **0** |
-| Total source lines | **7,432** (mean 121.8) |
-| Largest module | `workspace.cjs` — **200 lines, exactly at the ceiling**, one line from a required extraction |
-| Next largest | `profile-manager.cjs` 198, `main.cjs` 194, `proxy.cjs` 191, `profile-diagnostics.cjs` 190, `windows.cjs` 188 |
+| Metric                   | Value                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Modules measured         | **61**                                                                                                       |
+| Modules over the ceiling | **0**                                                                                                        |
+| Total source lines       | **7,432** (mean 121.8)                                                                                       |
+| Largest module           | `workspace.cjs` — **200 lines, exactly at the ceiling**, one line from a required extraction                 |
+| Next largest             | `profile-manager.cjs` 198, `main.cjs` 194, `proxy.cjs` 191, `profile-diagnostics.cjs` 190, `windows.cjs` 188 |
 
 The ceiling has fired nine times across the project and has never been relaxed — every breach was resolved by extracting a module along a question boundary: `self-test.cjs` (213), `footprint.cjs` (234), `windows.cjs` (252 → 262 after a Prettier pass), `profile-integrity.cjs`, `config-validator.cjs` (251), `profile-manager.cjs` (205), `timeline-engine.cjs` (228), `dashboard-telemetry.cjs` (326), and `settings-form-mapper.cjs` (273). Complete per-module measurements follow.
 
 **61 modules · 7432 lines · mean 121.8 · largest 200 (`workspace.cjs`) · 0 over the 200-line ceiling**
 
-| Module | Lines | Headroom to 200 | 
-| --- | ---: | ---: |
-| `workspace.cjs` | 200 | 0 |
-| `profile-manager.cjs` | 198 | 2 |
-| `main.cjs` | 194 | 6 |
-| `proxy.cjs` | 191 | 9 |
-| `profile-diagnostics.cjs` | 190 | 10 |
-| `windows.cjs` | 188 | 12 |
-| `config-schema.cjs` | 185 | 15 |
-| `vision-grid.cjs` | 183 | 17 |
-| `self-test-footprint.cjs` | 181 | 19 |
-| `vision-frame.cjs` | 180 | 20 |
-| `ipc.cjs` | 172 | 28 |
-| `footprint.cjs` | 170 | 30 |
-| `supervision.cjs` | 169 | 31 |
-| `telemetry-redaction.cjs` | 169 | 31 |
-| `session-fsm.cjs` | 166 | 34 |
-| `settings-form-mapper.cjs` | 166 | 34 |
-| `config-walk.cjs` | 162 | 38 |
-| `profile-integrity.cjs` | 161 | 39 |
-| `self-test.cjs` | 158 | 42 |
-| `dashboard-telemetry.cjs` | 156 | 44 |
-| `geometry.cjs` | 154 | 46 |
-| `model.cjs` | 153 | 47 |
-| `identity-fields.cjs` | 145 | 55 |
-| `profile-paths.cjs` | 145 | 55 |
-| `self-test-fixtures.cjs` | 142 | 58 |
-| `types.cjs` | 138 | 62 |
-| `timeline-engine.cjs` | 133 | 67 |
-| `game-screen.cjs` | 132 | 68 |
-| `settings-ui-controller.cjs` | 131 | 69 |
-| `self-test-profiles.cjs` | 130 | 70 |
-| `saved-session.cjs` | 129 | 71 |
-| `session-cookies.cjs` | 127 | 73 |
-| `inspection.cjs` | 123 | 77 |
-| `settings-form-values.cjs` | 122 | 78 |
-| `screen-reader-pool.cjs` | 113 | 87 |
-| `identity.cjs` | 110 | 90 |
-| `config-validator.cjs` | 109 | 91 |
-| `profile-sweep.cjs` | 104 | 96 |
-| `timeline-query.cjs` | 102 | 98 |
-| `vision-pipeline.cjs` | 101 | 99 |
-| `plist.cjs` | 93 | 107 |
-| `timeline-transfer.cjs` | 93 | 107 |
-| `profile-removal.cjs` | 92 | 108 |
-| `recovery.cjs` | 89 | 111 |
-| `hardening.cjs` | 88 | 112 |
-| `profiles.cjs` | 85 | 115 |
-| `game-region.cjs` | 82 | 118 |
-| `target-identity.cjs` | 75 | 125 |
-| `session-window.cjs` | 71 | 129 |
-| `recovery-policy.cjs` | 66 | 134 |
-| `session-config.cjs` | 63 | 137 |
-| `display-geometry.cjs` | 60 | 140 |
-| `profile-repair.cjs` | 59 | 141 |
-| `layout.cjs` | 57 | 143 |
-| `session-events.cjs` | 57 | 143 |
-| `state.cjs` | 55 | 145 |
-| `shop-recovery.cjs` | 45 | 155 |
-| `window-arrange.cjs` | 40 | 160 |
-| `network.cjs` | 38 | 162 |
-| `preload.cjs` | 26 | 174 |
-| `errors.cjs` | 16 | 184 |
-
+| Module                       | Lines | Headroom to 200 |
+| ---------------------------- | ----: | --------------: |
+| `workspace.cjs`              |   200 |               0 |
+| `profile-manager.cjs`        |   198 |               2 |
+| `main.cjs`                   |   194 |               6 |
+| `proxy.cjs`                  |   191 |               9 |
+| `profile-diagnostics.cjs`    |   190 |              10 |
+| `windows.cjs`                |   188 |              12 |
+| `config-schema.cjs`          |   185 |              15 |
+| `vision-grid.cjs`            |   183 |              17 |
+| `self-test-footprint.cjs`    |   181 |              19 |
+| `vision-frame.cjs`           |   180 |              20 |
+| `ipc.cjs`                    |   172 |              28 |
+| `footprint.cjs`              |   170 |              30 |
+| `supervision.cjs`            |   169 |              31 |
+| `telemetry-redaction.cjs`    |   169 |              31 |
+| `session-fsm.cjs`            |   166 |              34 |
+| `settings-form-mapper.cjs`   |   166 |              34 |
+| `config-walk.cjs`            |   162 |              38 |
+| `profile-integrity.cjs`      |   161 |              39 |
+| `self-test.cjs`              |   158 |              42 |
+| `dashboard-telemetry.cjs`    |   156 |              44 |
+| `geometry.cjs`               |   154 |              46 |
+| `model.cjs`                  |   153 |              47 |
+| `identity-fields.cjs`        |   145 |              55 |
+| `profile-paths.cjs`          |   145 |              55 |
+| `self-test-fixtures.cjs`     |   142 |              58 |
+| `types.cjs`                  |   138 |              62 |
+| `timeline-engine.cjs`        |   133 |              67 |
+| `game-screen.cjs`            |   132 |              68 |
+| `settings-ui-controller.cjs` |   131 |              69 |
+| `self-test-profiles.cjs`     |   130 |              70 |
+| `saved-session.cjs`          |   129 |              71 |
+| `session-cookies.cjs`        |   127 |              73 |
+| `inspection.cjs`             |   123 |              77 |
+| `settings-form-values.cjs`   |   122 |              78 |
+| `screen-reader-pool.cjs`     |   113 |              87 |
+| `identity.cjs`               |   110 |              90 |
+| `config-validator.cjs`       |   109 |              91 |
+| `profile-sweep.cjs`          |   104 |              96 |
+| `timeline-query.cjs`         |   102 |              98 |
+| `vision-pipeline.cjs`        |   101 |              99 |
+| `plist.cjs`                  |    93 |             107 |
+| `timeline-transfer.cjs`      |    93 |             107 |
+| `profile-removal.cjs`        |    92 |             108 |
+| `recovery.cjs`               |    89 |             111 |
+| `hardening.cjs`              |    88 |             112 |
+| `profiles.cjs`               |    85 |             115 |
+| `game-region.cjs`            |    82 |             118 |
+| `target-identity.cjs`        |    75 |             125 |
+| `session-window.cjs`         |    71 |             129 |
+| `recovery-policy.cjs`        |    66 |             134 |
+| `session-config.cjs`         |    63 |             137 |
+| `display-geometry.cjs`       |    60 |             140 |
+| `profile-repair.cjs`         |    59 |             141 |
+| `layout.cjs`                 |    57 |             143 |
+| `session-events.cjs`         |    57 |             143 |
+| `state.cjs`                  |    55 |             145 |
+| `shop-recovery.cjs`          |    45 |             155 |
+| `window-arrange.cjs`         |    40 |             160 |
+| `network.cjs`                |    38 |             162 |
+| `preload.cjs`                |    26 |             174 |
+| `errors.cjs`                 |    16 |             184 |
 
 ### 2.5 Packaged build verification
 
-| Item | Value |
-| --- | --- |
-| Artifact | `poolside/release/Poolside-win32-x64/Poolside.exe` |
-| Built with | `electron-packager`, Electron v44.4.1, `--asar.unpackDir=node_modules` |
-| Self-test | **8 PASS, exit 0** |
-| Freshness | Rebuilt after the last change to `src/`; the only commits since are documentation, so the binary matches HEAD's source |
+| Item       | Value                                                                                                                  |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Artifact   | `poolside/release/Poolside-win32-x64/Poolside.exe`                                                                     |
+| Built with | `electron-packager`, Electron v44.4.1, `--asar.unpackDir=node_modules`                                                 |
+| Self-test  | **8 PASS, exit 0**                                                                                                     |
+| Freshness  | Rebuilt after the last change to `src/`; the only commits since are documentation, so the binary matches HEAD's source |
 
 Dropping `--asar.unpackDir` breaks native `sharp`/`tesseract.js` inside the package while the dev build hides the problem — which is why the packaged self-test is run rather than assumed.
 
@@ -1823,17 +1824,17 @@ Dropping `--asar.unpackDir` breaks native `sharp`/`tesseract.js` inside the pack
 
 The programmatic baseline built across **Milestones 0 through 5 is present on disk, committed, and structurally verified** on this machine. Each subsystem below is signed off against the tests that hold it, not against intent:
 
-| Milestone | Subsystem | Verified by |
-| --- | --- | --- |
-| **M0** | CommonJS main process, single IPC contract with one trust guard, error taxonomy, session-storage authority, Electron pinning, local-only telemetry rule, module ceiling and architecture guards | `architecture.test.cjs`, `model.test.cjs`, desktop IPC assertions |
-| **M1** | **Event-driven Session FSM** — `idle → launching → loading → ready → degraded → closing → closed`, single writer of session state, FSM-owned deadlines (30 s / 45 s), 50-transition history per session | `session-fsm.test.cjs` (deadline expiry, inapplicable-event refusal, terminal `closed`) |
-| **M1** | **Crash & Stall Supervisor** — `render-process-gone` / `unresponsive` handling with exponential backoff (1,500 ms base, doubling, 30 s cap, 3 attempts) and a health record that reaches the dashboard | `supervision.test.cjs` (259 lines, deterministic with injected timers) |
-| **M1** | **Profile Identity isolation** — per-session identity and route footprint applied in two halves, 5 CDP overrides, applied values read back out of the running page, isolation asserted between sessions | `identity.test.cjs`, `proxy.test.cjs`, `geometry.test.cjs`, desktop identity + footprint scenarios |
-| **M1** | **Profile lifecycle** — establish, generation tracking, integrity verdicts, quarantine-only repair, deletion refused while open, bounded diagnostics | `profile-*.test.cjs` (4 suites), desktop profile-lifecycle scenario |
-| **M2** | **Validation schemas** — one declaration of the configuration surface, a walker owning the errors-vs-dropped rule, the boundary validator, schema-first enforcement at both save and launch | `config.test.cjs` — declaration parity, storage round-trip, and a 21-value corpus asserted verdict-for-verdict against the legacy path |
-| **M3** | **Vision foundations** — capture coordinate ownership across four coordinate systems, clipping rules, achieved-density verification, structured recognition grid, 15-frame fixture corpus | `vision-pipeline.test.cjs`, `vision-corpus.test.cjs`, desktop canvas-capture scenario |
-| **M4** | **Telemetry platform** — diagnostic timeline compiled from two bounded histories, sensitivity-layered metrics, redaction plus a scan that refuses a dirty payload | `timeline-engine.test.cjs`, `dashboard-telemetry.test.cjs`, desktop diagnostics scenario |
-| **M5** | **Metadata form mappers** — settings controls generated from the configuration schema, typed form-input pipeline, per-field refusals, masked credential handling | `settings-form.test.cjs`, desktop settings-contract scenario |
+| Milestone | Subsystem                                                                                                                                                                                               | Verified by                                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **M0**    | CommonJS main process, single IPC contract with one trust guard, error taxonomy, session-storage authority, Electron pinning, local-only telemetry rule, module ceiling and architecture guards         | `architecture.test.cjs`, `model.test.cjs`, desktop IPC assertions                                                                      |
+| **M1**    | **Event-driven Session FSM** — `idle → launching → loading → ready → degraded → closing → closed`, single writer of session state, FSM-owned deadlines (30 s / 45 s), 50-transition history per session | `session-fsm.test.cjs` (deadline expiry, inapplicable-event refusal, terminal `closed`)                                                |
+| **M1**    | **Crash & Stall Supervisor** — `render-process-gone` / `unresponsive` handling with exponential backoff (1,500 ms base, doubling, 30 s cap, 3 attempts) and a health record that reaches the dashboard  | `supervision.test.cjs` (259 lines, deterministic with injected timers)                                                                 |
+| **M1**    | **Profile Identity isolation** — per-session identity and route footprint applied in two halves, 5 CDP overrides, applied values read back out of the running page, isolation asserted between sessions | `identity.test.cjs`, `proxy.test.cjs`, `geometry.test.cjs`, desktop identity + footprint scenarios                                     |
+| **M1**    | **Profile lifecycle** — establish, generation tracking, integrity verdicts, quarantine-only repair, deletion refused while open, bounded diagnostics                                                    | `profile-*.test.cjs` (4 suites), desktop profile-lifecycle scenario                                                                    |
+| **M2**    | **Validation schemas** — one declaration of the configuration surface, a walker owning the errors-vs-dropped rule, the boundary validator, schema-first enforcement at both save and launch             | `config.test.cjs` — declaration parity, storage round-trip, and a 21-value corpus asserted verdict-for-verdict against the legacy path |
+| **M3**    | **Vision foundations** — capture coordinate ownership across four coordinate systems, clipping rules, achieved-density verification, structured recognition grid, 15-frame fixture corpus               | `vision-pipeline.test.cjs`, `vision-corpus.test.cjs`, desktop canvas-capture scenario                                                  |
+| **M4**    | **Telemetry platform** — diagnostic timeline compiled from two bounded histories, sensitivity-layered metrics, redaction plus a scan that refuses a dirty payload                                       | `timeline-engine.test.cjs`, `dashboard-telemetry.test.cjs`, desktop diagnostics scenario                                               |
+| **M5**    | **Metadata form mappers** — settings controls generated from the configuration schema, typed form-input pipeline, per-field refusals, masked credential handling                                        | `settings-form.test.cjs`, desktop settings-contract scenario                                                                           |
 
 ### 3.2 Development phase status — stated precisely
 
@@ -1843,24 +1844,30 @@ Two qualifications belong in a signed record rather than being left to inference
 
 **1. "Complete" applies to the code that exists, not to every criterion those milestones named.** The following remain opens, each already tracked as a row in `docs/architecture.md` §13 and §5.4 of `PROJECT_HANDOFF.md`:
 
-| Remainder | Why it is not closed |
-| --- | --- |
-| Labelled frame corpus (≥ 300 frames) and measured recognition accuracy | ADR-0002's criterion 1 is unmet; the 15-frame corpus is derived layouts, not ground truth, and ADR-0002 correctly remains `Accepted (provisional)` |
-| Recognition grid wired into the classifier | Blocked on the measurement above — changing what the classifier reads without it would be unjustified |
-| Region ranking validated against the live site | Needs one live pass from the user |
-| Durable logs, diagnostics bundle file, frame timings, crash reporting to disk | M4 remainder; the collation, ordering and redaction floor they assemble through already exist and are tested |
-| Design tokens, component kit, i18n + extraction test, full accessibility audit, command palette, per-session detail view, click→paint budget | M5's acceptance criteria are **not** met and its exit gate (*a first-time user opens, arranges and understands 8 sessions unaided*) is unverified — it needs a human, not a test |
-| Account-override UI | The mapper and controller support the section and it is tested; no view renders it yet |
-| Fault injection, soak results, reproducible build, signing/updater, threat model/SBOM, performance budgets | Milestones M6–M9, not started |
-| CI | Needs a GitHub remote (a hand-off item) |
+| Remainder                                                                                                                                    | Why it is not closed                                                                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Labelled frame corpus (≥ 300 frames) and measured recognition accuracy                                                                       | ADR-0002's criterion 1 is unmet; the 15-frame corpus is derived layouts, not ground truth, and ADR-0002 correctly remains `Accepted (provisional)`                               |
+| Recognition grid wired into the classifier                                                                                                   | Blocked on the measurement above — changing what the classifier reads without it would be unjustified                                                                            |
+| Region ranking validated against the live site                                                                                               | Needs one live pass from the user                                                                                                                                                |
+| Durable logs, diagnostics bundle file, frame timings, crash reporting to disk                                                                | M4 remainder; the collation, ordering and redaction floor they assemble through already exist and are tested                                                                     |
+| Design tokens, component kit, i18n + extraction test, full accessibility audit, command palette, per-session detail view, click→paint budget | M5's acceptance criteria are **not** met and its exit gate (_a first-time user opens, arranges and understands 8 sessions unaided_) is unverified — it needs a human, not a test |
+| Account-override UI                                                                                                                          | The mapper and controller support the section and it is tested; no view renders it yet                                                                                           |
+| Fault injection, soak results, reproducible build, signing/updater, threat model/SBOM, performance budgets                                   | Milestones M6–M9, not started                                                                                                                                                    |
+| CI                                                                                                                                           | Needs a GitHub remote (a hand-off item)                                                                                                                                          |
 
 **2. Verification is 100% green for what is built and tested — and that is a different claim from "the system is 100% verified."** No accuracy threshold has been measured against labelled data, no latency series has been recorded on a reference machine, and no soak has been run. Those are properties of the whole product rather than of the code, and they are unmeasured rather than passing.
 
-### 3.3 Scope note on downstream use
+### 3.3 Unfinished downstream integration
 
-The platform's own scope boundary is recorded, element by element, in `BOUNDARIES.md` §3.1–3.8 and `docs/adr/0011-operational-scope-boundaries.md` §11.1–11.8, and it did not change for this sign-off. What this document certifies is the substrate: isolated per-account sessions, an honest lifecycle, measured configuration, coordinate ownership, and a telemetry layer that refuses to export what it should not. Input emission into a live game surface, coordination between accounts, and match-outcome manipulation are not built, not verified, and not mapped — the read-only integration surface is documented in §5.3 of `PROJECT_HANDOFF.md`, and the injection points are not.
+The unfinished game-facing work is recorded in `INCOMPLETE_WORK.md` and
+`docs/adr/0011-game-automation-gaps.md`. This document certifies the implemented substrate: isolated
+per-account sessions, lifecycle management, measured configuration, coordinate ownership, and
+screened telemetry. Input emission, account coordination, and match completion are not built or
+verified; the current read-only integration surface is documented in §5.3 of `PROJECT_HANDOFF.md`.
 
-An external layer that **observes** — reading session state, health, telemetry, diagnostics payloads, and coordinate/geometry output — has a documented, tested, contract-stable surface to build against. An external layer that **acts on the game** is a decision for whoever writes and operates it, and I have not built it or provided the map for it.
+The observation layer — session state, health, telemetry, diagnostics payloads, and
+coordinate/geometry output — has a documented and tested surface. The game-action layer and its
+integration map remain to be implemented.
 
 ### 3.4 Reproducing this document's results
 
@@ -1880,4 +1887,4 @@ Operational notes for whoever runs this next: a stray `electron.exe` holds the s
 
 ---
 
-*Signed off at `bf28e9564c962e40500005dc930c4b00892de5c1` — track the hash, not the date. This document was produced from that tree and committed immediately afterwards, so `git log` shows a HEAD one commit ahead of the hash above; no source, test or packaging input changed in the commit that added this file.*
+_Signed off at `bf28e9564c962e40500005dc930c4b00892de5c1` — track the hash, not the date. This document was produced from that tree and committed immediately afterwards, so `git log` shows a HEAD one commit ahead of the hash above; no source, test or packaging input changed in the commit that added this file._

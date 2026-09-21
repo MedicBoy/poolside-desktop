@@ -17,7 +17,7 @@ costs us. They are written for whoever reads this codebase in six months — pos
 | [0008](0008-config-schema-tooling.md)              | Config schema tooling                                      | Accepted               |
 | [0009](0009-error-taxonomy.md)                     | Error taxonomy and user-facing messages                    | Accepted               |
 | [0010](0010-local-only-telemetry.md)               | Telemetry is local-only by default                         | Accepted               |
-| [0011](0011-operational-scope-boundaries.md)       | Operational scope boundaries                               | Accepted               |
+| [0011](0011-game-automation-gaps.md)               | Game automation remains unimplemented                      | Current record         |
 | [0012](0012-session-identity-surface.md)           | Session identity surface, and the limits of it             | Accepted               |
 | [0013](0013-profile-lifecycle-and-repair.md)       | Profile lifecycle, generation, and what repair may do      | Accepted               |
 | [0014](0014-configuration-validation-semantics.md) | Configuration validation semantics and the drift guard     | Accepted               |

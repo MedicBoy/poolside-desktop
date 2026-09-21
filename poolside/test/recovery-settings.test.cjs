@@ -11,7 +11,9 @@ test('reliability preferences keep safe defaults and use account values', () => 
     monitorIntervalSeconds: MONITOR_INTERVAL_DEFAULT
   });
   assert.deepEqual(
-    resolveRecovery({ recovery: { shopReturnDelaySeconds: 9, backgroundThrottling: true, repaintMitigation: false, monitorIntervalSeconds: 45 } }),
+    resolveRecovery({
+      recovery: { shopReturnDelaySeconds: 9, backgroundThrottling: true, repaintMitigation: false, monitorIntervalSeconds: 45 }
+    }),
     { shopReturnDelaySeconds: 9, backgroundThrottling: true, repaintMitigation: false, monitorIntervalSeconds: 45 }
   );
   // A malformed interval falls back rather than reaching the scheduler.

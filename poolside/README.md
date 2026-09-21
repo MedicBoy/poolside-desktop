@@ -1,6 +1,6 @@
 # Poolside — session preview
 
-A Windows desktop foundation for the requested 8 Ball Pool tool. This build manages isolated browser sessions. **Automated coin transfers, opponent recognition, VPN configuration, and identity spoofing are not implemented.** The overall version-one goal is not complete.
+A Windows desktop foundation for the requested 8 Ball Pool tool. This build manages isolated browser sessions. **Automated coin transfers, opponent recognition, VPN configuration, and per-session device-fingerprint controls are not implemented.** The overall version-one goal is not complete.
 
 ## Run
 
@@ -13,7 +13,7 @@ Open `release/Poolside-win32-x64/Poolside.exe` after packaging, or use `npm inst
 3. Verify that opening and signing into the second account does not log out the first.
 4. Report any login failure or browser-compatibility error. Do not share passwords, cookies, or tokens.
 
-The app reports a window as open, not an account as authenticated. Authentication and opponent detection are not verified in this build. Google or other providers may reject embedded browsers; those cases must be tested without bypassing their protections.
+The app reports a window as open, not an account as authenticated. Authentication and opponent detection are not verified in this build. Embedded-browser compatibility and authentication-challenge handling still require implementation and testing.
 
 If signing in lands on the web shop, Poolside now checks for the visible English shop headings on the official site. After they remain present for five seconds, it navigates the same window back to the game once per window opening. A visible password field, dialog, or large game canvas/iframe prevents this detection. This is a text-based heuristic, not authenticated-login detection. Different shop wording or layouts may require the manual **Return to game** control. The manual control also disables further automatic returns for that window. Avoid using it during a match.
 
@@ -92,7 +92,7 @@ the test suite `self-test.cjs`. Shared shapes are declared in `types.cjs`.
 | `docs/release-checklist.md` | Source, package, and clean-machine checks required before a release        |
 | `docs/adr/`                 | Twelve architectural decisions, each with its costs and how it is enforced |
 | `CONTRIBUTING.md`           | The gate, branching, commit format, module rules, definition of done       |
-| `../BOUNDARIES.md`          | What is in scope, what needs a hand-off, what is out of scope              |
+| `../INCOMPLETE_WORK.md`     | Remaining implementation and external verification work                    |
 
 | Command                           | What it does                                                                        |
 | --------------------------------- | ----------------------------------------------------------------------------------- |

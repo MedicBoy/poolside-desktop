@@ -6,16 +6,16 @@ This document describes the security and privacy properties Poolside relies on t
 and review aid, not a promise that a Windows PC compromised by malware can be made safe by one
 application.
 
-## Product boundary
+## Current product surface
 
 Poolside is a local Windows workspace for separate, persistent browser sessions. A person signs in
 inside the corresponding browser window. Poolside does not display, export, or import passwords,
 cookies, tokens, hidden account identifiers, or browser-page text.
 
-The following are out of scope and are recorded in [ADR-0011](adr/0011-operational-scope-boundaries.md):
-input generation into game pages, multi-account match coordination, match-outcome workflows,
-detection-evasion fingerprint spoofing, route selection for matchmaking manipulation, and credential
-import/export.
+The following capabilities are not implemented and are recorded in
+[ADR-0011](adr/0011-game-automation-gaps.md): input generation into game pages, multi-account match
+coordination, match-outcome workflows, device-fingerprint controls, matchmaking-aware route selection,
+and external credential import/export.
 
 ## Assets worth protecting
 
@@ -60,7 +60,7 @@ login providers, and website risks are outside Poolside's ability to control.
 | Diagnostics or activity history exposes identity or secrets         | Activity persistence redacts account labels, paths, IPs, and token-shaped strings; diagnostics use a separate anonymising projection and final secret scan                | Pattern scans are a floor, not proof; never export diagnostics with sensitive page content visible                                      |
 | Capture Lab stores a sensitive sign-in screen                       | Capture requires an explicit user confirmation; review and deletion are available; OCR returns only matched rule phrases; the manifest has a fixed metadata allowlist     | The user must still inspect the screen first. A capture is not automatically safe because it is local                                   |
 | Corrupt profile/session data loses access                           | Damaged carry-over is quarantined rather than silently deleted; profile deletion needs native confirmation and is refused while open                                      | Persistent web storage can still expire or be invalidated by the site, requiring a normal sign-in                                       |
-| Tampered configuration produces risky browser behavior              | Settings and account overrides pass schema validation before use; unsupported fields are refused or ignored with an activity warning                                      | Normal browser preferences do not guarantee any particular website behavior                                                             |
+| Tampered configuration produces invalid browser behavior            | Settings and account overrides pass schema validation before use; unsupported fields are rejected or ignored with an activity warning                                     | Normal browser preferences do not guarantee any particular website behavior                                                             |
 | Malicious package or dependency                                     | Pinned Node dependencies, static architecture checks, test/type/lint gates, and a local package self-test                                                                 | Portable release folders are not yet code-signed or independently clean-machine validated                                               |
 
 ## Network behavior

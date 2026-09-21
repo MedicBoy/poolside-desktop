@@ -1,14 +1,14 @@
 # POOLSIDE — ENGINEERING ROADMAP & BLUEPRINT
 
-| | |
-| --- | --- |
-| **Document** | Poolside Engineering Roadmap |
-| **Version** | 1.0 (baseline) |
-| **Baseline commit** | `3834705` / tag `v0.1.0-session-foundation` |
-| **Baseline date** | 2026-09-17 |
-| **Status** | Draft for approval — no milestone below M0 is started |
-| **Scope owner** | Project owner |
-| **Engineering** | Project owner + Hermes |
+|                     |                                                       |
+| ------------------- | ----------------------------------------------------- |
+| **Document**        | Poolside Engineering Roadmap                          |
+| **Version**         | 1.0 (baseline)                                        |
+| **Baseline commit** | `3834705` / tag `v0.1.0-session-foundation`           |
+| **Baseline date**   | 2026-09-17                                            |
+| **Status**          | Draft for approval — no milestone below M0 is started |
+| **Scope owner**     | Project owner                                         |
+| **Engineering**     | Project owner and contributors                        |
 
 ---
 
@@ -22,47 +22,32 @@ criteria run green on a clean checkout.
 Effort figures are **estimates in engineer-weeks (ew)**, one competent generalist, and are given as
 ranges because the game-facing surface is genuinely unknown until instrumented.
 
-### 0.1 Scope boundary (read this first)
+### 0.1 Product coverage
 
-**In scope:** the session/profile platform, the vision & state-recognition engine, the
-configuration system, UI/UX, diagnostics and observability, reliability engineering, security
-hardening, release engineering, performance and scale.
+The implemented roadmap covers the session/profile platform, vision and state recognition,
+configuration, UI/UX, diagnostics, reliability, security, release engineering, performance, and
+scale. Game input, multi-account matchmaking coordination, match completion, device-fingerprint
+controls, and transfer accounting are unfinished and tracked in `INCOMPLETE_WORK.md` and ADR-0011.
 
-**Out of scope — permanently, and by explicit decision:**
-
-- Emitting synthetic input into the game surface (automated clicking/dragging/keying of gameplay)
-- Coordinating multiple accounts (synchronised queueing, session orchestration for mutual matching)
-- Any deliberate-forfeit or match-outcome manipulation
-- Browser/device identity spoofing intended to defeat the game's own account or device detection
-- Anything whose purpose is to move in-game currency between accounts
-
-Rationale, stated once so it is not relitigated: that set is a bot that farms a live multiplayer
-game's monetised currency, it breaches the operator's terms, and it puts the user's accounts at
-ban risk. It is not a technical limitation and it does not change with scale, distribution model,
-or whether the user sells anything. Everything **else** in this document is fair game and is the
-overwhelming majority of the work.
-
-The platform described here is a legitimate, genuinely ambitious product in its own right: a
-**multi-session browser orchestration workspace with a computer-vision screen-state engine**. That
-is what we are building, and we will build it to a standard the commercial antidetect/session-
-management market does not currently meet.
+The implemented platform is a **multi-session browser orchestration workspace with a
+computer-vision screen-state engine**. It is the foundation for the remaining work.
 
 ### 0.2 Definition of "above industry standard" — made falsifiable
 
 Ambition is worthless unless it is measurable. The target product must hold all of the following,
 on a 4-core/16 GB reference machine, with **8 concurrent sessions open**:
 
-| Metric | Target |
-| --- | --- |
-| Cold start to interactive dashboard | ≤ 1.5 s p95 |
-| Dashboard input latency (click → paint) | ≤ 100 ms p95 |
-| Capture → classified screen state | ≤ 800 ms p95 |
-| Per-session resident memory (steady state) | ≤ 220 MB, no monotonic growth over 8 h soak |
-| Screen-state accuracy on the labelled corpus | ≥ 97 % top-1, ≥ 0.90 macro-F1 |
-| `unknown` rate on an unseen valid screen | ≤ 5 % (and never a wrong confident answer) |
-| Crash-free session-hours | ≥ 99.5 % over a 72 h soak |
-| Test suite wall-clock | ≤ 3 min for unit; ≤ 12 min for full CI |
-| Reproducible build | Byte-identical `app.asar` from the same commit + lockfile |
+| Metric                                       | Target                                                    |
+| -------------------------------------------- | --------------------------------------------------------- |
+| Cold start to interactive dashboard          | ≤ 1.5 s p95                                               |
+| Dashboard input latency (click → paint)      | ≤ 100 ms p95                                              |
+| Capture → classified screen state            | ≤ 800 ms p95                                              |
+| Per-session resident memory (steady state)   | ≤ 220 MB, no monotonic growth over 8 h soak               |
+| Screen-state accuracy on the labelled corpus | ≥ 97 % top-1, ≥ 0.90 macro-F1                             |
+| `unknown` rate on an unseen valid screen     | ≤ 5 % (and never a wrong confident answer)                |
+| Crash-free session-hours                     | ≥ 99.5 % over a 72 h soak                                 |
+| Test suite wall-clock                        | ≤ 3 min for unit; ≤ 12 min for full CI                    |
+| Reproducible build                           | Byte-identical `app.asar` from the same commit + lockfile |
 
 ---
 
@@ -93,26 +78,26 @@ M0 → M1 → M3 → M6 → M8; M2, M4, M5, M7 parallelise.
 
 ### 2.1 Verified capability (executed, not claimed)
 
-| Component | State | Evidence |
-| --- | --- | --- |
-| Session isolation | Works | `npm run test:desktop` — separate cookie jars, cookies survive window reopen |
-| Session persistence | Works | `npm run test:persistence` — seed + verify across real process restart |
-| IPC hardening | Works | `trusted()` validates sender + frame + frame URL |
-| Workspace model | Works | Strict UUID/duplicate/single-receiver validation, atomic write, read-only fallback |
-| Shop auto-return | Works (fixture) | `ShopReturnGate` 5 s stable, fires once, cancellable |
-| Screen recognition | Partial | 8/8 tests, but 7 positive fixtures, 0 negatives, `loading` deliberately `unknown` |
-| IP diagnostics | Works | ipify through the account's own session, credential-free |
-| UI | Functional | Single-view dashboard, CSP-locked, no design system, no a11y audit |
+| Component           | State           | Evidence                                                                           |
+| ------------------- | --------------- | ---------------------------------------------------------------------------------- |
+| Session isolation   | Works           | `npm run test:desktop` — separate cookie jars, cookies survive window reopen       |
+| Session persistence | Works           | `npm run test:persistence` — seed + verify across real process restart             |
+| IPC hardening       | Works           | `trusted()` validates sender + frame + frame URL                                   |
+| Workspace model     | Works           | Strict UUID/duplicate/single-receiver validation, atomic write, read-only fallback |
+| Shop auto-return    | Works (fixture) | `ShopReturnGate` 5 s stable, fires once, cancellable                               |
+| Screen recognition  | Partial         | 8/8 tests, but 7 positive fixtures, 0 negatives, `loading` deliberately `unknown`  |
+| IP diagnostics      | Works           | ipify through the account's own session, credential-free                           |
+| UI                  | Functional      | Single-view dashboard, CSP-locked, no design system, no a11y audit                 |
 
 ### 2.2 Open defects carried into this roadmap
 
-| ID | Defect | Milestone that closes it |
-| --- | --- | --- |
-| D3 | `saved-session.cjs` keeps two copies of the same cookies; plist resurrects rotated session cookies | M1 |
-| D4 | `game-region.cjs` demands **exactly one** visible canvas in 1.3–1.8 aspect; lobby background is also canvas → `null` | M3 |
-| D5 | `classifyText` is an AND of exact English keywords; single copy change → silent `unknown` | M3 |
-| D6 | New Tesseract worker per inspection; `let inspecting` is a global lock across all accounts | M3 |
-| D7 | `arrange()` permanently lowers window minimum size to 420×360 | M1 |
+| ID  | Defect                                                                                                               | Milestone that closes it |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| D3  | `saved-session.cjs` keeps two copies of the same cookies; plist resurrects rotated session cookies                   | M1                       |
+| D4  | `game-region.cjs` demands **exactly one** visible canvas in 1.3–1.8 aspect; lobby background is also canvas → `null` | M3                       |
+| D5  | `classifyText` is an AND of exact English keywords; single copy change → silent `unknown`                            | M3                       |
+| D6  | New Tesseract worker per inspection; `let inspecting` is a global lock across all accounts                           | M3                       |
+| D7  | `arrange()` permanently lowers window minimum size to 420×360                                                        | M1                       |
 
 ### 2.3 Capability gaps
 
@@ -141,13 +126,15 @@ No accessibility audit. No performance budgets. No soak testing. No threat model
    bounded, evidence-based recovery.
 8. **Release engineering** — reproducible builds, signing, versioned updates, rollback.
 
-### 3.2 Non-goals
+### 3.2 Unfinished capabilities
 
-- No synthetic input into the game surface (§0.1).
-- No multi-account coordination (§0.1).
-- No identity spoofing to defeat detection (§0.1).
-- No cloud account storage, no token importing, no remote code/config loading, no bundled VPN.
-- No attempt to bypass a provider's bot protections or authentication challenges.
+- Game-surface input emission.
+- Multi-account matchmaking coordination.
+- Per-session device-fingerprint controls.
+- Cloud account storage, external token import, remote configuration, and bundled VPN support.
+- Authentication-challenge handling.
+
+Implementation requirements and completion evidence are tracked in `INCOMPLETE_WORK.md`.
 
 ### 3.3 Success metrics
 
@@ -181,6 +168,7 @@ than live conditions; time-to-diagnose a reported failure ≤ 10 minutes from a 
 ```
 
 **Hard rules**
+
 - `main.cjs` (373 lines, 21 functions today) becomes the composition root only; every concern
   moves to a module with a single exported surface. Cap: **no module over 200 lines**, enforced in
   CI.
@@ -230,7 +218,7 @@ owns user settings (JSON sidecar, atomic, versioned, migratable); **secrets** go
 
 ## 5. Milestones
 
-### M0 — Engineering foundation · **2–3 ew** · *critical path*
+### M0 — Engineering foundation · **2–3 ew** · _critical path_
 
 **Objective.** Make every later change cheap, reviewable and mechanically verified.
 
@@ -240,6 +228,7 @@ Actions CI running lint → typecheck → unit → packaged smoke on Windows; `C
 `docs/adr/` with the first six ADRs (§8); module-size and dependency-boundary checks in CI.
 
 **Acceptance criteria.**
+
 1. `npm run lint && npm run typecheck && npm test` is green from a clean `npm ci`.
 2. CI is green on the baseline commit and reports its own duration.
 3. `tsc --checkJs` covers 100 % of `src/`; no `any` escapes without an inline justification.
@@ -249,18 +238,19 @@ Actions CI running lint → typecheck → unit → packaged smoke on Windows; `C
 
 ---
 
-### M1 — Session & profile platform v2 · **4–5 ew** · *critical path*
+### M1 — Session & profile platform v2 · **4–5 ew** · _critical path_
 
 **Objective.** Turn "open a window on a session" into a supervised, configurable, recoverable
 session lifecycle.
 
 **Deliverables.**
+
 - **Session FSM**: `idle → launching → loading → ready → degraded → closing → closed`, with every
   transition evented and every timeout owned by the FSM rather than by ad-hoc `setTimeout`s.
 - **Profile manager**: creation, deletion, quota, corruption detection, repair, with the
   authoritative-store decision from ADR-004 enforced in code (**closes D3**).
 - **Identity config**: per-session UA, locale, timezone, viewport, color scheme, storage quota,
-  applied through Electron's supported knobs. Unsupported knobs are *not* exposed as pretend
+  applied through Electron's supported knobs. Unsupported knobs are _not_ exposed as pretend
   switches.
 - **Network policy**: per-session `direct | proxy`, proxy connectivity pre-check, and an egress
   report that states what the endpoint observed — never a claim about location.
@@ -270,6 +260,7 @@ session lifecycle.
   recovery with backoff, and a per-session health record.
 
 **Acceptance criteria.**
+
 1. 8 sessions launch, reach `ready`, and close cleanly; each transitions through the FSM with no
    orphaned timers or listeners (asserted by a leak counter).
 2. Killing a renderer process externally returns that session to `ready` within 10 s without
@@ -284,7 +275,7 @@ session lifecycle.
 
 ---
 
-### M2 — Configuration system v2 · **3 ew** · *parallel*
+### M2 — Configuration system v2 · **3 ew** · _parallel_
 
 **Objective.** Every behaviour-influencing value is typed, validated, versioned, migratable,
 importable and exportable.
@@ -296,6 +287,7 @@ ordering/pinning; full settings UI bound to the schema; "reset section to defaul
 diff view.
 
 **Acceptance criteria.**
+
 1. Round-trip: export → import → byte-identical effective config.
 2. A v1 workspace file loads into v2 through a migration test that asserts exact field mapping.
 3. Hand-editing a config value to an out-of-range type produces a precise, non-fatal error naming
@@ -308,12 +300,13 @@ paths.
 
 ---
 
-### M3 — Vision & state recognition engine v2 · **6–7 ew** · *critical path*
+### M3 — Vision & state recognition engine v2 · **6–7 ew** · _critical path_
 
 **Objective.** Replace an unmeasured keyword heuristic with a calibrated, offline, regression-
 tested recognition engine.
 
 **Deliverables.**
+
 - **Capture pipeline**: viewport location that handles multiple candidate surfaces by scoring
   (largest clipped-to-viewport landscape element, ≥ 50 % viewport width), returning
   `{ok:false, reason, candidates[]}` instead of bare `null` (**closes D4**).
@@ -331,6 +324,7 @@ tested recognition engine.
 - **Label tooling**: a small local labelling/annotation utility so new frames are cheap to add.
 
 **Acceptance criteria.**
+
 1. Macro-F1 ≥ 0.90 and top-1 accuracy ≥ 97 % on a **held-out** split of the corpus.
 2. A blank or transition frame never produces a confident non-`unknown` answer (explicit negative
    test set).
@@ -339,13 +333,13 @@ tested recognition engine.
 4. Recognition of a screen in 8 concurrent sessions: every result ≤ 800 ms p95, no cross-session
    interference.
 5. Removing the Sharp contrast pass or the bottom-band fallback degrades accuracy measurably —
-   i.e. the harness can *detect* a regression in each pipeline stage.
+   i.e. the harness can _detect_ a regression in each pipeline stage.
 
 **Exit gate.** Recognition accuracy is a number on a dashboard, not an opinion.
 
 ---
 
-### M4 — Diagnostics & observability · **3 ew** · *parallel*
+### M4 — Diagnostics & observability · **3 ew** · _parallel_
 
 **Objective.** Make every failure explicable from data, without touching the machine it happened on.
 
@@ -358,6 +352,7 @@ no credentials, no IPs, no account names); an in-app timeline view; opt-in crash
 local file only.
 
 **Acceptance criteria.**
+
 1. A diagnostics bundle from a repro captures the sequence leading to it — validated against three
    scripted failure scenarios (renderer kill, load failure, recognition failure).
 2. Bundle generation is verified to contain zero secrets by an automated scanner test.
@@ -369,7 +364,7 @@ local file only.
 
 ---
 
-### M5 — UI/UX v2 · **4 ew** · *parallel*
+### M5 — UI/UX v2 · **4 ew** · _parallel_
 
 **Objective.** Make the quality of the interface match the quality of the engine.
 
@@ -381,6 +376,7 @@ config schema; command palette + hotkeys for session and layout operations; a re
 that names the failing component and the next action.
 
 **Acceptance criteria.**
+
 1. Every interactive element is reachable and operable by keyboard alone (automated a11y audit
    green).
 2. Contrast and focus checks pass on all views in both themes.
@@ -392,7 +388,7 @@ documentation.
 
 ---
 
-### M6 — Reliability engineering · **3 ew** · *critical path*
+### M6 — Reliability engineering · **3 ew** · _critical path_
 
 **Objective.** Prove the product survives things going wrong, rather than assuming it.
 
@@ -403,6 +399,7 @@ ceilings with graceful degradation); 72 h soak with metrics; documented recovery
 detection → action → evidence).
 
 **Acceptance criteria.**
+
 1. Every fault in the injection catalogue is detected within 10 s and either recovered or surfaced
    as an actionable state — no silent hangs.
 2. 72 h soak, 8 sessions: crash-free ≥ 99.5 %, no unbounded growth, no orphaned processes on exit.
@@ -413,7 +410,7 @@ detection → action → evidence).
 
 ---
 
-### M7 — Security & privacy hardening · **3 ew** · *parallel*
+### M7 — Security & privacy hardening · **3 ew** · _parallel_
 
 **Objective.** Replace "carefully written" with "threat-modelled and verified".
 
@@ -425,6 +422,7 @@ in CI, lockfile integrity, pinned transitive deps, SBOM generation); automated s
 logs and diagnostics; a documented data-retention and deletion story.
 
 **Acceptance criteria.**
+
 1. Every trust boundary has at least one test that attempts the crossing and asserts refusal.
 2. CSP is asserted by test on every renderer; no `unsafe-inline` anywhere.
 3. `npm audit` and SBOM generation run in CI; a seeded vulnerable dependency fails the build.
@@ -435,7 +433,7 @@ logs and diagnostics; a documented data-retention and deletion story.
 
 ---
 
-### M8 — Release engineering · **3 ew** · *critical path*
+### M8 — Release engineering · **3 ew** · _critical path_
 
 **Objective.** Ship builds that are reproducible, signed, updatable and reversible.
 
@@ -446,6 +444,7 @@ automation; changelog generation from conventional commits; a packaging test mat
 deps (`sharp`, tesseract data) load from `app.asar.unpacked` in a clean VM.
 
 **Acceptance criteria.**
+
 1. Two CI runs of the same commit produce identical `app.asar` hashes.
 2. Update path verified end-to-end in a clean VM: install → update → rollback.
 3. Packaged self-test passes in a clean VM with no dev toolchain present.
@@ -456,7 +455,7 @@ deps (`sharp`, tesseract data) load from `app.asar.unpacked` in a clean VM.
 
 ---
 
-### M9 — Performance & scale · **2–3 ew** · *parallel*
+### M9 — Performance & scale · **2–3 ew** · _parallel_
 
 **Objective.** Hit §0.2's numbers and prove they hold under load.
 
@@ -467,6 +466,7 @@ freeze-adjacent flags already in `main.cjs` become a documented, switchable poli
 hardcoded); 16-session stretch test.
 
 **Acceptance criteria.**
+
 1. All §0.2 metrics met on the reference machine, measured by the harness, in CI-archived results.
 2. 16 sessions open with graceful degradation rather than failure, documented thresholds.
 3. Cold start ≤ 1.5 s p95 with 8 configured sessions.
@@ -508,35 +508,35 @@ default.
 
 ## 7. Risk register
 
-| # | Risk | P | Impact | Mitigation |
-| --- | --- | --- | --- | --- |
-| R1 | Game UI changes silently break recognition | High | High | Corpus + CI thresholds + `unknown`-first design; a copy change must degrade, never mislead |
-| R2 | Electron/Chromium pin drift breaks behaviour (the zero-window teardown class of bug) | Medium | High | Pin exact version, ADR it, smoke-test windows lifecycle per upgrade, test the upgrade in a branch |
-| R3 | Microphone-thin evidence for live behaviour (7 positive fixtures, 0 negatives) | High | High | M3 corpus ≥ 300 labelled frames with held-out split before any new game-facing logic |
-| R4 | Native deps (`sharp`, tesseract data) break only in packaged builds | Medium | Medium | M8 clean-VM packaging matrix; packaging test in CI from M0 |
-| R5 | Resource exhaustion with many sessions | Medium | Medium | M6 governor, M9 16-session stretch, memory ceilings |
-| R6 | Repo lives inside a OneDrive-synced folder | Medium | Medium | Keep `.git` operations short; document lock failures; consider a non-synced clone as the working repo |
-| R7 | Bus factor of one | High | High | ADRs, runbooks, exhaustive CI, diagnostics bundles — knowledge that survives is written down |
-| R8 | Scope creep back toward the excluded automation set | Medium | High | §0.1 is a decision, not a default; it is re-read at every milestone gate |
-| R9 | Ban/ToS consequences of any game-facing automation the owner pursues elsewhere | Medium | High | Documented and out of our scope; the platform's diagnostics remain useful without it |
-| R10 | Silent accuracy rot (tests green, live wrong) | Medium | High | Held-out split, negative fixtures, periodic scripted live validation with recorded evidence |
+| #   | Risk                                                                                 | P      | Impact | Mitigation                                                                                            |
+| --- | ------------------------------------------------------------------------------------ | ------ | ------ | ----------------------------------------------------------------------------------------------------- |
+| R1  | Game UI changes silently break recognition                                           | High   | High   | Corpus + CI thresholds + `unknown`-first design; a copy change must degrade, never mislead            |
+| R2  | Electron/Chromium pin drift breaks behaviour (the zero-window teardown class of bug) | Medium | High   | Pin exact version, ADR it, smoke-test windows lifecycle per upgrade, test the upgrade in a branch     |
+| R3  | Microphone-thin evidence for live behaviour (7 positive fixtures, 0 negatives)       | High   | High   | M3 corpus ≥ 300 labelled frames with held-out split before any new game-facing logic                  |
+| R4  | Native deps (`sharp`, tesseract data) break only in packaged builds                  | Medium | Medium | M8 clean-VM packaging matrix; packaging test in CI from M0                                            |
+| R5  | Resource exhaustion with many sessions                                               | Medium | Medium | M6 governor, M9 16-session stretch, memory ceilings                                                   |
+| R6  | Repo lives inside a OneDrive-synced folder                                           | Medium | Medium | Keep `.git` operations short; document lock failures; consider a non-synced clone as the working repo |
+| R7  | Bus factor of one                                                                    | High   | High   | ADRs, runbooks, exhaustive CI, diagnostics bundles — knowledge that survives is written down          |
+| R8  | Unfinished automation work is mistaken for completed functionality                   | Medium | High   | Track each missing component and its acceptance evidence in `INCOMPLETE_WORK.md`                      |
+| R9  | Game-facing integration differs from the current live-site flow                      | Medium | High   | Versioned fixtures, scripted live validation, and diagnostics for every integration state             |
+| R10 | Silent accuracy rot (tests green, live wrong)                                        | Medium | High   | Held-out split, negative fixtures, periodic scripted live validation with recorded evidence           |
 
 ---
 
 ## 8. Decision log — ADRs to write in M0
 
-| ADR | Decision | Notes |
-| --- | --- | --- |
-| 001 | CommonJS vs ESM for main process | CJS today; decide once, document migration cost |
-| 002 | Recognition stack: Tesseract vs ONNX/template hybrid | M3 chooses on measured accuracy and latency |
-| 003 | `persist:` partitions vs managed profile directories | Affects control over corruption repair and quotas |
-| 004 | Authoritative session store (profile) and the fate of the plist | **Closes D3**; one owner per piece of state |
-| 005 | IPC contract versioning strategy | Compatibility policy across releases |
-| 006 | Electron version pinning and upgrade policy | Directly motivated by the zero-window finding |
-| 007 | Game-facing test strategy: fixtures vs live validation | Encodes §6's fixture discipline |
-| 008 | Config schema tooling (hand-written vs generated) | Determines M2's ergonomics |
-| 009 | Error taxonomy and user-facing message policy | Every failure names cause + next action |
-| 010 | Telemetry policy: local-only by default | Privacy as the default posture |
+| ADR | Decision                                                        | Notes                                             |
+| --- | --------------------------------------------------------------- | ------------------------------------------------- |
+| 001 | CommonJS vs ESM for main process                                | CJS today; decide once, document migration cost   |
+| 002 | Recognition stack: Tesseract vs ONNX/template hybrid            | M3 chooses on measured accuracy and latency       |
+| 003 | `persist:` partitions vs managed profile directories            | Affects control over corruption repair and quotas |
+| 004 | Authoritative session store (profile) and the fate of the plist | **Closes D3**; one owner per piece of state       |
+| 005 | IPC contract versioning strategy                                | Compatibility policy across releases              |
+| 006 | Electron version pinning and upgrade policy                     | Directly motivated by the zero-window finding     |
+| 007 | Game-facing test strategy: fixtures vs live validation          | Encodes §6's fixture discipline                   |
+| 008 | Config schema tooling (hand-written vs generated)               | Determines M2's ergonomics                        |
+| 009 | Error taxonomy and user-facing message policy                   | Every failure names cause + next action           |
+| 010 | Telemetry policy: local-only by default                         | Privacy as the default posture                    |
 
 ---
 

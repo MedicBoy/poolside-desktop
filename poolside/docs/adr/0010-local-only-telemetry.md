@@ -10,12 +10,9 @@ This application holds live, authenticated sessions for real accounts. Anything 
 itself is therefore potentially sensitive: activity feeds name accounts, the region probe sees
 balances and names, session files hold cookies, and an IP check reveals the user's address.
 
-The category this product sits in is notorious for the opposite behaviour — the reference tool this
-project was modelled on turned out to carry loggers and droppers, which is why the machine it ran on
-had to be reset. That history makes the default posture part of the product, not a footnote.
-
-Meanwhile M4 needs diagnostics to be good enough that a failure is fixable from a bundle alone. Those
-two pull in opposite directions unless the default is chosen deliberately.
+M4 needs diagnostics to be detailed enough that a failure is fixable from a bundle while keeping
+account, session, and network data local. The telemetry design therefore separates operational
+diagnostics from sensitive values.
 
 ## Decision
 

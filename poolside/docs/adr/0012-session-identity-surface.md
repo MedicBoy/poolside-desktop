@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-18
 - **Related:** ADR-0011 §11.4 and §11.6 (what identity configuration is allowed to be), ADR-0003
-  (persistent partitions), `BOUNDARIES.md` §3, roadmap M1
+  (persistent partitions), `INCOMPLETE_WORK.md`, roadmap M1
 
 ## Context
 

@@ -9,11 +9,22 @@ function fixture() {
   const workspace = { data: { routePresets: [], accounts: [main, slave], windows: { [main.id]: { x: 10 }, [slave.id]: { x: 20 } } } };
   const handlers = new Map();
   const removed = [];
+  const sessions = new Map();
+  const opened = [];
+  const closed = [];
   registerAccountManagement({
     handle: (name, handler) => handlers.set(name, handler),
     model,
     workspace,
-    sessions: new Map(),
+    sessions,
+    windows: {
+      openAccount: async id => {
+        opened.push(id);
+      },
+      closeAccount: id => {
+        closed.push(id);
+      }
+    },
     save: next => {
       workspace.data = next;
     },
@@ -32,7 +43,7 @@ function fixture() {
     confirmDestructive: async () => true,
     activeAccounts: () => workspace.data.accounts.filter(account => !account.archived)
   });
-  return { handlers, workspace, main, slave, removed };
+  return { handlers, workspace, main, slave, removed, sessions, opened, closed };
 }
 
 test('account management archives, restores, and edits the same workspace entries that Sessions renders', () => {
@@ -82,4 +93,75 @@ test('a selected saved route clears an account-specific route override, and clea
   const cleared = workspace.data.accounts.find(account => account.id === slave.id);
   assert.ok(cleared);
   assert.equal(Object.hasOwn(cleared, 'routePresetId'), false);
+});
+
+test('a bulk open skips the accounts that are already open and reports what it left alone', async () => {
+  const { handlers, workspace, main, slave, sessions, opened } = fixture();
+  sessions.set(main.id, { fsm: { state: 'ready' } });
+  const result = await handlers.get('account:bulk')({ action: 'open', ids: [main.id, slave.id] });
+  assert.deepEqual(opened, [slave.id]);
+  assert.deepEqual(result, { action: 'open', changed: 1, skipped: ['Main'] });
+  assert.equal(workspace.data.accounts.length, 2, 'a bulk open never changes the directory');
+});
+
+test('a bulk archive refuses while a selected session is open and names it', async () => {
+  const { handlers, workspace, main, slave, sessions } = fixture();
+  sessions.set(main.id, { fsm: { state: 'ready' } });
+  await assert.rejects(handlers.get('account:bulk')({ action: 'archive', ids: [main.id, slave.id] }), /Main/);
+  const untouched = workspace.data.accounts.find(account => account.id === slave.id);
+  assert.ok(untouched);
+  assert.equal(untouched.archived, false, 'nothing is archived by a refused plan');
+});
+
+test('a bulk archive marks every selected account once the sessions are closed', async () => {
+  const { handlers, workspace, main, slave } = fixture();
+  const result = await handlers.get('account:bulk')({ action: 'archive', ids: [main.id, slave.id] });
+  assert.deepEqual(result, { action: 'archive', changed: 2, skipped: [] });
+  assert.deepEqual(
+    workspace.data.accounts.map(account => account.archived),
+    [true, true]
+  );
+});
+
+test('a bulk removal asks once, clears the slot and its saved window, and leaves unselected accounts alone', async () => {
+  const { handlers, workspace, main, slave, removed } = fixture();
+  const result = await handlers.get('account:bulk')({ action: 'delete', ids: [slave.id] });
+  assert.deepEqual(removed, [slave.id]);
+  assert.deepEqual(result, { action: 'delete', changed: 1, skipped: [] });
+  assert.deepEqual(
+    workspace.data.accounts.map(account => account.id),
+    [main.id]
+  );
+  assert.equal(Object.hasOwn(workspace.data.windows, slave.id), false);
+  assert.equal(Object.hasOwn(workspace.data.windows, main.id), true);
+});
+
+test('a cancelled bulk removal destroys nothing', async () => {
+  const main = model.account({ name: 'Main', role: 'receiver' });
+  const handlers = new Map();
+  const removed = [];
+  const workspace = { data: { routePresets: [], accounts: [main], windows: {} } };
+  registerAccountManagement({
+    handle: (name, handler) => handlers.set(name, handler),
+    model,
+    workspace,
+    sessions: new Map(),
+    windows: { openAccount: async () => {}, closeAccount: () => {} },
+    save: next => {
+      workspace.data = next;
+    },
+    log: () => {},
+    getAccount: id => workspace.data.accounts.find(account => account.id === id),
+    profiles: {
+      remove: async account => {
+        removed.push(account.id);
+        return { removed: ['profile'], failures: [] };
+      }
+    },
+    confirmDestructive: async () => false,
+    activeAccounts: () => workspace.data.accounts.filter(account => !account.archived)
+  });
+  await assert.rejects(handlers.get('account:bulk')({ action: 'delete', ids: [main.id] }), /cancelled/);
+  assert.deepEqual(removed, []);
+  assert.equal(workspace.data.accounts.length, 1);
 });

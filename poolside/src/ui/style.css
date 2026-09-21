@@ -986,6 +986,43 @@ p {
 .archived-heading {
   margin-top: 30px;
 }
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin: -6px 0 16px;
+  padding: 12px 16px;
+  border: 1px solid rgba(244, 114, 182, 0.42);
+  border-radius: 18px;
+  background: rgba(244, 114, 182, 0.1);
+}
+.bulk-count {
+  font-size: 12px;
+  font-weight: 650;
+  color: #f9d4e8;
+}
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bulk-actions .secondary,
+.bulk-actions .danger {
+  padding: 9px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+.bulk-links {
+  display: flex;
+  gap: 14px;
+  margin-left: auto;
+}
+.card-picker {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
 .managed-card {
   padding: 18px;
   border: 1px solid var(--line);

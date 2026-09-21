@@ -123,7 +123,7 @@ sessions long after the code moved to persistent profiles, and the screen-recogn
 described a locator that had been replaced. Both were fixed as bugs.
 
 If a change makes a document wrong, the document is part of the change. That applies to `README.md`,
-`docs/architecture.md`, the ADRs and `BOUNDARIES.md`.
+`docs/architecture.md`, the ADRs and `../INCOMPLETE_WORK.md`.
 
 ## Security rules
 
@@ -138,10 +138,9 @@ If a change makes a document wrong, the document is part of the change. That app
   feature is wrong.
 - Report a security concern in the issue tracker without reproducing a live exploit.
 
-## Scope
+## Incomplete work
 
-Read `BOUNDARIES.md` before proposing a feature, and `docs/adr/0007` for the reasoning. The boundary
-is a decision, not a gap to be filled later: no synthetic input at the game's controls, no
-multi-account coordination, no match-outcome manipulation, no device-identity spoofing, no credential
-import. Work that needs any of those is out of scope for this repository, and a pull request
-containing it will be closed without discussion of its implementation.
+Read `../INCOMPLETE_WORK.md` before proposing a feature and update it when an unfinished capability
+lands. Game input, multi-account coordination, match completion, device-identity controls, and
+credential import are not implemented in the current tree. Contributions in those areas need clear
+module contracts, tests, diagnostics, and corresponding documentation updates.

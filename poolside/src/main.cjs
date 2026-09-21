@@ -18,6 +18,7 @@ const { createActivityJournal } = require('./activity-journal.cjs');
 const { createIpc } = require('./ipc.cjs');
 const { createProfileManager } = require('./profile-manager.cjs');
 const { messageOf } = require('./errors.cjs');
+const { createNativeDialogs } = require('./native-dialogs.cjs');
 
 const UI_FILE = path.join(__dirname, 'ui', 'index.html');
 const UI_URL = pathToFileURL(UI_FILE).href;
@@ -50,24 +51,7 @@ const { inspector, monitor } = createObservationServices({
   deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor,
   sessions
 });
-// Ask before an irreversible removal; headless tests answer no rather than blocking on a dialog.
-async function confirmDestructive(title, detail) {
-  if (selfTest) return false;
-  const prompt = {
-    type: /** @type {'warning'} */ ('warning'),
-    buttons: ['Cancel', 'Delete'],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
-    title: 'Poolside',
-    message: title,
-    detail
-  };
-  // Parented to the dashboard when there is one, so the dialog cannot end up behind it.
-  const parent = workspace.dashboard;
-  const { response } = parent ? await dialog.showMessageBox(parent, prompt) : await dialog.showMessageBox(prompt);
-  return response === 1;
-}
+const { confirmDestructive, chooseDirectory } = createNativeDialogs({ dialog, dashboard: () => workspace.dashboard, selfTest });
 const ipc = createIpc({
   ipcMain,
   UI_URL,
@@ -77,7 +61,9 @@ const ipc = createIpc({
   profiles: profileManager,
   captureLab,
   diagnosticsRoot: app.getPath('userData'),
+  dataRoot: app.getPath('userData'),
   openPath: destination => shell.openPath(destination),
+  chooseDirectory,
   confirmDestructive
 });
 

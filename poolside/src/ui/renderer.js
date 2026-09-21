@@ -266,18 +266,67 @@ function visibleReadings(account) {
     .join('');
   return `<section class="visible-readings"><h4>Last visible account readings</h4><dl class="managed-details">${rows}</dl><p>Read locally from this window's own screen. These values are display-only and may be inaccurate; verify them in the game.</p></section>`;
 }
+// --- Bulk selection on Account management ------------------------------------------------------
+// The selection lives in the renderer and is pruned on every paint, so a card that disappears can never
+// stay selected. The work itself is one IPC call per action: the main process re-checks every rule and
+// asks for confirmation once, because a renderer-side check would be advice rather than a guard.
+let managerSelectionMode = false;
+const managerSelection = new Set();
+function renderBulkBar() {
+  const bar = $('#bulk-bar');
+  if (!bar) return;
+  bar.classList.toggle('hidden', !managerSelectionMode);
+  $('#bulk-count').textContent = `${managerSelection.size} of ${state.accounts.length} selected`;
+  for (const button of bar.querySelectorAll('[data-bulk]')) button.disabled = !managerSelection.size;
+  $('#bulk-all').disabled = !state.accounts.length || managerSelection.size === state.accounts.length;
+  $('#bulk-clear').disabled = !managerSelection.size;
+}
+function setSelectionMode(on) {
+  managerSelectionMode = on;
+  if (!on) managerSelection.clear();
+  const toggle = $('#select-toggle');
+  toggle.setAttribute('aria-pressed', String(on));
+  toggle.textContent = on ? 'Done selecting' : 'Select accounts';
+  renderManagedAccounts();
+}
+async function runBulk(action) {
+  const ids = [...managerSelection];
+  if (!ids.length) return;
+  const result = await call(() => poolside.bulk({ action, ids }));
+  if (!result.ok) return;
+  const { changed, skipped } = result.value;
+  const noun = `${changed} account${changed === 1 ? '' : 's'}`;
+  if (action === 'delete') toast(`${noun} and their local profiles removed.`);
+  else if (!changed) toast(`Nothing to do — ${skipped.length ? skipped.join(', ') : 'no accounts'} already in that state.`);
+  else if (skipped.length) toast(`${noun} updated; ${skipped.length} left unchanged because they were already in that state.`);
+  else toast(`${noun} updated.`);
+  // Archiving and removal change which list a card belongs to, so the selection is cleared rather than
+  // carried onto whatever now occupies those rows.
+  if (action === 'archive' || action === 'delete') managerSelection.clear();
+  renderBulkBar();
+}
 function managedCard(account, archived = false) {
   const screen = account.gameScreen;
   const screenState = screen?.state && screen.state !== 'unknown' ? screen.state.replaceAll('-', ' ') : 'not inspected';
   const live = !isClosed(account);
+  // Only the active list is selectable: an archived slot has no session to open or close, and its two
+  // remaining actions are already single-click on its own card.
+  const picker =
+    !archived && managerSelectionMode
+      ? `<input type="checkbox" class="card-picker" data-select-account="${escapeHtml(account.id)}" aria-label="Select ${escapeHtml(account.name)}" ${managerSelection.has(account.id) ? 'checked' : ''} />`
+      : '';
   return `<article class="managed-card ${archived ? 'archived' : ''}">
-    <div class="managed-card-heading"><span class="account-avatar ${account.role}">${escapeHtml(account.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(account.name)}</div><span class="account-role">${account.role === 'receiver' ? 'Receiving account' : 'Sending account'} · ${escapeHtml(statusLabel(account))}</span></div><div class="managed-actions">${archived ? `<button class="secondary" data-action="restore" data-id="${account.id}">Restore</button>` : `<button class="secondary" data-action="edit-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Edit</button><button class="secondary" data-action="account-preferences" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Session preferences</button><button class="secondary" data-action="archive" data-id="${account.id}" ${live ? 'disabled' : ''}>Archive</button>`}<button class="danger-button" data-action="delete-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Remove…</button></div></div>
+    <div class="managed-card-heading">${picker}<span class="account-avatar ${account.role}">${escapeHtml(account.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(account.name)}</div><span class="account-role">${account.role === 'receiver' ? 'Receiving account' : 'Sending account'} · ${escapeHtml(statusLabel(account))}</span></div><div class="managed-actions">${archived ? `<button class="secondary" data-action="restore" data-id="${account.id}">Restore</button>` : `<button class="secondary" data-action="edit-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Edit</button><button class="secondary" data-action="account-preferences" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Session preferences</button><button class="secondary" data-action="archive" data-id="${account.id}" ${live ? 'disabled' : ''}>Archive</button>`}<button class="danger-button" data-action="delete-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Remove…</button></div></div>
     ${account.note ? `<p class="account-note"><strong>Local note:</strong> ${escapeHtml(account.note)}</p>` : ''}
     <dl class="managed-details"><div><dt>Browser profile</dt><dd>${escapeHtml(profileSummary(account))}</dd></div><div><dt>Current screen</dt><dd>${escapeHtml(screenState)}${typeof screen?.score === 'number' ? ` · ${Math.round(screen.score * 100)}% match` : ''}</dd></div><div><dt>Public IP check</dt><dd>${account.network?.status === 'checked' ? escapeHtml(account.network.ip) : 'Not checked'}</dd></div><div><dt>Created</dt><dd>${account.createdAt ? escapeHtml(new Date(account.createdAt).toLocaleDateString()) : 'Unknown'}</dd></div></dl>${visibleReadings(account)}${screenHistory(account)}${accountOverview(account)}
   </article>`;
 }
 function renderManagedAccounts() {
   const archived = state.archivedAccounts || [];
+  // A selection cannot outlive the accounts it names: anything archived, removed or renamed away is
+  // dropped before the bar reports a count, so "3 selected" can never include a slot that is gone.
+  const active = new Set(state.accounts.map(account => account.id));
+  for (const id of [...managerSelection]) if (!active.has(id)) managerSelection.delete(id);
   $('#manager-active-count').textContent = state.accounts.length;
   $('#manager-archived-count').textContent = archived.length;
   $('#managed-accounts').innerHTML = state.accounts.length
@@ -286,6 +335,7 @@ function renderManagedAccounts() {
   $('#archived-accounts').innerHTML = archived.length
     ? archived.map(account => managedCard(account, true)).join('')
     : '<div class="manager-empty">No archived account slots.</div>';
+  renderBulkBar();
 }
 function openEditDialog(id) {
   const account = state.accounts.find(candidate => candidate.id === id);
@@ -362,7 +412,7 @@ const SETTINGS_HELP = {
   'recovery.repaintMitigation':
     'Requests several display refreshes after the game page loads. It can help if a loaded game window appears blank or frozen.',
   'recovery.monitorIntervalSeconds':
-    'How often, in seconds, live status reads this window\'s screen while you have it open and focused. It pauses automatically whenever this window is not the focused one.'
+    "How often, in seconds, live status reads this window's screen while you have it open and focused. It pauses automatically whenever this window is not the focused one."
 };
 function settingHelp(path) {
   const text = SETTINGS_HELP[path] || 'This is a local Poolside setting. It is checked before saving.';
@@ -534,6 +584,34 @@ document.addEventListener('click', async event => {
   if (!button || button.disabled) return;
   if (button.dataset.view) view(button.dataset.view);
   if (button.classList.contains('add-account')) openDialog();
+  if (button.dataset.bulk) {
+    await runBulk(button.dataset.bulk);
+    return;
+  }
+  if (button.dataset.action === 'backup-export' || button.dataset.action === 'backup-import') {
+    // Not routed through `call`: that helper re-renders whenever a result carries an `accounts` key, and
+    // these results describe a folder rather than a workspace snapshot.
+    const exporting = button.dataset.action === 'backup-export';
+    try {
+      const result = exporting ? await poolside.backupExport() : await poolside.backupImport();
+      if (!result.ok) throw new Error(result.error);
+      const value = result.value || {};
+      if (exporting) {
+        const folder = String(value.folder || '')
+          .split(/[\\/]/)
+          .pop();
+        toast(`Backup written to ${folder}: ${value.accountCount} account(s), ${value.profileCount} browser profile(s).`);
+      } else {
+        const parts = [`${(value.restored || []).length} account(s) restored`];
+        if (value.present?.length) parts.push(`${value.present.length} already in this workspace`);
+        if (value.conflicts?.length) parts.push(`${value.conflicts.length} skipped — ${value.conflicts[0].reason}`);
+        toast(`${parts.join(' · ')}.`);
+      }
+    } catch (error) {
+      toast(error.message, true);
+    }
+    return;
+  }
   if (['diagnostics-preview', 'diagnostics-save', 'diagnostics-open-folder', 'activity-history-clear'].includes(button.dataset.action)) {
     // Its own branch, before the account-action chain: that chain ends in `poolside.open(id)` as the fallback,
     // so an action with no account would silently try to open one.
@@ -732,6 +810,22 @@ $('#open-all').addEventListener('click', () => call(() => poolside.openAll()));
 $('#close-all').addEventListener('click', () => call(() => poolside.closeAll()));
 $('#arrange').addEventListener('click', () => call(() => poolside.arrange()));
 $('#search').addEventListener('input', renderAccounts);
+$('#select-toggle').addEventListener('click', () => setSelectionMode(!managerSelectionMode));
+$('#bulk-all').addEventListener('click', () => {
+  for (const account of state.accounts) managerSelection.add(account.id);
+  renderManagedAccounts();
+});
+$('#bulk-clear').addEventListener('click', () => {
+  managerSelection.clear();
+  renderManagedAccounts();
+});
+$('#managed-accounts').addEventListener('change', event => {
+  const picker = event.target.closest('[data-select-account]');
+  if (!picker) return;
+  if (picker.checked) managerSelection.add(picker.dataset.selectAccount);
+  else managerSelection.delete(picker.dataset.selectAccount);
+  renderBulkBar();
+});
 
 let captureLab = { samples: [], states: [] };
 const captureLabel = value => String(value || 'unknown').replaceAll('-', ' ');

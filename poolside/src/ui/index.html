@@ -65,287 +65,306 @@
       </header>
       <main>
         <div class="crumbs">Workspace <span class="slash">/</span> <strong id="breadcrumb">Sessions</strong></div>
-      <section class="view" id="view-sessions">
-        <div class="page-heading">
-          <div>
-            <div class="eyebrow">A CLEARER VIEW OF YOUR GAME</div>
-            <h1>Your session workspace</h1>
-            <p>One place for your accounts. A separate browser for each.</p>
+        <section class="view" id="view-sessions">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">A CLEARER VIEW OF YOUR GAME</div>
+              <h1>Your session workspace</h1>
+              <p>One place for your accounts. A separate browser for each.</p>
+            </div>
+            <button class="primary add-account"><span>＋</span> Add account</button>
           </div>
-          <button class="primary add-account"><span>＋</span> Add account</button>
-        </div>
-        <div class="stats">
-          <div class="stat"><span>Account slots</span><strong id="account-count">0</strong><small>Configured on this device</small></div>
-          <div class="stat">
-            <span>Open windows</span><strong id="open-count">0<span class="stat-dot"></span></strong
-            ><small id="window-hint">Ready when you are</small>
+          <div class="stats">
+            <div class="stat"><span>Account slots</span><strong id="account-count">0</strong><small>Configured on this device</small></div>
+            <div class="stat">
+              <span>Open windows</span><strong id="open-count">0<span class="stat-dot"></span></strong
+              ><small id="window-hint">Ready when you are</small>
+            </div>
+            <div class="stat">
+              <span>Screen inspection</span><strong class="stat-word" id="inspection-status">Waiting</strong
+              ><small id="inspection-hint">Open a game window to inspect its screen</small>
+            </div>
           </div>
-          <div class="stat">
-            <span>Screen inspection</span><strong class="stat-word" id="inspection-status">Waiting</strong
-            ><small id="inspection-hint">Open a game window to inspect its screen</small>
+          <div class="content-grid">
+            <div class="accounts-panel">
+              <div class="section-heading">
+                <div>
+                  <h2>Accounts <span id="section-count" class="count-pill">0</span></h2>
+                  <p>Manage isolated browser sessions and inspect their current game screen.</p>
+                </div>
+                <button class="text-button" id="arrange">▦ Arrange windows</button>
+              </div>
+              <div class="toolbar">
+                <label class="search"
+                  ><span>⌕</span><input id="search" type="search" placeholder="Find an account…" aria-label="Find an account" /></label
+                ><button class="secondary" id="open-all">Open all <span>↗</span></button>
+              </div>
+              <div id="accounts" class="account-list"></div>
+              <div class="session-footnote">
+                <span>◈</span>
+                <p>
+                  Each account has its own cookies and storage. Login sessions are saved on this PC across restarts. Check IP contacts
+                  api.ipify.org through that session; it does not verify location or the game’s network route.
+                </p>
+              </div>
+            </div>
+            <aside class="run-panel">
+              <div class="run-heading"><span class="eyebrow">VERSION ONE</span><span class="outline-badge">Local</span></div>
+              <h2>Session workspace</h2>
+              <p class="muted">Your local browser profiles and screen observations.</p>
+              <div class="table-art" aria-hidden="true">
+                <div class="table-rail">
+                  <i class="pocket p1"></i><i class="pocket p2"></i><i class="pocket p3"></i><i class="pocket p4"></i
+                  ><i class="cue-ball"></i><i class="eight-ball">8</i><i class="trajectory"></i>
+                </div>
+                <span>MAKE ROOM FOR A BETTER SESSION</span>
+              </div>
+              <div class="run-row"><span>Primary account</span><strong id="receiver-name">Not selected</strong></div>
+              <div class="run-row"><span>Other accounts</span><strong id="sender-count">0</strong></div>
+              <div class="run-row"><span>Preferred table</span><strong id="table-value">Bangkok</strong></div>
+              <div class="run-row"><span>Match limit</span><strong id="limit-value">10</strong></div>
+              <button class="text-button preferences-link" data-view="settings">Edit preferences <span>↗</span></button>
+              <div class="integration-note" id="workspace-note">
+                <strong><span class="amber-dot"></span> Browser session ready</strong>
+                <p>Opening a window confirms the browser session is running. Account sign-in is private and is not inferred by this app.</p>
+              </div>
+              <button class="secondary full" id="close-all">Close all game windows</button>
+            </aside>
           </div>
-        </div>
-        <div class="content-grid">
-          <div class="accounts-panel">
+          <section class="recent">
+            <div class="section-heading">
+              <h2>Recent activity</h2>
+              <button class="text-button" data-view="activity">View all <span>↗</span></button>
+            </div>
+            <div id="recent-events"></div>
+          </section>
+        </section>
+        <section class="view hidden" id="view-activity">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">YOUR SESSION HISTORY</div>
+              <h1>Activity</h1>
+              <p id="activity-history-note">What happened in this app session. No passwords or tokens are recorded.</p>
+            </div>
+            <div class="page-actions">
+              <button class="secondary" data-action="diagnostics-preview">Check diagnostics payload ↗</button>
+              <button class="primary" data-action="diagnostics-save">Save redacted diagnostics</button>
+              <button class="secondary" data-action="diagnostics-open-folder">Open diagnostics folder ↗</button>
+              <button class="danger" data-action="activity-history-clear">Erase saved activity history…</button>
+            </div>
+          </div>
+          <div class="panel activity-panel">
+            <div class="activity-toolbar">
+              <div>
+                <h2>Recent activity <span id="activity-visible-count" class="count-pill">0</span></h2>
+                <p>Newest first. Open the full history only when you need it.</p>
+              </div>
+              <label
+                >Show<select id="activity-filter" aria-label="Activity filter">
+                  <option value="all">Everything</option>
+                  <option value="warning">Needs attention</option>
+                  <option value="session">Session changes</option>
+                </select></label
+              >
+            </div>
+            <div id="timeline"></div>
+            <details class="activity-history">
+              <summary>Show full saved history</summary>
+              <div id="all-events"></div>
+            </details>
+          </div>
+        </section>
+        <section class="view hidden" id="view-accounts">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">LOCAL ACCOUNT DIRECTORY</div>
+              <h1>Account management</h1>
+              <p>Rename, organize, and remove the account slots and browser profiles saved on this device.</p>
+            </div>
+            <div class="page-actions">
+              <button class="secondary" data-action="backup-export">Back up…</button>
+              <button class="secondary" data-action="backup-import">Restore…</button>
+              <button class="secondary" id="select-toggle" aria-pressed="false">Select accounts</button>
+              <button class="primary add-account"><span>＋</span> Add account</button>
+            </div>
+          </div>
+          <div class="manager-notice">
+            <strong>Saved session data stays private.</strong>
+            <span
+              >Poolside keeps each browser profile isolated, but does not display tokens, cookies, passwords, or hidden account
+              identifiers.</span
+            >
+          </div>
+          <div class="section-heading">
+            <div>
+              <h2>Active accounts <span id="manager-active-count" class="count-pill">0</span></h2>
+              <p>Changes made here are reflected throughout the workspace immediately.</p>
+            </div>
+          </div>
+          <div class="bulk-bar hidden" id="bulk-bar" role="group" aria-label="Bulk account actions">
+            <span class="bulk-count" id="bulk-count">0 of 0 selected</span>
+            <div class="bulk-actions">
+              <button class="secondary" data-bulk="open">Open</button>
+              <button class="secondary" data-bulk="close">Close</button>
+              <button class="secondary" data-bulk="archive">Archive</button>
+              <button class="danger" data-bulk="delete">Remove…</button>
+            </div>
+            <span class="bulk-links">
+              <button class="text-button" id="bulk-all">Select all</button>
+              <button class="text-button" id="bulk-clear">Clear</button>
+            </span>
+          </div>
+          <div id="managed-accounts" class="managed-account-list"></div>
+          <div class="section-heading archived-heading">
+            <div>
+              <h2>Archived accounts <span id="manager-archived-count" class="count-pill">0</span></h2>
+              <p>Archived accounts keep their local profile until you restore or permanently remove them.</p>
+            </div>
+          </div>
+          <div id="archived-accounts" class="managed-account-list"></div>
+        </section>
+        <section class="view hidden" id="view-capture-lab">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">LOCAL RECOGNITION EVIDENCE</div>
+              <h1>Capture lab</h1>
+              <p>Build a private reference library of game screens. Capture, compare, then decide whether each result is correct.</p>
+            </div>
+          </div>
+          <div class="manager-notice capture-notice">
+            <strong>Samples stay on this PC.</strong
+            ><span
+              >Only capture screens that contain no passwords, sign-in fields, tokens, private messages, or other sensitive content.</span
+            >
+          </div>
+          <div class="capture-grid">
+            <form id="capture-form" class="panel capture-panel">
+              <h2>Record a labeled sample</h2>
+              <p class="muted">Open a game window, bring the expected screen into view, and label what you see before recording.</p>
+              <label>Open account<select id="capture-account" required></select></label
+              ><label>Expected screen<select id="capture-state" required></select></label
+              ><label class="capture-confirm"
+                ><input id="capture-benchmark" type="checkbox" /> Keep this as a benchmark sample for future local OCR checks.</label
+              ><label class="capture-confirm"
+                ><input id="capture-confirmed" type="checkbox" required /> I checked that this screen contains no credentials or private
+                information.</label
+              ><button class="primary" type="submit">Capture and evaluate <span>→</span></button>
+              <p class="form-status" id="capture-status" role="status"></p>
+            </form>
+            <section class="panel capture-panel">
+              <h2>Recognition health</h2>
+              <p class="muted">Use the cards to jump to the samples that need attention. These results stay on this PC.</p>
+              <div id="capture-metrics" class="capture-metrics"></div>
+              <div id="capture-coverage" class="capture-coverage" aria-label="Screen-label evidence coverage"></div>
+              <section class="capture-benchmark-section" aria-labelledby="capture-benchmark-heading">
+                <h3 id="capture-benchmark-heading">Benchmark report</h3>
+                <div id="capture-benchmark-report"></div>
+              </section>
+              <p class="muted">
+                “Needs review” means the first OCR reading did not match the label you chose. Review those samples, mark each one checked,
+                or delete it if it is not useful. Benchmark samples are kept separate so they can measure the reader without inflating the
+                evidence count.
+              </p>
+            </section>
+          </div>
+          <section class="capture-samples">
             <div class="section-heading">
               <div>
-                <h2>Accounts <span id="section-count" class="count-pill">0</span></h2>
-                <p>Manage isolated browser sessions and inspect their current game screen.</p>
+                <h2>Local samples <span id="capture-count" class="count-pill">0</span></h2>
+                <p>Review a sample before keeping it. Deleting it removes both its image and its record.</p>
               </div>
-              <button class="text-button" id="arrange">▦ Arrange windows</button>
             </div>
-            <div class="toolbar">
-              <label class="search"
-                ><span>⌕</span><input id="search" type="search" placeholder="Find an account…" aria-label="Find an account" /></label
-              ><button class="secondary" id="open-all">Open all <span>↗</span></button>
+            <div class="capture-toolbar" aria-label="Filter local samples">
+              <label
+                >Screen<select id="capture-filter-state" aria-label="Expected screen">
+                  <option value="">All screen labels</option>
+                </select></label
+              >
+              <label
+                >Set<select id="capture-filter-cohort">
+                  <option value="">Evidence and benchmark</option>
+                  <option value="evidence">Evidence</option>
+                  <option value="benchmark">Benchmark</option>
+                </select></label
+              >
+              <label
+                >Result<select id="capture-filter-result">
+                  <option value="">All results</option>
+                  <option value="review">Needs review</option>
+                  <option value="match">Matches label</option>
+                </select></label
+              >
+              <span id="capture-visible-count" class="muted" aria-live="polite"></span>
             </div>
-            <div id="accounts" class="account-list"></div>
-            <div class="session-footnote">
-              <span>◈</span>
+            <div id="capture-samples" class="managed-account-list"></div>
+          </section>
+        </section>
+        <section class="view hidden" id="view-settings">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">MAKE IT YOUR WORKSPACE</div>
+              <h1>Settings</h1>
               <p>
-                Each account has its own cookies and storage. Login sessions are saved on this PC across restarts. Check IP contacts
-                api.ipify.org through that session; it does not verify location or the game’s network route.
+                Choose the table label and browser-session defaults for this workspace. Hover the
+                <span
+                  class="info-dot"
+                  tabindex="0"
+                  data-tip="Each setting has a short explanation beside it. Your choices apply only when a session opens; they do not control the game."
+                  >i</span
+                >
+                beside a setting when you want help.
               </p>
             </div>
           </div>
-          <aside class="run-panel">
-            <div class="run-heading"><span class="eyebrow">VERSION ONE</span><span class="outline-badge">Local</span></div>
-            <h2>Session workspace</h2>
-            <p class="muted">Your local browser profiles and screen observations.</p>
-            <div class="table-art" aria-hidden="true">
-              <div class="table-rail">
-                <i class="pocket p1"></i><i class="pocket p2"></i><i class="pocket p3"></i><i class="pocket p4"></i><i class="cue-ball"></i
-                ><i class="eight-ball">8</i><i class="trajectory"></i>
-              </div>
-              <span>MAKE ROOM FOR A BETTER SESSION</span>
-            </div>
-            <div class="run-row"><span>Primary account</span><strong id="receiver-name">Not selected</strong></div>
-            <div class="run-row"><span>Other accounts</span><strong id="sender-count">0</strong></div>
-            <div class="run-row"><span>Preferred table</span><strong id="table-value">Bangkok</strong></div>
-            <div class="run-row"><span>Match limit</span><strong id="limit-value">10</strong></div>
-            <button class="text-button preferences-link" data-view="settings">Edit preferences <span>↗</span></button>
-            <div class="integration-note" id="workspace-note">
-              <strong><span class="amber-dot"></span> Browser session ready</strong>
-              <p>Opening a window confirms the browser session is running. Account sign-in is private and is not inferred by this app.</p>
-            </div>
-            <button class="secondary full" id="close-all">Close all game windows</button>
-          </aside>
-        </div>
-        <section class="recent">
-          <div class="section-heading">
-            <h2>Recent activity</h2>
-            <button class="text-button" data-view="activity">View all <span>↗</span></button>
-          </div>
-          <div id="recent-events"></div>
-        </section>
-      </section>
-      <section class="view hidden" id="view-activity">
-        <div class="page-heading">
-          <div>
-            <div class="eyebrow">YOUR SESSION HISTORY</div>
-            <h1>Activity</h1>
-            <p id="activity-history-note">What happened in this app session. No passwords or tokens are recorded.</p>
-          </div>
-          <div class="page-actions">
-            <button class="secondary" data-action="diagnostics-preview">Check diagnostics payload ↗</button>
-            <button class="primary" data-action="diagnostics-save">Save redacted diagnostics</button>
-            <button class="secondary" data-action="diagnostics-open-folder">Open diagnostics folder ↗</button>
-            <button class="danger" data-action="activity-history-clear">Erase saved activity history…</button>
-          </div>
-        </div>
-        <div class="panel activity-panel">
-          <div class="activity-toolbar">
-            <div>
-              <h2>Recent activity <span id="activity-visible-count" class="count-pill">0</span></h2>
-              <p>Newest first. Open the full history only when you need it.</p>
-            </div>
-            <label
-              >Show<select id="activity-filter" aria-label="Activity filter">
-                <option value="all">Everything</option>
-                <option value="warning">Needs attention</option>
-                <option value="session">Session changes</option>
-              </select></label
-            >
-          </div>
-          <div id="timeline"></div>
-          <details class="activity-history">
-            <summary>Show full saved history</summary>
-            <div id="all-events"></div>
-          </details>
-        </div>
-      </section>
-      <section class="view hidden" id="view-accounts">
-        <div class="page-heading">
-          <div>
-            <div class="eyebrow">LOCAL ACCOUNT DIRECTORY</div>
-            <h1>Account management</h1>
-            <p>Rename, organize, and remove the account slots and browser profiles saved on this device.</p>
-          </div>
-          <button class="primary add-account"><span>＋</span> Add account</button>
-        </div>
-        <div class="manager-notice">
-          <strong>Saved session data stays private.</strong>
-          <span
-            >Poolside keeps each browser profile isolated, but does not display tokens, cookies, passwords, or hidden account
-            identifiers.</span
-          >
-        </div>
-        <div class="section-heading">
-          <div>
-            <h2>Active accounts <span id="manager-active-count" class="count-pill">0</span></h2>
-            <p>Changes made here are reflected throughout the workspace immediately.</p>
-          </div>
-        </div>
-        <div id="managed-accounts" class="managed-account-list"></div>
-        <div class="section-heading archived-heading">
-          <div>
-            <h2>Archived accounts <span id="manager-archived-count" class="count-pill">0</span></h2>
-            <p>Archived accounts keep their local profile until you restore or permanently remove them.</p>
-          </div>
-        </div>
-        <div id="archived-accounts" class="managed-account-list"></div>
-      </section>
-      <section class="view hidden" id="view-capture-lab">
-        <div class="page-heading">
-          <div>
-            <div class="eyebrow">LOCAL RECOGNITION EVIDENCE</div>
-            <h1>Capture lab</h1>
-            <p>Build a private reference library of game screens. Capture, compare, then decide whether each result is correct.</p>
-          </div>
-        </div>
-        <div class="manager-notice capture-notice">
-          <strong>Samples stay on this PC.</strong
-          ><span
-            >Only capture screens that contain no passwords, sign-in fields, tokens, private messages, or other sensitive content.</span
-          >
-        </div>
-        <div class="capture-grid">
-          <form id="capture-form" class="panel capture-panel">
-            <h2>Record a labeled sample</h2>
-            <p class="muted">Open a game window, bring the expected screen into view, and label what you see before recording.</p>
-            <label>Open account<select id="capture-account" required></select></label
-            ><label>Expected screen<select id="capture-state" required></select></label
-            ><label class="capture-confirm"
-              ><input id="capture-benchmark" type="checkbox" /> Keep this as a benchmark sample for future local OCR checks.</label
-            ><label class="capture-confirm"
-              ><input id="capture-confirmed" type="checkbox" required /> I checked that this screen contains no credentials or private
-              information.</label
-            ><button class="primary" type="submit">Capture and evaluate <span>→</span></button>
-            <p class="form-status" id="capture-status" role="status"></p>
-          </form>
-          <section class="panel capture-panel">
-            <h2>Recognition health</h2>
-            <p class="muted">Use the cards to jump to the samples that need attention. These results stay on this PC.</p>
-            <div id="capture-metrics" class="capture-metrics"></div>
-            <div id="capture-coverage" class="capture-coverage" aria-label="Screen-label evidence coverage"></div>
-            <section class="capture-benchmark-section" aria-labelledby="capture-benchmark-heading">
-              <h3 id="capture-benchmark-heading">Benchmark report</h3>
-              <div id="capture-benchmark-report"></div>
-            </section>
-            <p class="muted">
-              “Needs review” means the first OCR reading did not match the label you chose. Review those samples, mark each one checked, or
-              delete it if it is not useful. Benchmark samples are kept separate so they can measure the reader without inflating the
-              evidence count.
-            </p>
-          </section>
-        </div>
-        <section class="capture-samples">
-          <div class="section-heading">
-            <div>
-              <h2>Local samples <span id="capture-count" class="count-pill">0</span></h2>
-              <p>Review a sample before keeping it. Deleting it removes both its image and its record.</p>
-            </div>
-          </div>
-          <div class="capture-toolbar" aria-label="Filter local samples">
-            <label
-              >Screen<select id="capture-filter-state" aria-label="Expected screen">
-                <option value="">All screen labels</option>
-              </select></label
-            >
-            <label
-              >Set<select id="capture-filter-cohort">
-                <option value="">Evidence and benchmark</option>
-                <option value="evidence">Evidence</option>
-                <option value="benchmark">Benchmark</option>
-              </select></label
-            >
-            <label
-              >Result<select id="capture-filter-result">
-                <option value="">All results</option>
-                <option value="review">Needs review</option>
-                <option value="match">Matches label</option>
-              </select></label
-            >
-            <span id="capture-visible-count" class="muted" aria-live="polite"></span>
-          </div>
-          <div id="capture-samples" class="managed-account-list"></div>
-        </section>
-      </section>
-      <section class="view hidden" id="view-settings">
-        <div class="page-heading">
-          <div>
-            <div class="eyebrow">MAKE IT YOUR WORKSPACE</div>
-            <h1>Settings</h1>
-            <p>
-              Choose the table label and browser-session defaults for this workspace. Hover the
-              <span
-                class="info-dot"
-                tabindex="0"
-                data-tip="Each setting has a short explanation beside it. Your choices apply only when a session opens; they do not control the game."
-                >i</span
-              >
-              beside a setting when you want help.
-            </p>
-          </div>
-        </div>
-        <div class="settings-grid">
-          <div class="panel settings-panel">
-            <h2>Workspace preferences</h2>
-            <p class="muted">
-              Choose a default once here. An account can override it later in Account management. Hover an info icon for plain-English help.
-            </p>
-            <form id="settings-form">
-              <div id="settings-fields"></div>
-            </form>
-            <section class="route-presets">
-              <h2>Saved route presets</h2>
-              <p class="muted">Reusable network configurations. Assign one to an account from its Session preferences.</p>
-              <form id="route-preset-form" class="route-preset-form">
-                <input id="route-preset-name" placeholder="Preset name" required maxlength="40" /><input
-                  id="route-preset-spec"
-                  placeholder="host:port or socks5://host:port"
-                  required
-                /><input id="route-preset-bypass" placeholder="Optional bypass list" /><label
-                  ><input id="route-preset-enabled" type="checkbox" checked /> Enabled</label
-                ><button class="secondary" type="submit">Save route preset</button>
+          <div class="settings-grid">
+            <div class="panel settings-panel">
+              <h2>Workspace preferences</h2>
+              <p class="muted">
+                Choose a default once here. An account can override it later in Account management. Hover an info icon for plain-English
+                help.
+              </p>
+              <form id="settings-form">
+                <div id="settings-fields"></div>
               </form>
-              <div id="route-preset-list"></div>
-            </section>
-            <button class="primary" type="submit" form="settings-form">Save preferences</button>
-            <p class="form-status" id="settings-status" role="status"></p>
+              <section class="route-presets">
+                <h2>Saved route presets</h2>
+                <p class="muted">Reusable network configurations. Assign one to an account from its Session preferences.</p>
+                <form id="route-preset-form" class="route-preset-form">
+                  <input id="route-preset-name" placeholder="Preset name" required maxlength="40" /><input
+                    id="route-preset-spec"
+                    placeholder="host:port or socks5://host:port"
+                    required
+                  /><input id="route-preset-bypass" placeholder="Optional bypass list" /><label
+                    ><input id="route-preset-enabled" type="checkbox" checked /> Enabled</label
+                  ><button class="secondary" type="submit">Save route preset</button>
+                </form>
+                <div id="route-preset-list"></div>
+              </section>
+              <button class="primary" type="submit" form="settings-form">Save preferences</button>
+              <p class="form-status" id="settings-status" role="status"></p>
+            </div>
+            <div class="panel settings-panel">
+              <h2>Browser sessions</h2>
+              <dl>
+                <dt>Browser</dt>
+                <dd>Dedicated Chromium windows</dd>
+                <dt>Account isolation</dt>
+                <dd>Separate saved profiles</dd>
+                <dt>Session lifetime</dt>
+                <dd>Saved across restarts</dd>
+                <dt>Route</dt>
+                <dd>Per session, applied and read back from the running session</dd>
+                <dt>Identity overrides</dt>
+                <dd>Per session: user agent, languages, locale, time zone, viewport, colour scheme</dd>
+              </dl>
+              <p class="muted">Poolside does not change your Opera profile. Login happens directly on the game’s website.</p>
+            </div>
           </div>
-          <div class="panel settings-panel">
-            <h2>Browser sessions</h2>
-            <dl>
-              <dt>Browser</dt>
-              <dd>Dedicated Chromium windows</dd>
-              <dt>Account isolation</dt>
-              <dd>Separate saved profiles</dd>
-              <dt>Session lifetime</dt>
-              <dd>Saved across restarts</dd>
-              <dt>Route</dt>
-              <dd>Per session, applied and read back from the running session</dd>
-              <dt>Identity overrides</dt>
-              <dd>Per session: user agent, languages, locale, time zone, viewport, colour scheme</dd>
-            </dl>
-            <p class="muted">Poolside does not change your Opera profile. Login happens directly on the game’s website.</p>
-          </div>
-        </div>
-      </section>
-      <footer class="main-footer">
-        <span>POOLSIDE <span class="separator">·</span> Built for a clearer session</span
-        ><span>Poolside v0.2.0 <span class="separator">·</span> Local workspace</span>
-      </footer>
+        </section>
+        <footer class="main-footer">
+          <span>POOLSIDE <span class="separator">·</span> Built for a clearer session</span
+          ><span>Poolside v0.2.0 <span class="separator">·</span> Local workspace</span>
+        </footer>
       </main>
     </div>
     <dialog id="account-dialog" aria-labelledby="account-dialog-title">

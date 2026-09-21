@@ -74,7 +74,7 @@ measure the result.
 - **A small trained classifier (ONNX) now.** Rejected: no corpus to train on. Training on seven
   fixtures would produce a model that looks accurate and is not.
 - **DOM/JS introspection instead of vision.** Not available: game windows are sandboxed with no
-  preload bridge, and reaching into the game's own DOM is out of scope.
+  preload bridge. Direct game-DOM integration is not implemented.
 
 ## Enforcement
 

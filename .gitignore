@@ -17,3 +17,6 @@ Thumbs.db
 
 # Mercury agent runtime remnants
 mercury-*
+
+# Local one-off maintenance scripts
+.edit_release.cjs)

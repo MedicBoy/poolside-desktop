@@ -66,7 +66,9 @@ function parseAmount(text) {
 function inBalanceBand(box, bounds) {
   if (!box || !bounds || !(bounds.width > 0) || !(bounds.height > 0)) return false;
   const middle = box.y + box.height / 2;
-  return middle >= bounds.height * BALANCE_BAND.top && middle <= bounds.height * BALANCE_BAND.bottom && box.x >= bounds.width * BALANCE_BAND.left;
+  return (
+    middle >= bounds.height * BALANCE_BAND.top && middle <= bounds.height * BALANCE_BAND.bottom && box.x >= bounds.width * BALANCE_BAND.left
+  );
 }
 
 /**

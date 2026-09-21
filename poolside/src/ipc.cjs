@@ -5,7 +5,6 @@
 // returns the same { ok, value | error } envelope. Extracted from main.cjs so the composition root
 // stays wiring.
 
-const { checkPublicIP } = require('./network.cjs');
 const model = require('./model.cjs');
 const settingsController = require('./settings-ui-controller.cjs');
 const diagnosticsBundle = require('./diagnostics-bundle.cjs');
@@ -13,16 +12,32 @@ const { log, snapshot, save, publish, getAccount, clearActivityHistory } = requi
 const { sessions, workspace } = require('./state.cjs');
 const { messageOf } = require('./errors.cjs');
 const { registerAccountManagement } = require('./account-management-ipc.cjs');
-const routePresets = require('./route-presets.cjs');
+const workspaceBackup = require('./workspace-backup.cjs');
 const { registerCaptureLab } = require('./capture-lab-ipc.cjs');
+const { registerBackupIpc } = require('./backup-ipc.cjs');
+const { registerRoutePresetIpc } = require('./route-preset-ipc.cjs');
+const { createAccountIpCheck } = require('./network-ipc.cjs');
 
 const PREFS_SAVED = 'Transfer preferences saved. Automation is not yet connected.';
 
 /**
- * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, monitor: any, profiles: any, captureLab: any, diagnosticsRoot: string, openPath: (path: string) => Promise<string>, confirmDestructive: (title: string, detail: string) => Promise<boolean>}} deps
+ * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, monitor: any, profiles: any, captureLab: any, diagnosticsRoot: string, dataRoot: string, openPath: (path: string) => Promise<string>, confirmDestructive: (title: string, detail: string) => Promise<boolean>, chooseDirectory: (title: string, allowCreate: boolean) => Promise<string|null>}} deps
  */
 function createIpc(deps) {
-  const { ipcMain, UI_URL, windows, inspector, monitor, profiles, captureLab, diagnosticsRoot, openPath, confirmDestructive } = deps;
+  const {
+    ipcMain,
+    UI_URL,
+    windows,
+    inspector,
+    monitor,
+    profiles,
+    captureLab,
+    diagnosticsRoot,
+    dataRoot,
+    openPath,
+    confirmDestructive,
+    chooseDirectory
+  } = deps;
   const activeAccounts = () => workspace.data.accounts.filter(a => !a.archived);
 
   /**
@@ -52,43 +67,11 @@ function createIpc(deps) {
     });
   }
 
-  /** Check the public address seen by this account's own session. Never persisted. */
-  async function checkAccountIP(id) {
-    const account = getAccount(id);
-    const group = sessions.get(id);
-    if (!group) throw new Error('Open this account window before checking its IP.');
-    if (group.network && group.network.status === 'checking') return;
-    group.network = { status: 'checking' };
-    publish();
-    try {
-      const result = await checkPublicIP(group.session);
-      if (sessions.get(id) !== group) return;
-      group.network = { status: 'checked', ...result };
-      log(`${account.name}: public IP checked using this session. This does not verify game routing or location.`);
-    } catch (error) {
-      if (sessions.get(id) !== group) return;
-      group.network = { status: 'error' };
-      log(`${account.name}: ${messageOf(error)}`, 'warning');
-      throw error;
-    }
-  }
+  const checkAccountIP = createAccountIpCheck({ sessions, getAccount, publish, log });
 
   function register() {
     handle('workspace:get', () => snapshot());
-    handle('route-preset:add', input => {
-      const preset = routePresets.create(input, workspace.data.routePresets || []);
-      save({ ...workspace.data, routePresets: [...(workspace.data.routePresets || []), preset] });
-      log(`Route preset ${preset.name} saved.`);
-      return preset;
-    });
-    handle('route-preset:delete', id => {
-      const preset = (workspace.data.routePresets || []).find(item => item.id === id);
-      if (!preset) throw new Error('Route preset not found.');
-      const used = workspace.data.accounts.filter(account => account.routePresetId === id);
-      if (used.length) throw new Error(`Remove this preset from ${used.length} account(s) before deleting it.`);
-      save({ ...workspace.data, routePresets: (workspace.data.routePresets || []).filter(item => item.id !== id) });
-      log(`Route preset ${preset.name} removed.`);
-    });
+    registerRoutePresetIpc({ handle, workspace, save, log });
     handle('account:add', input => {
       const account = model.account(input, activeAccounts());
       save({ ...workspace.data, accounts: [...workspace.data.accounts, account] });
@@ -138,6 +121,7 @@ function createIpc(deps) {
       if (!agreed) throw new Error('Saved activity history was not erased.');
       return clearActivityHistory();
     });
+    registerBackupIpc({ handle, backup: workspaceBackup, dataRoot, chooseDirectory, workspace, save, log });
     handle('account:return-game', id => windows.returnToGame(id));
     handle('account:reload', id => windows.reloadAccount(id));
     handle('account:inspect', id => inspector.inspectGame(id));
@@ -155,7 +139,19 @@ function createIpc(deps) {
       return monitor.stop(id);
     });
     registerCaptureLab({ handle, inspector, captureLab });
-    registerAccountManagement({ handle, model, workspace, sessions, save, log, getAccount, profiles, confirmDestructive, activeAccounts });
+    registerAccountManagement({
+      handle,
+      model,
+      workspace,
+      sessions,
+      windows,
+      save,
+      log,
+      getAccount,
+      profiles,
+      confirmDestructive,
+      activeAccounts
+    });
     handle('sessions:open', async () => {
       await Promise.all(activeAccounts().map(a => windows.openAccount(a.id)));
     });

@@ -2,8 +2,9 @@
 
 Structure of the application: what the modules are, what may depend on what, how a session moves
 through its states, and where each kind of state lives. Decisions behind the structure are in
-[`docs/adr/`](adr/README.md); the scope boundary is [ADR-0011](adr/0011-operational-scope-boundaries.md)
-and [`../BOUNDARIES.md`](../BOUNDARIES.md). The privacy and security review is in [the threat model](threat-model.md).
+[`docs/adr/`](adr/README.md); unfinished game automation is recorded in
+[ADR-0011](adr/0011-game-automation-gaps.md) and [`../../INCOMPLETE_WORK.md`](../../INCOMPLETE_WORK.md).
+The privacy and security review is in [the threat model](threat-model.md).
 
 ## 1. Shape of the system
 

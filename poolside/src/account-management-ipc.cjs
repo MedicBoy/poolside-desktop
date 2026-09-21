@@ -3,12 +3,14 @@
 // removal clears both the slot and its local storage.
 
 const settingsController = require('./settings-ui-controller.cjs');
+const bulkPlan = require('./bulk-plan.cjs');
 
 function registerAccountManagement({
   handle,
   model,
   workspace,
   sessions,
+  windows,
   save,
   log,
   getAccount,
@@ -21,6 +23,7 @@ function registerAccountManagement({
     if (!account) throw new Error('Account not found.');
     return account;
   };
+  const isOpen = account => sessions.has(account.id);
 
   handle('account:update', input => {
     const account = getAccount(input && input.id);
@@ -93,6 +96,54 @@ function registerAccountManagement({
     save(next);
     log(`${account.name}: account slot and local profile removed.`);
     return outcome;
+  });
+  // One request for a whole selection, planned before anything is touched. Opening and closing are
+  // ordinary window work; archiving and removal keep the single-account rule that an open session must
+  // be closed first, and removal asks once for the whole selection rather than once per account.
+  handle('account:bulk', async input => {
+    const { action, accounts } = bulkPlan.selection(input, workspace.data.accounts);
+    const outcome = bulkPlan.plan(action, accounts, isOpen);
+    if (!outcome.ok) throw new Error(outcome.error);
+    if (!outcome.ids.length) return { action, changed: 0, skipped: outcome.skipped };
+    if (action === 'open') {
+      for (const id of outcome.ids) await windows.openAccount(id);
+    } else if (action === 'close') {
+      for (const id of outcome.ids) windows.closeAccount(id);
+    } else if (action === 'archive') {
+      const selected = new Set(outcome.ids);
+      save({
+        ...workspace.data,
+        accounts: workspace.data.accounts.map(candidate => (selected.has(candidate.id) ? { ...candidate, archived: true } : candidate))
+      });
+      log(`${outcome.ids.length} account slot${outcome.ids.length === 1 ? '' : 's'} archived.`);
+    } else {
+      const prompt = bulkPlan.removalPrompt(outcome.names);
+      const agreed = await confirmDestructive(prompt.title, prompt.detail);
+      if (!agreed) throw new Error('Account removal was cancelled.');
+      const failures = [];
+      const removed = new Set();
+      for (const account of accounts) {
+        const result = await profiles.remove(account);
+        if (result.failures.length) failures.push(`${account.name}: ${result.failures.join('; ')}`);
+        else removed.add(account.id);
+      }
+      // Whatever was genuinely destroyed is dropped from the workspace first, so a partly failed removal
+      // leaves the list matching the disk instead of claiming accounts that are already gone.
+      if (removed.size) {
+        const windowsMap = { ...(workspace.data.windows || {}) };
+        for (const id of removed) delete windowsMap[id];
+        const next = { ...workspace.data, accounts: workspace.data.accounts.filter(candidate => !removed.has(candidate.id)) };
+        if (Object.keys(windowsMap).length) next.windows = windowsMap;
+        else delete next.windows;
+        save(next);
+        log(`${removed.size} account slot${removed.size === 1 ? '' : 's'} and local profile${removed.size === 1 ? '' : 's'} removed.`);
+      }
+      if (failures.length)
+        throw new Error(
+          `${removed.size} of ${accounts.length} accounts were removed; the rest could not be deleted: ${failures.join(' | ')}`
+        );
+    }
+    return { action, changed: outcome.ids.length, skipped: outcome.skipped };
   });
 }
 

@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-18
 - **Related:** ADR-0003 (persistent partitions), ADR-0004 (session storage authority), ADR-0006 (Electron
-  pin), ADR-0012 (session identity surface), `BOUNDARIES.md` §1
+  pin), ADR-0012 (session identity surface), `INCOMPLETE_WORK.md`
 - **Supersedes:** nothing. This is the first record covering profile lifecycle, integrity and deletion.
 
 ## Context

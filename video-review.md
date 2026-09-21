@@ -16,23 +16,23 @@ The bottom-left account is matched against a different opponent and also leaves.
 
 ## Timeline
 
-| Approximate position | Observed content |
-| --- | --- |
-| 0:00–0:15 | Preview montage of controller, browser windows, and accounts. |
-| 0:30–1:00 | Introduction and Windows installer. |
-| 1:15–1:30 | Resource download and licensing discussion. |
-| 1:45–2:00 | Controller, expandable main-account fields, transfer list, and remote strategy-loading messages. |
-| 2:05–2:15 | Saved cloud-account list and account actions. |
-| 2:25 | Web login opens the official game site in an incognito browser. |
-| 2:35–2:45 | Bulk .plist parser; a dialog reports five unique tokens extracted from five files. |
-| 2:55–3:10 | Account selection and window-count setting. |
-| 3:15–3:25 | Limit control and table strategies: None, Bangkok, Rome, Seoul. |
-| 3:30–3:40 | Browser launches; VPN extension/setup screen appears. |
-| 3:45–3:50 | Game sessions load at localhost addresses; three game windows are present with Windows set to two. |
-| 3:55–4:00 | Bangkok matches are entered. Top-left and top-right accounts are paired; bottom-left has another opponent. |
-| 4:00–4:04 | Secondary accounts leave; top-left wins and shows the pot animation. |
-| 4:05–4:08 | Narration claims continued operation until the chosen limit. The recording does not demonstrate completion of that limit. |
-| 4:13 onward | Outro. |
+| Approximate position | Observed content                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 0:00–0:15            | Preview montage of controller, browser windows, and accounts.                                                             |
+| 0:30–1:00            | Introduction and Windows installer.                                                                                       |
+| 1:15–1:30            | Resource download and licensing discussion.                                                                               |
+| 1:45–2:00            | Controller, expandable main-account fields, transfer list, and remote strategy-loading messages.                          |
+| 2:05–2:15            | Saved cloud-account list and account actions.                                                                             |
+| 2:25                 | Web login opens the official game site in an incognito browser.                                                           |
+| 2:35–2:45            | Bulk .plist parser; a dialog reports five unique tokens extracted from five files.                                        |
+| 2:55–3:10            | Account selection and window-count setting.                                                                               |
+| 3:15–3:25            | Limit control and table strategies: None, Bangkok, Rome, Seoul.                                                           |
+| 3:30–3:40            | Browser launches; VPN extension/setup screen appears.                                                                     |
+| 3:45–3:50            | Game sessions load at localhost addresses; three game windows are present with Windows set to two.                        |
+| 3:55–4:00            | Bangkok matches are entered. Top-left and top-right accounts are paired; bottom-left has another opponent.                |
+| 4:00–4:04            | Secondary accounts leave; top-left wins and shows the pot animation.                                                      |
+| 4:05–4:08            | Narration claims continued operation until the chosen limit. The recording does not demonstrate completion of that limit. |
+| 4:13 onward          | Outro.                                                                                                                    |
 
 ## Interface inventory
 
@@ -53,13 +53,13 @@ The bottom-left account is matched against a different opponent and also leaves.
 5. **Repeatability:** edited transitions and jumps in the controller timer prevent treating this as an uninterrupted reliability test.
 6. **Limit semantics:** narration associates the limit with matches, but per-account versus total counting and failure handling remain unclear.
 7. **Browser support:** the demonstration looks Chromium-based; it does not establish compatibility with the user's installed Opera.
-8. **Software safety:** visuals cannot establish the presence or absence of loggers, droppers, or hidden network behavior.
+8. **Runtime behavior:** the recording does not expose the demonstrated tool's network requests, background processes, or local storage behavior.
 
 ## Additional user-supplied frames (September 17, 2026)
 
 At the time these frames were supplied, the user had not yet tested Poolside. These are reference-video screenshots, not results from the new app.
 
-- Image 1 shows `https://vpn-browser.com/thanks/` in a launched browser. This supports identifying the demonstrated extension's associated website; the frame does not establish its version, permissions, safety, or active connection.
+- Image 1 shows `https://vpn-browser.com/thanks/` in a launched browser. This identifies the demonstrated extension's associated website; the frame does not establish its version, configuration, or active connection.
 - Image 2 shows a tab titled `api.ipify.org` in the top-left browser. ipify's official documentation (https://www.ipify.org/) describes this endpoint as returning the public IPv4 address. Likely purpose: checking that browser's outgoing IP. It is not itself a VPN or a location selector, and its tab alone does not show the returned IP or prove all game traffic uses the same route.
 - Image 3 visibly logs downloading/extracting `resources.zip`, followed by extracting pre-cached `web_assets.zip` into a directory beginning `C:\Program Files (x86)\CT By GOD MODE`. The full destination is clipped. Combined with the localhost game URLs, this supports a local asset-serving component, but does not identify the archive contents or prove game modification.
 - Image 4 visibly says `Bangkok Strategy (MAIN will use VPN extension)...`. This is evidence of role-specific configuration in that strategy. It does not say ONLY the main uses a VPN, establish what networking the secondary windows use, or generalize to every strategy.
