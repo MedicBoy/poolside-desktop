@@ -135,3 +135,65 @@ test('only a ledger this module could have written is read back from disk', () =
   const withoutSequence = coordination.cleanState({ format: coordination.FORMAT, matches: stored.matches.slice(0, 1) });
   assert.ok(Number.isInteger(withoutSequence.sequence) && withoutSequence.sequence >= 1);
 });
+
+test('the readiness barrier opens with a deadline and closes with a verdict', () => {
+  const state = coordination.start(coordination.emptyState(), pair('a', 'b'));
+  const matchId = state.matches[0].matchId;
+  const waiting = coordination.requestReadiness(state, { matchId, now: AT, deadlineMs: 120000 });
+  const opened = waiting.matches[0].readiness;
+  assert.equal(opened.verdict, 'preparing');
+  assert.equal(opened.requestedAt, new Date(AT).toISOString());
+  assert.equal(opened.deadlineAt, new Date(AT + 120000).toISOString());
+  assert.equal(opened.releasedAt, null);
+  assert.equal(opened.skewMs, null);
+  assert.equal(waiting.matches[0].history.at(-1).event, 'readiness-requested');
+
+  const released = coordination.settleReadiness(waiting, {
+    matchId,
+    verdict: 'ready',
+    reason: 'Alice and Bob are ready.',
+    releasedAt: AT + 4200,
+    skewMs: 4200,
+    now: AT + 4200
+  });
+  const closed = released.matches[0].readiness;
+  assert.equal(closed.verdict, 'ready');
+  assert.equal(closed.releasedAt, new Date(AT + 4200).toISOString());
+  assert.equal(closed.skewMs, 4200);
+  assert.equal(released.matches[0].history.at(-1).event, 'released');
+  assert.equal(coordination.dashboardView(released).active[0].readiness.verdict, 'ready');
+
+  const blocked = coordination.settleReadiness(waiting, {
+    matchId,
+    verdict: 'blocked',
+    reason: 'Bob did not become ready within 120 seconds.',
+    now: AT + 121000
+  });
+  assert.equal(blocked.matches[0].readiness.verdict, 'blocked');
+  assert.equal(blocked.matches[0].readiness.releasedAt, null);
+  assert.equal(blocked.matches[0].readiness.skewMs, null);
+  assert.match(blocked.matches[0].readiness.reason, /Bob did not become ready/);
+  assert.equal(blocked.matches[0].history.at(-1).event, 'blocked');
+});
+
+test('the barrier refuses nonsense and a settled match cannot be re-armed', () => {
+  const state = coordination.start(coordination.emptyState(), pair('a', 'b'));
+  const matchId = state.matches[0].matchId;
+  assert.throws(() => coordination.requestReadiness(state, { matchId, deadlineMs: 0 }), /deadline is required/);
+  assert.throws(() => coordination.requestReadiness(state, { matchId: 'nope', deadlineMs: 1000 }), /not in the local ledger/);
+  assert.throws(() => coordination.settleReadiness(state, { matchId, verdict: 'maybe', reason: '' }), /Unknown readiness verdict/);
+  const done = coordination.complete(state, { matchId, winner: 'a', now: AT + 10 });
+  assert.throws(() => coordination.requestReadiness(done, { matchId, deadlineMs: 1000 }), /no longer active/);
+  assert.throws(() => coordination.settleReadiness(done, { matchId, verdict: 'ready', reason: '' }), /no longer active/);
+});
+
+test('a stored readiness record survives a round trip, and a malformed one is dropped', () => {
+  const state = coordination.start(coordination.emptyState(), pair('a', 'b'));
+  const matchId = state.matches[0].matchId;
+  const withBarrier = coordination.requestReadiness(state, { matchId, now: AT, deadlineMs: 5000 });
+  const roundTripped = coordination.cleanState(JSON.parse(JSON.stringify(withBarrier)));
+  assert.deepEqual(roundTripped.matches[0].readiness, withBarrier.matches[0].readiness);
+  const invented = JSON.parse(JSON.stringify(withBarrier));
+  invented.matches[0].readiness = { verdict: 'probably', requestedAt: 'whenever', deadlineAt: 'whenever' };
+  assert.equal(coordination.cleanState(invented).matches[0].readiness, null, 'an invented verdict is not trusted');
+});

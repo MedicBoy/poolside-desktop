@@ -181,6 +181,10 @@ test('match coordination is a navigable, labelled local record of who played who
   assert.match(renderer, /data-action="match-cancel"/);
   assert.match(renderer, /data-action="match-load"/);
   assert.match(renderer, /Load both profiles/);
+  assert.match(renderer, /function matchReadiness\(match\)/);
+  assert.match(renderer, /Release blocked — /);
+  assert.match(renderer, /waiting for \$|Waiting for /);
+  assert.match(renderer, /match-readiness/);
   assert.match(renderer, /poolside\.loadMatchSessions\(/);
   assert.match(renderer, /poolside\.startMatch\(/);
   assert.match(renderer, /poolside\.completeMatch\(/);

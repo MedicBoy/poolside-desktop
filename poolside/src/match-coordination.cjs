@@ -11,98 +11,26 @@
 // outcome. A recorded result is what the operator recorded, and the ledger says so.
 //
 // Pure: no Electron, no fs, no clock of its own. Time and identity arrive as arguments so every rule
-// below is arithmetic a test can pin.
+// below is arithmetic a test can pin. The record shape and its validation live in `match-record.cjs`;
+// this module owns the operations that move a ledger from one valid state to the next.
 
-const FORMAT = 'poolside-match-coordination/v1';
-/** Bounded because the ledger is broadcast to the dashboard on every change and written on every match. */
-const LEDGER_LIMIT = 200;
-const HISTORY_LIMIT = 12;
+const {
+  FORMAT,
+  LEDGER_LIMIT,
+  HISTORY_LIMIT,
+  ID_LIMIT,
+  NAME_LIMIT,
+  TEXT_LIMIT,
+  STATES,
+  READINESS_VERDICTS,
+  text,
+  stamp,
+  emptyState,
+  cleanState
+} = require('./match-record.cjs');
+
+/** How many finished matches the dashboard shows. */
 const VIEW_LIMIT = 8;
-const NAME_LIMIT = 60;
-const TEXT_LIMIT = 200;
-const ID_LIMIT = 64;
-
-const STATES = ['active', 'completed', 'cancelled'];
-
-/** @param {unknown} value @param {number} max */
-function text(value, max) {
-  return typeof value === 'string'
-    ? value
-        .replace(/[\r\n\t]+/g, ' ')
-        .trim()
-        .slice(0, max)
-    : '';
-}
-
-function stamp(now) {
-  return new Date(now).toISOString();
-}
-
-/** @returns {{format: string, sequence: number, matches: any[]}} */
-function emptyState() {
-  return { format: FORMAT, sequence: 0, matches: [] };
-}
-
-function cleanParticipant(value) {
-  if (!value || typeof value !== 'object') return null;
-  const id = text(value.id, ID_LIMIT);
-  const name = text(value.name, NAME_LIMIT);
-  return id && name ? { id, name } : null;
-}
-
-function cleanHistory(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(step => {
-      if (!step || typeof step !== 'object') return null;
-      const at = text(step.at, 40);
-      const from = STATES.includes(step.from) ? step.from : null;
-      const to = STATES.includes(step.to) ? step.to : null;
-      const event = text(step.event, 32);
-      if (!Number.isFinite(Date.parse(at)) || !from || !to || !/^[a-z0-9-]+$/.test(event)) return null;
-      return { at, from, to, event, detail: text(step.detail, TEXT_LIMIT) };
-    })
-    .filter(Boolean)
-    .slice(-HISTORY_LIMIT);
-}
-
-function cleanMatch(value) {
-  if (!value || typeof value !== 'object') return null;
-  const handle = text(value.handle, 24);
-  const matchId = text(value.matchId, ID_LIMIT);
-  const participants = Array.isArray(value.participants) ? value.participants.map(cleanParticipant).filter(Boolean) : [];
-  const state = STATES.includes(value.state) ? value.state : null;
-  const startedAt = text(value.startedAt, 40);
-  if (!/^m\d+$/.test(handle) || !matchId || participants.length !== 2 || !state || !Number.isFinite(Date.parse(startedAt))) return null;
-  const winner = participants.find(participant => participant.id === value.winnerId) || null;
-  const endedAt = text(value.endedAt, 40);
-  return {
-    handle,
-    matchId,
-    participants,
-    state,
-    winnerId: winner ? winner.id : null,
-    winnerName: winner ? winner.name : null,
-    reason: text(value.reason, TEXT_LIMIT),
-    startedAt,
-    endedAt: Number.isFinite(Date.parse(endedAt)) ? endedAt : null,
-    history: cleanHistory(value.history)
-  };
-}
-
-/**
- * Accept only a ledger this module could have produced. Anything else is dropped rather than trusted,
- * because this shape is read back from a file and from the dashboard.
- * @param {unknown} value
- */
-function cleanState(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return emptyState();
-  const source = /** @type {any} */ (value);
-  if (source.format !== FORMAT) return emptyState();
-  const matches = (Array.isArray(source.matches) ? source.matches : []).map(cleanMatch).filter(Boolean).slice(0, LEDGER_LIMIT);
-  const sequence = Number.isInteger(source.sequence) && source.sequence >= 0 ? source.sequence : matches.length;
-  return { format: FORMAT, sequence: Math.max(sequence, matches.length), matches };
-}
 
 function step(from, to, event, detail, at) {
   return { at: stamp(at), from, to, event, detail: text(detail, TEXT_LIMIT) };
@@ -120,6 +48,55 @@ function moved(match, to, event, detail, now) {
 function replaced(state, match) {
   const matches = state.matches.map(candidate => (candidate.matchId === match.matchId ? match : candidate));
   return { ...state, matches: matches.slice(0, LEDGER_LIMIT) };
+}
+
+function activeMatch(state, matchId) {
+  const match = locate(state, matchId);
+  if (match.state !== 'active') throw new Error('That match is no longer active.');
+  return match;
+}
+
+/**
+ * Open the barrier: from now until the deadline, this match is waiting for every participant to be
+ * ready. Called when a match starts and again whenever release has to be re-requested.
+ * @param {{format: string, sequence: number, matches: any[]}} state
+ * @param {{matchId: string, now?: number, deadlineMs: number, reason?: string}} input
+ */
+function requestReadiness(state, { matchId, now = Date.now(), deadlineMs, reason }) {
+  const match = activeMatch(state, matchId);
+  if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) throw new Error('A readiness deadline is required.');
+  const detail = text(reason, TEXT_LIMIT) || 'Waiting for every participant to be ready.';
+  const readiness = {
+    verdict: 'preparing',
+    requestedAt: stamp(now),
+    deadlineAt: stamp(now + deadlineMs),
+    releasedAt: null,
+    skewMs: null,
+    reason: detail,
+    checkedAt: stamp(now)
+  };
+  return replaced(state, moved({ ...match, readiness }, match.state, 'readiness-requested', detail, now));
+}
+
+/**
+ * Close the barrier with a verdict. `ready` records when release actually happened and how long it
+ * took against the monotonic clock the caller measured; `blocked` records why release did not happen.
+ * @param {{format: string, sequence: number, matches: any[]}} state
+ * @param {{matchId: string, verdict: string, reason: string, releasedAt?: number, skewMs?: number|null, now?: number}} input
+ */
+function settleReadiness(state, { matchId, verdict, reason, releasedAt, skewMs = null, now = Date.now() }) {
+  const match = activeMatch(state, matchId);
+  if (!['ready', 'blocked'].includes(verdict)) throw new Error(`Unknown readiness verdict: ${verdict}`);
+  const detail = text(reason, TEXT_LIMIT) || (verdict === 'ready' ? 'Every participant is ready.' : 'Readiness was not reached.');
+  const readiness = {
+    ...match.readiness,
+    verdict,
+    reason: detail,
+    releasedAt: verdict === 'ready' ? stamp(releasedAt === undefined ? now : releasedAt) : null,
+    skewMs: verdict === 'ready' && typeof skewMs === 'number' && Number.isFinite(skewMs) && skewMs >= 0 ? Math.round(skewMs) : null,
+    checkedAt: stamp(now)
+  };
+  return replaced(state, moved({ ...match, readiness }, match.state, verdict === 'ready' ? 'released' : 'blocked', detail, now));
 }
 
 function locate(state, handleOrId) {
@@ -164,6 +141,7 @@ function start(state, { first, second, accounts, now = Date.now(), matchId }) {
     reason: '',
     startedAt: stamp(now),
     endedAt: null,
+    readiness: null,
     history: []
   };
   if (!record.matchId) throw new Error('A match identity could not be created.');
@@ -225,6 +203,7 @@ function matchView(match) {
     reason: match.reason,
     startedAt: match.startedAt,
     endedAt: match.endedAt,
+    readiness: match.readiness ? { ...match.readiness } : null,
     history: match.history.slice(-4).map(item => ({ ...item }))
   };
 }
@@ -255,11 +234,14 @@ module.exports = {
   complete,
   cancel,
   reconcile,
+  requestReadiness,
+  settleReadiness,
   dashboardView,
   cleanState,
   emptyState,
   FORMAT,
   LEDGER_LIMIT,
   HISTORY_LIMIT,
-  STATES
+  STATES,
+  READINESS_VERDICTS
 };

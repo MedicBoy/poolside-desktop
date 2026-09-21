@@ -64,7 +64,7 @@
       "mode": "available",
       "validation": "integration-proven",
       "flag": "on",
-      "detail": "Pairs two of your own accounts into a match, records the result and keeps a bounded local ledger. It records what you decide: it does not pair accounts on the game service or verify a real match."
+      "detail": "Pairs two of your own accounts into a match, loads both profiles, holds the match at a readiness barrier that reports which participants are ready and blocks release when they are not, records the result and keeps a bounded local ledger. It records what you decide: it does not pair accounts on the game service or verify a real match."
     },
     {
       "id": "diagnostics",

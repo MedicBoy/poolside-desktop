@@ -9,6 +9,8 @@ function harness(overrides = {}) {
   let publishes = 0;
   const writes = [];
   const opened = [];
+  let clock = Date.parse('2026-09-21T12:00:00.000Z');
+  let mono = 1000;
   const accounts = overrides.accounts || [
     { id: 'a', name: 'Alice' },
     { id: 'b', name: 'Bob' },
@@ -34,13 +36,34 @@ function harness(overrides = {}) {
         return state;
       }
     },
-    now: () => Date.parse('2026-09-21T12:00:00.000Z'),
+    now: () => clock,
+    monotonic: () => mono,
+    ready: overrides.ready || null,
+    setTimer: (callback, delay) => ({ callback, delay, unref: () => {} }),
+    clearTimer: () => {},
     makeId: (() => {
       let index = 0;
       return () => `match-${++index}`;
     })()
   });
-  return { service, logs, writes, opened, accounts, publishes: () => publishes };
+  return {
+    service,
+    logs,
+    writes,
+    opened,
+    accounts,
+    publishes: () => publishes,
+    setClock: value => {
+      clock = value;
+    },
+    advanceClock: ms => {
+      clock += ms;
+    },
+    bumpMonotonic: ms => {
+      mono += ms;
+    },
+    match: () => service.state().matches[0]
+  };
 }
 
 test('starting a match publishes, logs and persists it', async () => {
@@ -147,4 +170,70 @@ test('loading refuses an unknown or settled match', async () => {
   await assert.rejects(() => service.load({ matchId: 'nope' }), /not in the local ledger/);
   service.complete({ matchId: 'match-1', winner: 'a' });
   await assert.rejects(() => service.load({ matchId: 'match-1' }), /no longer active/);
+});
+
+test('a match waits at the barrier until every participant is ready', async () => {
+  const readyIds = new Set();
+  const { service, match, bumpMonotonic } = harness({ openSession: true, ready: id => readyIds.has(id) });
+  await service.start({ first: 'a', second: 'b' });
+  assert.equal(match().readiness.verdict, 'preparing');
+  assert.equal(match().readiness.releasedAt, null);
+
+  readyIds.add('a');
+  service.advance();
+  assert.equal(match().readiness.verdict, 'preparing', 'one ready participant does not release the match');
+
+  bumpMonotonic(2500);
+  readyIds.add('b');
+  service.advance();
+  assert.equal(match().readiness.verdict, 'ready');
+  assert.equal(match().readiness.skewMs, 2500, 'release records how long the barrier took');
+  assert.ok(match().readiness.releasedAt);
+  assert.match(match().readiness.reason, /Alice and Bob are ready/);
+});
+
+test('a participant that never becomes ready blocks release at the deadline', async () => {
+  const { service, match, logs, advanceClock } = harness({ openSession: true, ready: id => id === 'a' });
+  await service.start({ first: 'a', second: 'b' });
+  advanceClock(119000);
+  service.advance();
+  assert.equal(match().readiness.verdict, 'preparing', 'still within the deadline');
+  advanceClock(2000);
+  service.advance();
+  assert.equal(match().readiness.verdict, 'blocked');
+  assert.match(match().readiness.reason, /Bob did not become ready within 120 seconds/);
+  assert.equal(match().readiness.releasedAt, null);
+  assert.equal(logs.at(-1).kind, 'warning');
+  assert.match(logs.at(-1).message, /m1: Bob did not become ready/);
+});
+
+test('release is withdrawn the moment a participant stops being ready', async () => {
+  const readyIds = new Set(['a', 'b']);
+  const { service, match } = harness({ openSession: true, ready: id => readyIds.has(id) });
+  await service.start({ first: 'a', second: 'b' });
+  service.advance();
+  assert.equal(match().readiness.verdict, 'ready');
+  readyIds.delete('b');
+  service.advance();
+  assert.equal(match().readiness.verdict, 'preparing');
+  assert.match(match().readiness.reason, /Bob is no longer ready, so release was withdrawn/);
+  assert.equal(match().readiness.releasedAt, null);
+});
+
+test('checking the barrier writes nothing while nothing has changed', async () => {
+  const { service, writes, advanceClock } = harness({ openSession: true, ready: () => false });
+  await service.start({ first: 'a', second: 'b' });
+  const before = writes.length;
+  advanceClock(1000);
+  assert.equal(service.advance(), false, 'nothing to record');
+  assert.equal(writes.length, before, 'a no-op check does not write the ledger');
+});
+
+test('a readiness check with no predicate blocks rather than pretending to be ready', async () => {
+  const { service, match, advanceClock } = harness();
+  await service.start({ first: 'a', second: 'b', load: false });
+  advanceClock(121000);
+  service.advance();
+  assert.equal(match().readiness.verdict, 'blocked');
+  assert.match(match().readiness.reason, /Alice and Bob did not become ready/);
 });

@@ -9,7 +9,17 @@ const crypto = require('node:crypto');
 const coordination = require('./match-coordination.cjs');
 
 /**
- * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
+ * Whether a participant is actually ready to be released: its own window is up AND its session
+ * reached `ready`. Defined once, here, so the barrier that gates release and the dashboard that
+ * explains it cannot disagree about what ready means.
+ * @param {{open: boolean, status: string}} session
+ */
+function participantReady({ open, status }) {
+  return Boolean(open && status === 'ready');
+}
+
+/**
+ * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
  */
 function createMatchService({
   accounts,
@@ -19,7 +29,13 @@ function createMatchService({
   openSession = null,
   journal = null,
   now = () => Date.now(),
-  makeId = () => crypto.randomUUID()
+  makeId = () => crypto.randomUUID(),
+  ready = null,
+  monotonic = () => performance.now(),
+  readyDeadlineMs = 120000,
+  readyCheckMs = 1000,
+  setTimer = (callback, delay) => setInterval(callback, delay),
+  clearTimer = timer => clearInterval(timer)
 }) {
   function roster() {
     if (typeof accounts === 'function') return accounts();
@@ -45,6 +61,103 @@ function createMatchService({
 
   store.current = journal ? journal.read() : coordination.emptyState();
 
+  /** Monotonic marks for the matches waiting at the barrier. Memory only: a restart cannot measure skew. */
+  const requested = new Map();
+  /** @type {any} */
+  let poll = null;
+
+  function participantReadiness(match) {
+    return match.participants.map(participant => ({
+      id: participant.id,
+      name: participant.name,
+      ready: typeof ready === 'function' ? Boolean(ready(participant.id)) : false
+    }));
+  }
+
+  /** Keep a check running only while some match is actually waiting at the barrier. */
+  function syncPoll() {
+    const waiting = store.current.matches.some(
+      match => match.state === 'active' && match.readiness && match.readiness.verdict === 'preparing'
+    );
+    if (waiting && !poll) {
+      poll = setTimer(() => {
+        try {
+          advance();
+        } catch (error) {
+          log(`The readiness barrier could not be checked: ${error instanceof Error ? error.message : String(error)}`, 'warning');
+        }
+      }, readyCheckMs);
+      if (poll && typeof poll.unref === 'function') poll.unref();
+    }
+    if (!waiting && poll) {
+      clearTimer(poll);
+      poll = null;
+    }
+  }
+
+  /**
+   * Advance every active match's readiness barrier. A match is released only once every participant
+   * reports ready, and release is withdrawn the moment one stops being ready: the barrier is the point
+   * where the operator stops assuming and starts knowing.
+   */
+  function advance() {
+    const at = now();
+    let next = store.current;
+    let changed = false;
+    /** @type {{handle: string, verdict: string, reason: string}[]} */
+    const announced = [];
+    for (const match of store.current.matches) {
+      if (match.state !== 'active') continue;
+      const readiness = match.readiness;
+      const states = participantReadiness(match);
+      const allReady = states.length === match.participants.length && states.every(entry => entry.ready);
+      const waiting = states.filter(entry => !entry.ready).map(entry => entry.name);
+      if (!readiness) {
+        next = coordination.requestReadiness(next, { matchId: match.matchId, now: at, deadlineMs: readyDeadlineMs });
+        requested.set(match.matchId, monotonic());
+        changed = true;
+        continue;
+      }
+      if (readiness.verdict === 'preparing' && allReady) {
+        const mark = requested.get(match.matchId);
+        const reason = `${states.map(entry => entry.name).join(' and ')} are ready.`;
+        next = coordination.settleReadiness(next, {
+          matchId: match.matchId,
+          verdict: 'ready',
+          reason,
+          releasedAt: at,
+          skewMs: typeof mark === 'number' ? Math.max(0, monotonic() - mark) : null,
+          now: at
+        });
+        requested.delete(match.matchId);
+        announced.push({ handle: match.handle, verdict: 'ready', reason });
+        changed = true;
+        continue;
+      }
+      if (readiness.verdict === 'preparing' && Date.parse(readiness.deadlineAt) <= at) {
+        const reason = `${waiting.join(' and ')} did not become ready within ${Math.round(readyDeadlineMs / 1000)} seconds.`;
+        next = coordination.settleReadiness(next, { matchId: match.matchId, verdict: 'blocked', reason, now: at });
+        announced.push({ handle: match.handle, verdict: 'blocked', reason });
+        changed = true;
+        continue;
+      }
+      if (readiness.verdict === 'ready' && !allReady) {
+        const reason = `${waiting.join(' and ')} is no longer ready, so release was withdrawn.`;
+        next = coordination.requestReadiness(next, { matchId: match.matchId, now: at, deadlineMs: readyDeadlineMs, reason });
+        requested.set(match.matchId, monotonic());
+        announced.push({ handle: match.handle, verdict: 'blocked', reason });
+        changed = true;
+      }
+    }
+    if (changed) {
+      store.current = persist(next);
+      for (const item of announced) log(`${item.handle}: ${item.reason}`, item.verdict === 'blocked' ? 'warning' : 'info');
+      publish();
+    }
+    syncPoll();
+    return changed;
+  }
+
   /**
    * Cancel anything whose participant has left the workspace. Called before every read, so the ledger
    * cannot show a match in progress between an account that is no longer there.
@@ -52,12 +165,14 @@ function createMatchService({
   function refresh() {
     const before = store.current;
     const next = coordination.reconcile(before, roster(), now());
-    if (next === before) return coordination.dashboardView(before);
-    const wasActive = id => before.matches.find(match => match.matchId === id)?.state === 'active';
-    const cancelled = next.matches.filter(match => match.state === 'cancelled' && wasActive(match.matchId));
-    store.current = persist(next);
-    for (const match of cancelled) log(match.reason, 'warning');
-    publish();
+    if (next !== before) {
+      const wasActive = id => before.matches.find(match => match.matchId === id)?.state === 'active';
+      const cancelled = next.matches.filter(match => match.state === 'cancelled' && wasActive(match.matchId));
+      store.current = persist(next);
+      for (const match of cancelled) log(match.reason, 'warning');
+      publish();
+    }
+    advance();
     return coordination.dashboardView(store.current);
   }
 
@@ -95,20 +210,43 @@ function createMatchService({
 
   /** @param {{matchId: string}} input */
   async function load({ matchId }) {
-    return { ...coordination.dashboardView(store.current), load: await openParticipants(matchId) };
+    const results = await openParticipants(matchId);
+    store.current = persist(
+      coordination.requestReadiness(store.current, {
+        matchId,
+        now: now(),
+        deadlineMs: readyDeadlineMs,
+        reason: 'Release was requested again.'
+      })
+    );
+    requested.set(matchId, monotonic());
+    advance();
+    return { ...coordination.dashboardView(store.current), load: results };
   }
 
   async function start({ first, second, load: shouldLoad = true }) {
-    const next = coordination.start(store.current, { first, second, accounts: roster(), now: now(), matchId: makeId() });
-    const opened = next.matches.find(
+    const created = coordination.start(store.current, { first, second, accounts: roster(), now: now(), matchId: makeId() });
+    const opened = created.matches.find(
       match => match.state === 'active' && !store.current.matches.some(before => before.matchId === match.matchId)
     );
-    const view = commit(
-      next,
-      opened ? `${opened.participants[0].name} vs ${opened.participants[1].name}: ${opened.handle} is in progress.` : null
-    );
-    if (!opened || shouldLoad === false) return view;
-    return { ...coordination.dashboardView(store.current), load: await openParticipants(opened.matchId) };
+    if (!opened) throw new Error('The match could not be created.');
+    // The barrier exists from the moment the match does, so a restart never finds an active match with
+    // no readiness deadline attached to it.
+    const next = coordination.requestReadiness(created, {
+      matchId: opened.matchId,
+      now: now(),
+      deadlineMs: readyDeadlineMs,
+      reason: 'Waiting for both participants to load.'
+    });
+    requested.set(opened.matchId, monotonic());
+    const view = commit(next, `${opened.participants[0].name} vs ${opened.participants[1].name}: ${opened.handle} is in progress.`);
+    if (shouldLoad === false) {
+      syncPoll();
+      return view;
+    }
+    const results = await openParticipants(opened.matchId);
+    advance();
+    return { ...coordination.dashboardView(store.current), load: results };
   }
 
   function complete({ matchId, winner }) {
@@ -123,7 +261,13 @@ function createMatchService({
     return commit(next, settled ? `${settled.handle}: ${settled.reason}` : null);
   }
 
-  return { start, complete, cancel, load, refresh, view: refresh, state: () => store.current };
+  /** Stop the barrier check. Used when the app is shutting down and by tests. */
+  function dispose() {
+    if (poll) clearTimer(poll);
+    poll = null;
+  }
+
+  return { start, complete, cancel, load, refresh, advance, dispose, view: refresh, state: () => store.current };
 }
 
-module.exports = { createMatchService };
+module.exports = { createMatchService, participantReady };

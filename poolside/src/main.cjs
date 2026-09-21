@@ -19,7 +19,7 @@ const { createTableNavigationService } = require('./table-navigation-service.cjs
 const { createTableNavigationJournal } = require('./table-navigation-journal.cjs');
 const { createCaptureLab } = require('./capture-lab.cjs');
 const { createMatchJournal } = require('./match-journal.cjs');
-const { createMatchService } = require('./match-service.cjs');
+const { createMatchService, participantReady } = require('./match-service.cjs');
 const { createActivityJournal } = require('./activity-journal.cjs');
 const { createIpc } = require('./ipc.cjs');
 const { createProfileManager } = require('./profile-manager.cjs');
@@ -94,6 +94,16 @@ const matches = createMatchService({
   journal: createMatchJournal({ root: app.getPath('userData') }),
   // Starting a match loads both participants' sessions through the same path as "Open ↗".
   openSession: id => windows.openAccount(id),
+  // Ready means this participant's own window is up and its session reached `ready`, not merely that
+  // an open was requested. The barrier that gates release reads exactly this.
+  ready: id => {
+    const group = sessions.get(id);
+    return participantReady({
+      open: Boolean(group && group.window && typeof group.window.isDestroyed === 'function' && !group.window.isDestroyed()),
+      status: group && group.fsm ? group.fsm.state : 'closed'
+    });
+  },
+  monotonic: () => performance.now(),
   publish,
   log
 });
@@ -240,6 +250,7 @@ app.on('before-quit', event => {
   windows.flushAll().then(async results => {
     monitor.dispose();
     tableNavigation.dispose();
+    matches.dispose();
     await screenReaders.closeAll().catch(() => {});
     if (results.some(r => r.status === 'rejected')) {
       dialog.showErrorBox('Session save incomplete', 'Some login state could not be saved. Existing profile files remain on this PC.');

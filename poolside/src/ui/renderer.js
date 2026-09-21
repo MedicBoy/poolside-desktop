@@ -719,9 +719,26 @@ function matchSessions(match) {
     )
     .join('')}</ul>`;
 }
+function matchReadiness(match) {
+  const readiness = match.readiness;
+  if (!readiness) return '';
+  const participants = match.participants || [];
+  const waiting = participants.filter(participant => participant.open === true && participant.ready !== true).map(entry => entry.name);
+  const missing = participants.filter(participant => participant.open !== true).map(entry => entry.name);
+  const detail =
+    readiness.verdict === 'ready'
+      ? `Released — every profile is ready${
+          Number.isFinite(readiness.skewMs) ? ` (${(readiness.skewMs / 1000).toFixed(1)} s from request to release)` : ''
+        }.`
+      : readiness.verdict === 'blocked'
+        ? `Release blocked — ${readiness.reason}`
+        : `Waiting for ${[...missing, ...waiting].join(' and ') || 'the profiles'} to be ready.`;
+  return `<small class="match-meta match-readiness ${readiness.verdict}">${escapeHtml(detail)}</small>`;
+}
 function matchCard(match, actionable) {
   const [first, second] = match.participants || [];
-  const needsLoad = actionable && (match.participants || []).some(participant => !participant.open);
+  const needsLoad =
+    actionable && (match.readiness?.verdict === 'blocked' || (match.participants || []).some(participant => !participant.open));
   const outcome =
     match.state === 'completed'
       ? `${match.winnerName || 'A participant'} recorded as the winner`
@@ -747,6 +764,7 @@ function matchCard(match, actionable) {
         <span class="match-handle">${escapeHtml(match.handle)}</span>
       </div>
       <small class="match-meta">${escapeHtml(outcome)} · ${escapeHtml(MATCH_LABELS[match.state] || match.state)} · ${escapeHtml(matchWhen(match))}</small>
+      ${matchReadiness(match)}
       ${matchSessions(match)}
       ${match.reason ? `<small class="match-meta">${escapeHtml(match.reason)}</small>` : ''}
       ${actions}
