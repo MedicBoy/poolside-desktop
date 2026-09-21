@@ -151,6 +151,7 @@ function footprintRow(a) {
     parts.push(f.verified.matches ? `using ${f.verified.route.label}` : `NOT using the configured route (${f.verified.route.label})`);
   if (f.storage && f.storage.cacheBytes !== null)
     parts.push(`${Math.round(f.storage.cacheBytes / 1024)} KB cached${f.storage.overQuota ? ', over the configured ceiling' : ''}`);
+  if (a.webRTC === 'disable_non_proxied_udp') parts.push('WebRTC held to the route');
   const text = parts.length ? parts.join(' · ') : 'default footprint — no identity or route configured';
   return `<div class="network-row"><span>${escapeHtml(text)}</span><button class="text-button" data-action="check-route" data-id="${a.id}" title="Ask Chromium which route this session will actually use" ${isClosed(a) ? 'disabled' : ''}>Check route ↗</button></div>`;
 }

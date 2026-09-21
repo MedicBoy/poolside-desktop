@@ -119,6 +119,12 @@ function buildSnapshot(activityHistory) {
       gameScreen: group && group.gameScreen ? group.gameScreen : null,
       visibleReadings: describeReadings(group && group.visibleReadings ? group.visibleReadings : {}, Date.now()),
       monitoring: Boolean(group && group.monitoring),
+      // The session's own WebRTC policy, so the row that explains a session's network can say whether
+      // anything is still able to step around the route. Null when there is no live window to ask.
+      webRTC:
+        group && group.window && typeof group.window.isDestroyed === 'function' && !group.window.isDestroyed()
+          ? group.window.webContents.getWebRTCIPHandlingPolicy()
+          : null,
       monitorIntervalSeconds: resolveRecovery(account).monitorIntervalSeconds,
       screenHistory: group && Array.isArray(group.screenHistory) ? group.screenHistory : [],
       screenAttention: group && group.screenAttention?.message ? group.screenAttention : null,
