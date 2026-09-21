@@ -128,6 +128,13 @@ const matches = createMatchService({
       status: group && group.fsm ? group.fsm.state : 'closed'
     });
   },
+  // The richer verdict the barrier actually uses: the session, plus the route the session reported when
+  // it opened. Chromium resolves that route locally, so this costs no request and cannot fail offline.
+  participant: id => {
+    const group = sessions.get(id);
+    const open = Boolean(group && group.window && typeof group.window.isDestroyed === 'function' && !group.window.isDestroyed());
+    return { open, status: open && group && group.fsm ? group.fsm.state : 'closed', footprint: group ? group.footprint : null };
+  },
   monotonic: () => performance.now(),
   publish,
   log

@@ -705,15 +705,19 @@ function matchWhen(match) {
   const date = new Date(match.endedAt || match.startedAt);
   return Number.isNaN(date.getTime()) ? 'an unknown time' : date.toLocaleString();
 }
-const sessionText = participant =>
-  participant.open ? `session ${STATUS_LABELS[participant.session] || participant.session}` : 'session not loaded';
+const sessionText = participant => {
+  if (!participant.open) return 'session not loaded';
+  const base = `session ${STATUS_LABELS[participant.session] || participant.session}`;
+  if (!participant.route || participant.route.required !== true) return base;
+  return `${base} · ${participant.route.ok === true ? 'route verified' : 'route not verified'}`;
+};
 function matchSessions(match) {
   const participants = match.participants || [];
   if (!participants.length || !Object.prototype.hasOwnProperty.call(participants[0], 'open')) return '';
   return `<ul class="match-sessions">${participants
     .map(
       participant =>
-        `<li class="${participant.open ? 'loaded' : 'unloaded'}"><span>${escapeHtml(participant.name)}</span> <small>${escapeHtml(
+        `<li class="${participant.releasable === true ? 'loaded' : 'unloaded'}"><span>${escapeHtml(participant.name)}</span> <small>${escapeHtml(
           sessionText(participant)
         )}</small></li>`
     )
@@ -723,8 +727,10 @@ function matchReadiness(match) {
   const readiness = match.readiness;
   if (!readiness) return '';
   const participants = match.participants || [];
-  const waiting = participants.filter(participant => participant.open === true && participant.ready !== true).map(entry => entry.name);
-  const missing = participants.filter(participant => participant.open !== true).map(entry => entry.name);
+  // Every participant that cannot be released, named with the check that failed rather than just "not
+  // ready": a closed window, a session that has not loaded, and a route that is not being honoured are
+  // three different problems and the operator fixes them differently.
+  const blocking = participants.filter(participant => participant.releasable !== true);
   const detail =
     readiness.verdict === 'ready'
       ? `Released — every profile is ready${
@@ -732,7 +738,7 @@ function matchReadiness(match) {
         }.`
       : readiness.verdict === 'blocked'
         ? `Release blocked — ${readiness.reason}`
-        : `Waiting for ${[...missing, ...waiting].join(' and ') || 'the profiles'} to be ready.`;
+        : `Waiting for ${blocking.map(entry => `${entry.name}: ${entry.detail || 'not ready'}`).join('; ') || 'the profiles'}`;
   return `<small class="match-meta match-readiness ${readiness.verdict}">${escapeHtml(detail)}</small>`;
 }
 function matchCard(match, actionable) {

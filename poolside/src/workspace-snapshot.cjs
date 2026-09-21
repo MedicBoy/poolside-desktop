@@ -11,6 +11,7 @@ const { TABLES } = require('./table-list.cjs');
 const { buildCapabilityReport } = require('./capability-registry.cjs');
 const { dashboardView } = require('./match-coordination.cjs');
 const { participantReady } = require('./match-service.cjs');
+const { participantPreflight } = require('./match-preflight.cjs');
 
 /** Bounded because snapshots are broadcast on every state change. */
 const TIMELINE_VIEW_LIMIT = 100;
@@ -67,7 +68,16 @@ function matchParticipantView(participant) {
   const group = sessions.get(participant.id);
   const open = Boolean(group && group.window && typeof group.window.isDestroyed === 'function' && !group.window.isDestroyed());
   const session = open && group && group.fsm ? group.fsm.state : 'closed';
-  return { ...participant, open, session, ready: participantReady({ open, status: session }) };
+  const preflight = participantPreflight({ open, status: session, footprint: group ? group.footprint : null });
+  return {
+    ...participant,
+    open,
+    session,
+    ready: participantReady({ open, status: session }),
+    route: preflight.route,
+    detail: preflight.detail,
+    releasable: preflight.ok
+  };
 }
 
 function matchesView() {

@@ -28,6 +28,7 @@ function harness(overrides = {}) {
             if (overrides.failFor === id) throw new Error('this profile could not be opened');
             opened.push(id);
           },
+    participant: overrides.participant || null,
     journal: {
       read: () => coordination.emptyState(),
       write: state => {
@@ -201,10 +202,10 @@ test('a participant that never becomes ready blocks release at the deadline', as
   advanceClock(2000);
   service.advance();
   assert.equal(match().readiness.verdict, 'blocked');
-  assert.match(match().readiness.reason, /Bob did not become ready within 120 seconds/);
+  assert.match(match().readiness.reason, /Bob \(The session is not ready\.\) did not become ready within 120 seconds/);
   assert.equal(match().readiness.releasedAt, null);
   assert.equal(logs.at(-1).kind, 'warning');
-  assert.match(logs.at(-1).message, /m1: Bob did not become ready/);
+  assert.match(logs.at(-1).message, /m1: Bob \(The session is not ready\.\) did not become ready/);
 });
 
 test('release is withdrawn the moment a participant stops being ready', async () => {
@@ -216,7 +217,7 @@ test('release is withdrawn the moment a participant stops being ready', async ()
   readyIds.delete('b');
   service.advance();
   assert.equal(match().readiness.verdict, 'preparing');
-  assert.match(match().readiness.reason, /Bob is no longer ready, so release was withdrawn/);
+  assert.match(match().readiness.reason, /Release was withdrawn: Bob \(The session is not ready\.\)/);
   assert.equal(match().readiness.releasedAt, null);
 });
 
@@ -235,5 +236,52 @@ test('a readiness check with no predicate blocks rather than pretending to be re
   advanceClock(121000);
   service.advance();
   assert.equal(match().readiness.verdict, 'blocked');
-  assert.match(match().readiness.reason, /Alice and Bob did not become ready/);
+  assert.match(
+    match().readiness.reason,
+    /Alice \(This build cannot inspect a participant\.\); Bob \(This build cannot inspect a participant\.\) did not become ready within 120 seconds/
+  );
+});
+
+test('a participant that loaded on the wrong route blocks release, and says which route it used', async () => {
+  const footprints = {
+    a: {
+      route: { configured: true, label: 'Proxy 1.2.3.4:8080' },
+      verified: { ok: true, matches: true, route: { label: 'Proxy 1.2.3.4:8080' } }
+    },
+    b: {
+      route: { configured: true, label: 'Proxy 5.6.7.8:8080' },
+      verified: { ok: true, matches: false, route: { label: 'Direct connection' } }
+    }
+  };
+  const { service, match, logs } = harness({
+    openSession: true,
+    participant: id => ({ open: true, status: 'ready', footprint: footprints[id] })
+  });
+  await service.start({ first: 'a', second: 'b' });
+  assert.equal(match().readiness.verdict, 'preparing', 'one participant on the wrong route is not releasable');
+  service.advance();
+  assert.equal(match().readiness.verdict, 'preparing');
+
+  // Fix the route and the match releases on the next check.
+  footprints.b.verified = { ok: true, matches: true, route: { label: 'Proxy 5.6.7.8:8080' } };
+  service.advance();
+  assert.equal(match().readiness.verdict, 'ready');
+  assert.match(logs.map(entry => entry.message).join(' '), /Alice and Bob are ready/);
+});
+
+test('a blocked match names the check that failed, not just the participant', async () => {
+  const { service, match, advanceClock } = harness({
+    openSession: true,
+    participant: () => ({
+      open: true,
+      status: 'ready',
+      footprint: { route: { configured: true, label: 'Proxy 1.2.3.4:8080' }, verified: { ok: false, error: 'resolveProxy failed' } }
+    })
+  });
+  await service.start({ first: 'a', second: 'b' });
+  advanceClock(121000);
+  service.advance();
+  assert.equal(match().readiness.verdict, 'blocked');
+  assert.match(match().readiness.reason, /Alice \(The route could not be read: resolveProxy failed\.\)/);
+  assert.match(match().readiness.reason, /Bob \(The route could not be read: resolveProxy failed\.\)/);
 });

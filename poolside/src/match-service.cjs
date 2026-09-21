@@ -7,6 +7,7 @@
 
 const crypto = require('node:crypto');
 const coordination = require('./match-coordination.cjs');
+const { createBarrier } = require('./match-barrier.cjs');
 
 /**
  * Whether a participant is actually ready to be released: its own window is up AND its session
@@ -19,7 +20,7 @@ function participantReady({ open, status }) {
 }
 
 /**
- * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
+ * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
  */
 function createMatchService({
   accounts,
@@ -27,6 +28,7 @@ function createMatchService({
   publish,
   log,
   openSession = null,
+  participant = null,
   journal = null,
   now = () => Date.now(),
   makeId = () => crypto.randomUUID(),
@@ -61,102 +63,22 @@ function createMatchService({
 
   store.current = journal ? journal.read() : coordination.emptyState();
 
-  /** Monotonic marks for the matches waiting at the barrier. Memory only: a restart cannot measure skew. */
-  const requested = new Map();
-  /** @type {any} */
-  let poll = null;
-
-  function participantReadiness(match) {
-    return match.participants.map(participant => ({
-      id: participant.id,
-      name: participant.name,
-      ready: typeof ready === 'function' ? Boolean(ready(participant.id)) : false
-    }));
-  }
-
-  /** Keep a check running only while some match is actually waiting at the barrier. */
-  function syncPoll() {
-    const waiting = store.current.matches.some(
-      match => match.state === 'active' && match.readiness && match.readiness.verdict === 'preparing'
-    );
-    if (waiting && !poll) {
-      poll = setTimer(() => {
-        try {
-          advance();
-        } catch (error) {
-          log(`The readiness barrier could not be checked: ${error instanceof Error ? error.message : String(error)}`, 'warning');
-        }
-      }, readyCheckMs);
-      if (poll && typeof poll.unref === 'function') poll.unref();
-    }
-    if (!waiting && poll) {
-      clearTimer(poll);
-      poll = null;
-    }
-  }
-
-  /**
-   * Advance every active match's readiness barrier. A match is released only once every participant
-   * reports ready, and release is withdrawn the moment one stops being ready: the barrier is the point
-   * where the operator stops assuming and starts knowing.
-   */
-  function advance() {
-    const at = now();
-    let next = store.current;
-    let changed = false;
-    /** @type {{handle: string, verdict: string, reason: string}[]} */
-    const announced = [];
-    for (const match of store.current.matches) {
-      if (match.state !== 'active') continue;
-      const readiness = match.readiness;
-      const states = participantReadiness(match);
-      const allReady = states.length === match.participants.length && states.every(entry => entry.ready);
-      const waiting = states.filter(entry => !entry.ready).map(entry => entry.name);
-      if (!readiness) {
-        next = coordination.requestReadiness(next, { matchId: match.matchId, now: at, deadlineMs: readyDeadlineMs });
-        requested.set(match.matchId, monotonic());
-        changed = true;
-        continue;
-      }
-      if (readiness.verdict === 'preparing' && allReady) {
-        const mark = requested.get(match.matchId);
-        const reason = `${states.map(entry => entry.name).join(' and ')} are ready.`;
-        next = coordination.settleReadiness(next, {
-          matchId: match.matchId,
-          verdict: 'ready',
-          reason,
-          releasedAt: at,
-          skewMs: typeof mark === 'number' ? Math.max(0, monotonic() - mark) : null,
-          now: at
-        });
-        requested.delete(match.matchId);
-        announced.push({ handle: match.handle, verdict: 'ready', reason });
-        changed = true;
-        continue;
-      }
-      if (readiness.verdict === 'preparing' && Date.parse(readiness.deadlineAt) <= at) {
-        const reason = `${waiting.join(' and ')} did not become ready within ${Math.round(readyDeadlineMs / 1000)} seconds.`;
-        next = coordination.settleReadiness(next, { matchId: match.matchId, verdict: 'blocked', reason, now: at });
-        announced.push({ handle: match.handle, verdict: 'blocked', reason });
-        changed = true;
-        continue;
-      }
-      if (readiness.verdict === 'ready' && !allReady) {
-        const reason = `${waiting.join(' and ')} is no longer ready, so release was withdrawn.`;
-        next = coordination.requestReadiness(next, { matchId: match.matchId, now: at, deadlineMs: readyDeadlineMs, reason });
-        requested.set(match.matchId, monotonic());
-        announced.push({ handle: match.handle, verdict: 'blocked', reason });
-        changed = true;
-      }
-    }
-    if (changed) {
-      store.current = persist(next);
-      for (const item of announced) log(`${item.handle}: ${item.reason}`, item.verdict === 'blocked' ? 'warning' : 'info');
-      publish();
-    }
-    syncPoll();
-    return changed;
-  }
+  // The barrier: when this match may be released, and when release must be withdrawn. It owns the check
+  // loop and the monotonic marks; the rules live in `match-barrier.cjs` and `match-preflight.cjs`.
+  const barrier = createBarrier({
+    store,
+    persist,
+    log,
+    publish,
+    participant,
+    ready,
+    now,
+    monotonic,
+    readyDeadlineMs,
+    readyCheckMs,
+    setTimer,
+    clearTimer
+  });
 
   /**
    * Cancel anything whose participant has left the workspace. Called before every read, so the ledger
@@ -172,7 +94,7 @@ function createMatchService({
       for (const match of cancelled) log(match.reason, 'warning');
       publish();
     }
-    advance();
+    barrier.advance();
     return coordination.dashboardView(store.current);
   }
 
@@ -219,8 +141,8 @@ function createMatchService({
         reason: 'Release was requested again.'
       })
     );
-    requested.set(matchId, monotonic());
-    advance();
+    barrier.noteRequest(matchId);
+    barrier.advance();
     return { ...coordination.dashboardView(store.current), load: results };
   }
 
@@ -238,14 +160,14 @@ function createMatchService({
       deadlineMs: readyDeadlineMs,
       reason: 'Waiting for both participants to load.'
     });
-    requested.set(opened.matchId, monotonic());
+    barrier.noteRequest(opened.matchId);
     const view = commit(next, `${opened.participants[0].name} vs ${opened.participants[1].name}: ${opened.handle} is in progress.`);
     if (shouldLoad === false) {
-      syncPoll();
+      barrier.syncPoll();
       return view;
     }
     const results = await openParticipants(opened.matchId);
-    advance();
+    barrier.advance();
     return { ...coordination.dashboardView(store.current), load: results };
   }
 
@@ -263,11 +185,10 @@ function createMatchService({
 
   /** Stop the barrier check. Used when the app is shutting down and by tests. */
   function dispose() {
-    if (poll) clearTimer(poll);
-    poll = null;
+    barrier.dispose();
   }
 
-  return { start, complete, cancel, load, refresh, advance, dispose, view: refresh, state: () => store.current };
+  return { start, complete, cancel, load, refresh, advance: barrier.advance, dispose, view: refresh, state: () => store.current };
 }
 
 module.exports = { createMatchService, participantReady };
