@@ -1419,6 +1419,20 @@ dialog textarea:focus {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+.route-preset-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.route-preset-accounts label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
 .field-help {
   margin: -0.35rem 0 0.9rem;
   color: var(--muted);

@@ -74,7 +74,7 @@ function createIpc(deps) {
 
   function register() {
     handle('workspace:get', () => snapshot());
-    registerRoutePresetIpc({ handle, workspace, save, log });
+    registerRoutePresetIpc({ handle, workspace, save, log, sessions });
     handle('account:open', id => windows.openAccount(id));
     handle('account:close', id => {
       getAccount(id);

@@ -663,16 +663,28 @@ function filteredActivity(entries) {
   if (activityFilter === 'session') return entries.filter(entry => entry.source === 'session');
   return entries;
 }
+// Each saved location lists the accounts, one tick box each, so assigning one is a click here rather
+// than a trip through that account's preferences dialog.
+function routePresetAccounts(preset) {
+  const accounts = (state.accounts || []).filter(account => !account.archived);
+  if (!accounts.length) return '<p class="muted route-preset-accounts">Add an account, then tick it here to use this location.</p>';
+  return `<div class="route-preset-accounts">${accounts
+    .map(account => {
+      const checked = account.routePresetId === preset.id;
+      return `<label><input type="checkbox" data-route-preset-assign="${escapeHtml(preset.id)}" data-route-account="${escapeHtml(account.id)}"${checked ? ' checked' : ''} aria-label="${escapeHtml(`Connect ${account.name} from ${preset.name}`)}" /> ${escapeHtml(account.name)}</label>`;
+    })
+    .join('')}</div>`;
+}
 function renderRoutePresets() {
   const presets = state.routePresets || [];
   $('#route-preset-list').innerHTML = presets.length
     ? presets
         .map(
           preset =>
-            `<div class="route-preset"><strong>${escapeHtml(preset.name)}</strong><span>${escapeHtml(preset.enabled ? preset.spec : `${preset.spec} · disabled`)}${preset.bypass ? ` · bypass ${escapeHtml(preset.bypass)}` : ''}</span><button class="text-button" data-route-preset-delete="${escapeHtml(preset.id)}">Remove</button></div>`
+            `<div class="route-preset"><strong>${escapeHtml(preset.name)}</strong><span>${escapeHtml(preset.enabled ? preset.spec : `${preset.spec} · disabled`)}${preset.bypass ? ` · bypass ${escapeHtml(preset.bypass)}` : ''}</span><button class="text-button" data-route-preset-delete="${escapeHtml(preset.id)}">Remove</button></div>${routePresetAccounts(preset)}`
         )
         .join('')
-    : '<p class="muted">No saved route presets yet.</p>';
+    : '<p class="muted">No saved network locations yet.</p>';
 }
 function renderCapabilityReport() {
   const report = state.capabilityReport;
@@ -1165,6 +1177,20 @@ $('#route-preset-list').addEventListener('click', async event => {
   if (!button) return;
   const result = await call(() => poolside.deleteRoutePreset(button.dataset.routePresetDelete));
   if (result.ok) toast('Saved route preset removed.');
+});
+// A tick box is an assignment, not a preference: it takes effect on that account's next load, and the
+// refreshed snapshot redraws every box so the list can never disagree with what is stored.
+$('#route-preset-list').addEventListener('change', async event => {
+  const box = event.target.closest('[data-route-preset-assign]');
+  if (!box) return;
+  box.disabled = true;
+  const result = await call(() =>
+    poolside.assignRoutePreset({ id: box.dataset.routeAccount, presetId: box.checked ? box.dataset.routePresetAssign : '' })
+  );
+  if (!result.ok) {
+    box.checked = !box.checked;
+    box.disabled = false;
+  }
 });
 $('#activity-filter').addEventListener('change', event => {
   activityFilter = event.target.value;

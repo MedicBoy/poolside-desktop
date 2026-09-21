@@ -134,6 +134,54 @@ async function runSelfTest(ctx) {
   }
   assert.equal(configBoundary.rendered, configBoundary.formPaths.length, 'every declared control is in the DOM');
 
+  // --- Ticking an account onto a saved network location, through the settings list itself ------------
+  // The assignment story is "paste the address, save it, tick the account", so this drives those three
+  // steps in the real page and reads the box back from the DOM. A checkbox that never reaches the IPC,
+  // or a list that redraws from a local guess instead of the stored document, fails here.
+  const routeAssignment = await dashboard.webContents.executeJavaScript(`(async () => {
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    document.querySelector('button[data-view="settings"]').click();
+    document.querySelector('#route-preset-name').value = 'Self-test location';
+    document.querySelector('#route-preset-spec').value = '198.51.100.7:8080';
+    document.querySelector('#route-preset-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    const until = Date.now() + 8000;
+    const row = () => Array.from(document.querySelectorAll('.route-preset')).find(item => item.querySelector('strong') && item.querySelector('strong').textContent === 'Self-test location');
+    while (!row() && Date.now() < until) await wait(100);
+    if (!row()) return { error: 'the saved location never appeared in the settings list' };
+    const presetId = row().querySelector('[data-route-preset-delete]').dataset.routePresetDelete;
+    const boxes = Array.from(document.querySelectorAll('[data-route-preset-assign="' + presetId + '"]'));
+    const receiver = (await poolside.get()).value.accounts.find(account => account.name === 'Test receiver');
+    const selector = '[data-route-preset-assign="' + presetId + '"][data-route-account="' + receiver.id + '"]';
+    const box = document.querySelector(selector);
+    if (!box) return { error: 'the location offered no tick box for the account' };
+    const label = box.getAttribute('aria-label');
+    const tick = checked => {
+      const current = document.querySelector(selector);
+      current.checked = checked;
+      current.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const assigned = async () => (await poolside.get()).value.accounts.filter(account => account.routePresetId === presetId).map(account => account.name);
+    tick(true);
+    while (!(await assigned()).length && Date.now() < until) await wait(100);
+    const names = await assigned();
+    // The reply carries the refreshed workspace, so the list redraws itself and the box stays ticked.
+    while (!document.querySelector(selector).checked && Date.now() < until) await wait(100);
+    const renderedChecked = document.querySelector(selector).checked;
+    tick(false);
+    while ((await poolside.get()).value.accounts.some(account => account.routePresetId === presetId) && Date.now() < until) await wait(100);
+    const assignmentsLeft = (await poolside.get()).value.accounts.filter(account => account.routePresetId === presetId).length;
+    const removed = await poolside.deleteRoutePreset(presetId);
+    return { boxes: boxes.length, label, names, renderedChecked, assignmentsLeft, removed: removed.ok, presets: (await poolside.get()).value.routePresets.length };
+  })()`);
+  assert.equal(routeAssignment.error, undefined, `the settings list refused the assignment: ${routeAssignment.error}`);
+  assert.equal(routeAssignment.boxes, 2, 'each saved location offers one tick box per account');
+  assert.equal(routeAssignment.label, 'Connect Test receiver from Self-test location');
+  assert.deepEqual(routeAssignment.names, ['Test receiver'], 'only the ticked account connects from the location');
+  assert.equal(routeAssignment.renderedChecked, true, 'the box redraws from the stored assignment');
+  assert.equal(routeAssignment.assignmentsLeft, 0, 'unticking clears the assignment rather than storing an empty one');
+  assert.equal(routeAssignment.removed, true, 'a location nothing uses can be removed again');
+  assert.equal(routeAssignment.presets, 0, 'the self-test leaves no saved location behind');
+
   // --- The diagnostics payload: anonymised, then scanned, through the real bridge ----------------
   // ADR-0010 commits this to a payload that carries no account names, and the handler refuses to hand one over
   // that fails its own scan. Both halves are asserted here against the accounts this suite created.
@@ -191,7 +239,7 @@ async function runSelfTest(ctx) {
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, capability About view, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, capability About view, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a saved network location assigned to one account by ticking its box in the settings list and cleared again by unticking it, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
   );
   app.exit(0);
 }

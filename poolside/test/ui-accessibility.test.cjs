@@ -193,3 +193,22 @@ test('match coordination is a navigable, labelled local record of who played who
   assert.match(renderer, /poolside\.completeMatch\(/);
   assert.match(renderer, /'sessions', 'matches', 'activity'/);
 });
+
+test('each saved location offers a labelled tick box per account and reports the assignment', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  assert.match(html, /tick the accounts that should use it/);
+  assert.match(renderer, /function routePresetAccounts\(preset\)/);
+  assert.match(renderer, /data-route-preset-assign="\$\{escapeHtml\(preset\.id\)\}"/);
+  assert.match(renderer, /data-route-account="\$\{escapeHtml\(account\.id\)\}"/);
+  // The accessible name has to say what the box does; a bare account name next to a location is not
+  // enough to know whether the box means "connect from here" or "make this the account I edit".
+  assert.match(renderer, /aria-label="\$\{escapeHtml\(`Connect \$\{account\.name\} from \$\{preset\.name\}`\)\}"/);
+  // The box is drawn from the stored assignment, not from anything the renderer remembers.
+  assert.match(renderer, /const checked = account\.routePresetId === preset\.id;/);
+  assert.match(renderer, /\$\{checked \? ' checked' : ''\}/);
+  assert.match(renderer, /poolside\.assignRoutePreset\(/);
+  assert.match(renderer, /presetId: box\.checked \? box\.dataset\.routePresetAssign : ''/);
+  assert.match(css, /\.route-preset-accounts\s*\{/);
+});

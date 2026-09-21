@@ -51,6 +51,9 @@ function publicAccount(account) {
     role: account.role,
     archived: account.archived === true,
     createdAt: account.createdAt,
+    // Which saved network location this account connects from, so the settings list can tick the right
+    // box. An id, never the address itself — the credentials stay in the main process.
+    ...(typeof account.routePresetId === 'string' && account.routePresetId ? { routePresetId: account.routePresetId } : {}),
     ...(typeof account.note === 'string' ? { note: account.note } : {})
   };
 }
