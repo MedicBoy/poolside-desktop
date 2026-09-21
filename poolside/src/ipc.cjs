@@ -17,6 +17,7 @@ const { registerCaptureLab } = require('./capture-lab-ipc.cjs');
 const { registerBackupIpc } = require('./backup-ipc.cjs');
 const { registerRoutePresetIpc } = require('./route-preset-ipc.cjs');
 const { registerMatchIpc } = require('./match-ipc.cjs');
+const { probeRoute } = require('./route-probe.cjs');
 
 const PREFS_SAVED = 'Transfer preferences saved. Automation is not yet connected.';
 
@@ -81,6 +82,8 @@ function createIpc(deps) {
     });
     handle('account:check-ip', checkAccountIP);
     handle('account:check-route', id => windows.checkRoute(id));
+    // Trying an address before it is saved or assigned, on a throwaway profile.
+    handle('route:test', input => probeRoute(input && input.spec));
     handle('account:delete-profile', async id => {
       const account = getAccount(id);
       // The only irreversible action in the application, so it is confirmed natively rather than by a

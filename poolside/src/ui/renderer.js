@@ -1135,6 +1135,18 @@ $('#settings-form').addEventListener('submit', async event => {
     ? 'Saved. A stored value this form does not own was unusable and has been left out.'
     : 'Preferences saved on this device.';
 });
+// Trying an address before it is saved: the answer appears under the field, in words.
+$('#route-preset-test').addEventListener('click', async () => {
+  const spec = $('#route-preset-spec').value.trim();
+  const output = $('#route-preset-test-result');
+  if (!spec) {
+    output.textContent = 'Paste an address first.';
+    return;
+  }
+  output.textContent = 'Testing… this takes a few seconds.';
+  const result = await poolside.testRoute(spec);
+  output.textContent = result.ok ? result.value.message : result.error;
+});
 $('#route-preset-form').addEventListener('submit', async event => {
   event.preventDefault();
   const result = await call(() =>

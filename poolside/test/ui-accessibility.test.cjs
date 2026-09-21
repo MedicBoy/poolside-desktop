@@ -180,6 +180,9 @@ test('match coordination is a navigable, labelled local record of who played who
   assert.match(renderer, /data-action="match-complete"/);
   assert.match(renderer, /data-action="match-cancel"/);
   assert.match(renderer, /data-action="match-load"/);
+  assert.match(html, /id="route-preset-test"/);
+  assert.match(html, /id="route-preset-test-result" role="status"/);
+  assert.match(renderer, /poolside\.testRoute\(/);
   assert.match(renderer, /Load both profiles/);
   assert.match(renderer, /function matchReadiness\(match\)/);
   assert.match(renderer, /Release blocked — /);

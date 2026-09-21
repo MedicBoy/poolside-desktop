@@ -398,8 +398,10 @@
                     id="route-preset-spec"
                     placeholder="Paste the address here — it can be host:port, user:pass@host:port, or the line your provider gave you"
                     required
-                  /><button class="secondary" type="submit">Save location</button>
+                  /><button class="secondary" type="submit">Save location</button
+                  ><button class="text-button" type="button" id="route-preset-test">Test this address</button>
                 </form>
+                <p class="form-status" id="route-preset-test-result" role="status"></p>
                 <details class="route-presets-advanced">
                   <summary>Advanced (most people never need this)</summary>
                   <p class="muted">
