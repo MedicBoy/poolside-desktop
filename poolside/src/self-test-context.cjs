@@ -10,7 +10,7 @@
 const fs = require('node:fs');
 const { app, BrowserWindow, session } = require('electron');
 const model = require('./model.cjs');
-const { checkPublicIP } = require('./network.cjs');
+const { createSessionIpReader } = require('./session-ip.cjs');
 const { createSessionFsm } = require('./session-fsm.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const { GAME_URL } = require('./windows.cjs');
@@ -27,7 +27,8 @@ function buildSelfTestContext({ profileManager, safeStorage, workspaceStore, win
     session,
     model,
     fs,
-    checkPublicIP,
+    // The live IP check the suite may run on demand: a plain session, so no proxy challenge to answer.
+    checkPublicIP: browserSession => createSessionIpReader({ session: browserSession })(),
     log,
     attachRecovery: (id, group) => windows.attachRecoveryFor(id, group),
     createSessionFsm,

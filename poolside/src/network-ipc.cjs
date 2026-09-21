@@ -1,4 +1,6 @@
-const { checkPublicIP } = require('./network.cjs');
+const { createSessionIpReader } = require('./session-ip.cjs');
+const { resolveProxyRoute } = require('./proxy.cjs');
+const { workspace } = require('./state.cjs');
 const { messageOf } = require('./errors.cjs');
 const { windowTitleFor } = require('./window-title.cjs');
 
@@ -12,7 +14,14 @@ function createAccountIpCheck({ sessions, getAccount, publish, log }) {
     group.network = { status: 'checking' };
     publish();
     try {
-      const result = await checkPublicIP(group.session);
+      // The read has to happen through the session's own route, with the credentials for that route: a bare
+      // fetch cannot answer an authenticated proxy's challenge, so a routed session would read nothing.
+      const route = resolveProxyRoute(account, { ...workspace.data.settings, routePresets: workspace.data.routePresets || [] });
+      const result = await createSessionIpReader({
+        session: group.session,
+        credentials: route.credentials || null,
+        expectedTarget: route.expectedTarget || null
+      })();
       if (sessions.get(id) !== group) return;
       group.network = { status: 'checked', ...result };
       // The window states which address this session leaves as, so it can be verified at a glance.

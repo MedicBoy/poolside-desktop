@@ -26,6 +26,7 @@
  * @property {any} profiles
  * @property {any} crypto
  * @property {any} store
+ * @property {any} monitor
  * @property {any} workspace
  * @property {Map<string, any>} sessions
  * @property {string} GAME_URL

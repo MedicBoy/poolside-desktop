@@ -48,7 +48,7 @@
       "mode": "limited",
       "validation": "fixture-proven",
       "flag": "on",
-      "detail": "Local English-screen observations; representative live accuracy is not established."
+      "detail": "Local English-screen observations of every game window that is on screen, focused or not — a window that is hidden or minimised is skipped rather than read from its last painted frame. Representative live accuracy is not established."
     },
     {
       "id": "table-navigation",
@@ -101,10 +101,10 @@
     {
       "id": "matchmaking-pairing",
       "name": "Matchmaking and pairing",
-      "mode": "unavailable",
-      "validation": "designed",
-      "flag": "off",
-      "detail": "No multi-account match coordinator or opponent-pairing proof."
+      "mode": "limited",
+      "validation": "fixture-proven",
+      "flag": "on",
+      "detail": "Pairs two of your own accounts locally and judges the pairing from the two sessions' own screen readings: the same table identified on both, or the same entry paid by both accounts inside a window. It does not pair accounts on the game service, and a local reading is evidence rather than proof — two accounts on different tables of the same fee would look alike."
     },
     {
       "id": "match-accounting",

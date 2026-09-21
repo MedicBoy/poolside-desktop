@@ -76,7 +76,7 @@ function screenRow(a) {
     ? 'Stop the local screen-status monitor for this account.'
     : 'Read one visible game screen locally about every 30 seconds. It never clicks or controls the game.';
   const monitorDetail = a.monitoring
-    ? `<small class="screen-detail">Live status is on · local screen reading about every ${a.monitorIntervalSeconds || 30} seconds, paused while this window is not focused.</small>`
+    ? `<small class="screen-detail">Live status is on · local screen reading about every ${a.monitorIntervalSeconds || 30} seconds, for every window that is on screen — focused or not.</small>`
     : '';
   return `<div class="network-row screen-row"><span><span class="screen-result">${escapeHtml(label)}</span>${attention ? `<small class="screen-detail screen-attention">${escapeHtml(attention.message)}</small>` : ''}${monitorDetail}${detail ? `<small class="screen-detail">${escapeHtml(detail)}</small>` : ''}</span><span class="screen-actions"><button class="text-button" data-action="inspect" data-id="${a.id}" title="Read one game image locally; this does not verify responsiveness" ${canMonitor ? '' : 'disabled'}>Inspect game ↗</button><button class="text-button" data-action="monitor" data-id="${a.id}" title="${monitorTitle}" ${canMonitor ? '' : 'disabled'}>${monitorLabel}</button></span></div>`;
 }
@@ -539,7 +539,7 @@ const SETTINGS_HELP = {
   'recovery.repaintMitigation':
     'Requests several display refreshes after the game page loads. It can help if a loaded game window appears blank or frozen.',
   'recovery.monitorIntervalSeconds':
-    "How often, in seconds, live status reads this window's screen while you have it open and focused. It pauses automatically whenever this window is not the focused one."
+    "How often, in seconds, live status reads this window's screen while you have it open. Every open window is read, focused or not — one that is hidden or minimised is skipped, and read again the moment it is back on screen."
 };
 function settingHelp(path) {
   const text = SETTINGS_HELP[path] || 'This is a local Poolside setting. It is checked before saving.';
@@ -655,7 +655,7 @@ function renderWorkspaceState() {
     return;
   }
   label.textContent = 'Browser session ready — waiting for game screen';
-  detail.textContent = 'Live status starts automatically and updates while a game window is focused.';
+  detail.textContent = 'Live status starts automatically and reads every game window that is on screen, focused or not.';
 }
 let activityFilter = 'all';
 function filteredActivity(entries) {
@@ -976,7 +976,7 @@ function render(next) {
   $('#inspection-hint').textContent = !open
     ? 'Open a game window to inspect its screen'
     : !inspected.length
-      ? 'Live status starts automatically while a game window is focused'
+      ? 'Live status starts automatically while a game window is on screen'
       : recognized.length
         ? `${recognized.length} current screen${recognized.length === 1 ? '' : 's'} recognized locally`
         : 'The last inspected screen could not be recognized';

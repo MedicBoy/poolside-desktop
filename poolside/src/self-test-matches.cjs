@@ -17,6 +17,7 @@ async function runMatchChecks(ctx, assert) {
   const { workspace, sessions, session, GAME_URL } = ctx;
   const dashboard = workspace.dashboard;
   const { partition } = require('./saved-session.cjs');
+  const { runDropoutCheck } = require('./self-test-dropout.cjs');
 
   /** Read the live barrier for the only active match until it leaves `preparing`, or time out. */
   async function waitForRelease(timeoutMs = 15000) {
@@ -240,6 +241,46 @@ async function runMatchChecks(ctx, assert) {
     assert.equal(group.window.webContents.getURL(), GAME_URL, 'the window loaded the game URL');
     assert.notEqual(group.fsm.state, 'closed');
   }
+
+  // --- Both windows are readable at once, not just the one that was clicked last -----------------------
+  // The operator's report: "if i click on one the other one isnt getting read". Live status used to read only
+  // the focused window, so two readings could never be fresh together and a pairing could never be judged.
+  // Only one window can hold focus, so this asks the monitor about both while one of them does.
+  sessions.get(matchAccountIds[0]).window.focus();
+  for (const id of matchAccountIds) ctx.monitor.start(id);
+  assert.equal(
+    matchAccountIds.filter(id => sessions.get(id).window.isFocused()).length,
+    1,
+    'exactly one of the two windows holds focus, which is all a desktop allows'
+  );
+  const readable = [];
+  for (const id of matchAccountIds) {
+    const group = sessions.get(id);
+    readable.push({
+      name: ctx.workspace.data.accounts.find(account => account.id === id).name,
+      destroyed: group.window.isDestroyed(),
+      contents: group.window.webContents.isDestroyed() ? 'destroyed' : group.window.webContents.getURL().slice(0, 40),
+      bounds: JSON.stringify(group.window.getBounds()),
+      visible: group.window.isVisible(),
+      minimized: group.window.isMinimized(),
+      visibilityState: await group.window.webContents.executeJavaScriptInIsolatedWorld(999, [{ code: 'document.visibilityState' }]),
+      sampleable: ctx.monitor.status(id).sampleable
+    });
+  }
+  assert.deepEqual(
+    readable.map(entry => entry.sampleable),
+    [true, true],
+    `both windows are readable, focused or not: ${JSON.stringify(readable)}`
+  );
+  // What makes them readable is the page's own answer, not Electron's idea of a window being visible — the
+  // measurement above found `isVisible()` false for a window Chromium was rendering.
+  assert.deepEqual(
+    readable.map(entry => entry.visibilityState),
+    ['visible', 'visible'],
+    'both pages report themselves on screen, which is what the monitor reads'
+  );
+  for (const id of matchAccountIds) ctx.monitor.stop(id);
+
   // Leave the session map as this check found it, then stop serving the fixture.
   await dashboard.webContents.executeJavaScript(
     `(async () => { for (const id of ${JSON.stringify(matchAccountIds)}) await poolside.close(id); })()`
@@ -247,47 +288,8 @@ async function runMatchChecks(ctx, assert) {
   for (const partitionSession of matchPartitions) partitionSession.protocol.unhandle('https');
   for (const id of matchAccountIds) assert.equal(sessions.has(id), false, 'each window this check opened was closed again');
 
-  // --- A match with no session behind it is cleared, not left blocking ------------------------------
-  // The operator's report, in their words: "I just tried to start a match and it says I am already in a
-  // match. I have nothing open at the moment." Both windows are closed at this point, so a match started now
-  // has no session behind it — the exact state that must not survive. The coordinator watches for it and
-  // cancels it as a dropout once the grace period has passed, which is what frees the accounts again.
-  const dropout = await dashboard.webContents.executeJavaScript(`(async () => {
-    const state = await poolside.get();
-    const ids = state.value.accounts.map(account => account.id);
-    const started = await poolside.startMatch({ first: ids[0], second: ids[1], load: false });
-    if (!started.ok) return { error: started.error };
-    const matchId = started.value.active[0].matchId;
-    // Live session state comes from the snapshot, not from the reply: the reply is the ledger, and whether a
-    // window is open is process state that the dashboard view resolves.
-    const first = (await poolside.get()).value.matches.active.find(match => match.matchId === matchId);
-    const open = first.participants.map(entry => entry.open);
-    const until = Date.now() + 45000;
-    let settled = null;
-    while (Date.now() < until) {
-      settled = (await poolside.get()).value.matches.recent.find(match => match.matchId === matchId) || null;
-      if (settled) break;
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    const after = await poolside.get();
-    return {
-      open,
-      cancelled: Boolean(settled),
-      reason: settled ? settled.reason : '',
-      active: after.value.matches.totals.active,
-      freed: (await poolside.startMatch({ first: ids[0], second: ids[1], load: false })).ok
-    };
-  })()`);
-  assert.deepEqual(dropout.open, [false, false], 'neither participant has a window behind it, as the operator reported');
-  assert.equal(dropout.cancelled, true, `the match with no session was not cleared: ${dropout.reason}`);
-  assert.match(dropout.reason, /session has been closed for \d+ seconds, so m\d+ was cancelled as a dropout\./);
-  assert.equal(dropout.active, 0, 'nothing is left in progress once the match with no session behind it is cleared');
-  assert.equal(dropout.freed, true, 'and the same two accounts can be paired again straight away');
-  // Leave the ledger as the suite found it: cancel the match this check started.
-  await dashboard.webContents.executeJavaScript(`(async () => {
-    const state = await poolside.get();
-    for (const match of state.value.matches.active) await poolside.cancelMatch({ matchId: match.matchId });
-  })()`);
+  // Both windows are closed now, which is the state the dropout check needs.
+  await runDropoutCheck(ctx, assert);
 }
 
 module.exports = { runMatchChecks };

@@ -20,16 +20,15 @@ test('capability IDs and status/flag contracts are coherent', () => {
     if (item.mode === 'unavailable') assert.equal(item.flag, 'off');
     if (item.mode === 'dry-run') assert.equal(item.flag, 'dry-run');
   }
-  for (const id of [
-    'authentication-verification',
-    'live-game-input',
-    'matchmaking-pairing',
-    'match-accounting',
-    'signed-installer',
-    'automatic-updates'
-  ]) {
+  // Capabilities that do not exist at all: nothing may claim them, whatever else is built.
+  for (const id of ['authentication-verification', 'live-game-input', 'match-accounting', 'signed-installer', 'automatic-updates']) {
     assert.equal(CAPABILITIES.find(item => item.id === id)?.mode, 'unavailable');
   }
+  // Pairing is the one that moved: two of your own accounts can be coordinated locally and the pairing judged
+  // from the two sessions' own screen readings, which is `limited` — it is not pairing on the game service and
+  // a local reading is evidence rather than proof, which is why it cannot be `available`.
+  assert.equal(CAPABILITIES.find(item => item.id === 'matchmaking-pairing')?.mode, 'limited');
+  assert.equal(CAPABILITIES.find(item => item.id === 'matchmaking-pairing')?.validation, 'fixture-proven');
 });
 
 test('generated report matches registry and package version exactly', () => {
