@@ -108,8 +108,13 @@ async function runSelfTest(ctx) {
   const matchFlow = await dashboard.webContents.executeJavaScript(`(async () => {
     const before = await poolside.get();
     const [first, second] = before.value.accounts.map(account => account.id);
-    const started = await poolside.startMatch({ first, second });
-    const refused = await poolside.startMatch({ first, second });
+    // load:false on purpose. This suite must never open a real game window: the session opener
+    // navigates to the live game URL, and an automated check cannot depend on the network or on a
+    // third-party site being reachable. The loading path is covered by unit tests with an injected
+    // opener; here the dashboard shape and the bridge surface are what get proven.
+    const started = await poolside.startMatch({ first, second, load: false });
+    const afterStart = await poolside.get();
+    const refused = await poolside.startMatch({ first, second, load: false });
     const settled = await poolside.completeMatch({ matchId: started.value.active[0].matchId, winner: second });
     const refusedResult = await poolside.completeMatch({ matchId: started.value.active[0].matchId, winner: first });
     const after = await poolside.get();
@@ -126,6 +131,8 @@ async function runSelfTest(ctx) {
       winner: after.value.matches.recent[0].winnerName,
       capabilityMode: capability ? capability.mode : 'missing',
       navigable: document.querySelectorAll('[data-view="matches"]').length,
+      sessions: afterStart.value.matches.active[0].participants.map(part => part.name + ':' + part.open + ':' + part.session),
+      loadBridge: typeof poolside.loadMatchSessions,
       logged: after.value.events.filter(event => /in progress|recorded as the winner/i.test(event.message)).length
     };
   })()`);
@@ -140,6 +147,12 @@ async function runSelfTest(ctx) {
   assert.equal(matchFlow.winner, 'Test sender');
   assert.equal(matchFlow.capabilityMode, 'available', 'the capability report agrees the coordinator exists');
   assert.equal(matchFlow.navigable, 1, 'the coordinator has its own dashboard view');
+  assert.deepEqual(
+    matchFlow.sessions,
+    ['Test receiver:false:closed', 'Test sender:false:closed'],
+    'the dashboard reports each participant session, and nothing was opened by this check'
+  );
+  assert.equal(matchFlow.loadBridge, 'function', 'the profiles can be loaded again from the dashboard');
   assert.ok(matchFlow.logged >= 2, 'the pairing and the result both reached the activity history');
 
   // --- The configuration schema boundary, through the real IPC bridge ---------------------------

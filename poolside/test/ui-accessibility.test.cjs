@@ -179,6 +179,9 @@ test('match coordination is a navigable, labelled local record of who played who
   assert.match(renderer, /renderMatches\(\);/);
   assert.match(renderer, /data-action="match-complete"/);
   assert.match(renderer, /data-action="match-cancel"/);
+  assert.match(renderer, /data-action="match-load"/);
+  assert.match(renderer, /Load both profiles/);
+  assert.match(renderer, /poolside\.loadMatchSessions\(/);
   assert.match(renderer, /poolside\.startMatch\(/);
   assert.match(renderer, /poolside\.completeMatch\(/);
   assert.match(renderer, /'sessions', 'matches', 'activity'/);

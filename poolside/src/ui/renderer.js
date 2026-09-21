@@ -705,8 +705,23 @@ function matchWhen(match) {
   const date = new Date(match.endedAt || match.startedAt);
   return Number.isNaN(date.getTime()) ? 'an unknown time' : date.toLocaleString();
 }
+const sessionText = participant =>
+  participant.open ? `session ${STATUS_LABELS[participant.session] || participant.session}` : 'session not loaded';
+function matchSessions(match) {
+  const participants = match.participants || [];
+  if (!participants.length || !Object.prototype.hasOwnProperty.call(participants[0], 'open')) return '';
+  return `<ul class="match-sessions">${participants
+    .map(
+      participant =>
+        `<li class="${participant.open ? 'loaded' : 'unloaded'}"><span>${escapeHtml(participant.name)}</span> <small>${escapeHtml(
+          sessionText(participant)
+        )}</small></li>`
+    )
+    .join('')}</ul>`;
+}
 function matchCard(match, actionable) {
   const [first, second] = match.participants || [];
+  const needsLoad = actionable && (match.participants || []).some(participant => !participant.open);
   const outcome =
     match.state === 'completed'
       ? `${match.winnerName || 'A participant'} recorded as the winner`
@@ -716,6 +731,11 @@ function matchCard(match, actionable) {
   const actions =
     actionable && first && second
       ? `<div class="match-actions">
+            ${
+              needsLoad
+                ? `<button class="secondary" data-action="match-load" data-match="${escapeHtml(match.matchId)}">Load both profiles</button>`
+                : ''
+            }
             <button class="secondary" data-action="match-complete" data-match="${escapeHtml(match.matchId)}" data-winner="${escapeHtml(first.id)}">${escapeHtml(first.name)} won</button>
             <button class="secondary" data-action="match-complete" data-match="${escapeHtml(match.matchId)}" data-winner="${escapeHtml(second.id)}">${escapeHtml(second.name)} won</button>
             <button class="text-button" data-action="match-cancel" data-match="${escapeHtml(match.matchId)}">Cancel</button>
@@ -727,6 +747,7 @@ function matchCard(match, actionable) {
         <span class="match-handle">${escapeHtml(match.handle)}</span>
       </div>
       <small class="match-meta">${escapeHtml(outcome)} · ${escapeHtml(MATCH_LABELS[match.state] || match.state)} · ${escapeHtml(matchWhen(match))}</small>
+      ${matchSessions(match)}
       ${match.reason ? `<small class="match-meta">${escapeHtml(match.reason)}</small>` : ''}
       ${actions}
     </article>`;
@@ -887,13 +908,24 @@ document.addEventListener('click', async event => {
     });
     return;
   }
-  if (button.dataset.action === 'match-complete' || button.dataset.action === 'match-cancel') {
+  if (['match-load', 'match-complete', 'match-cancel'].includes(button.dataset.action)) {
     const matchId = button.dataset.match;
     const completing = button.dataset.action === 'match-complete';
+    const loading = button.dataset.action === 'match-load';
     const result = await call(() =>
-      completing ? poolside.completeMatch({ matchId, winner: button.dataset.winner }) : poolside.cancelMatch({ matchId })
+      loading
+        ? poolside.loadMatchSessions({ matchId })
+        : completing
+          ? poolside.completeMatch({ matchId, winner: button.dataset.winner })
+          : poolside.cancelMatch({ matchId })
     );
-    if (result.ok) toast(completing ? 'Result recorded in the local ledger.' : 'Match cancelled.');
+    if (!result.ok) return;
+    if (loading) {
+      const failed = (result.value?.load || []).filter(entry => !entry.opened);
+      toast(failed.length ? `${failed[0].name} could not be loaded: ${failed[0].error}` : 'Both profiles are loading.', failed.length > 0);
+    } else {
+      toast(completing ? 'Result recorded in the local ledger.' : 'Match cancelled.');
+    }
     return;
   }
   if (button.dataset.action) {
@@ -964,7 +996,14 @@ call(() => poolside.get()).then(result => {
 $('#match-form').addEventListener('submit', async event => {
   event.preventDefault();
   const result = await call(() => poolside.startMatch({ first: $('#match-first').value, second: $('#match-second').value }));
-  if (result.ok) toast('Match started. Record the result when it settles.');
+  if (!result.ok) return;
+  const failed = (result.value?.load || []).filter(entry => !entry.opened);
+  toast(
+    failed.length
+      ? `Match started, but ${failed[0].name} could not be loaded: ${failed[0].error}`
+      : 'Match started and both profiles are loading. Record the result when it settles.',
+    failed.length > 0
+  );
 });
 for (const id of ['match-first', 'match-second']) $(`#${id}`).addEventListener('change', renderMatches);
 $('.brand').addEventListener('click', event => {

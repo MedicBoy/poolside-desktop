@@ -57,6 +57,23 @@ function publicSettings(settings) {
   return { table: settings.table, limit: settings.limit };
 }
 
+/**
+ * Each match participant's live session, so the dashboard can say who is actually loaded. The ledger
+ * itself stays pure and persisted; whether a window is open is process state and is resolved here.
+ * @param {{id: string, name: string}} participant
+ */
+function matchParticipantView(participant) {
+  const group = sessions.get(participant.id);
+  const open = Boolean(group && group.window && typeof group.window.isDestroyed === 'function' && !group.window.isDestroyed());
+  return { ...participant, open, session: open && group && group.fsm ? group.fsm.state : 'closed' };
+}
+
+function matchesView() {
+  const view = dashboardView(matchState.current);
+  const decorate = match => ({ ...match, participants: match.participants.map(matchParticipantView) });
+  return { ...view, active: view.active.map(decorate), recent: view.recent.map(decorate) };
+}
+
 function tableNavigationView(value) {
   if (!value || typeof value !== 'object') return null;
   return {
@@ -123,9 +140,20 @@ function buildSnapshot(activityHistory) {
     readOnly: workspace.readOnly,
     version: workspace.version,
     capabilityReport: buildCapabilityReport(workspace.version),
-    // Local match coordination: totals, the matches in progress, and the most recent results.
-    matches: dashboardView(matchState.current)
+    // Local match coordination: totals, the matches in progress with their live sessions, and the
+    // most recent results.
+    matches: matchesView()
   };
 }
 
-module.exports = { buildSnapshot, profileView, footprintView, publicAccount, publicSettings, tableNavigationView, TIMELINE_VIEW_LIMIT };
+module.exports = {
+  buildSnapshot,
+  profileView,
+  footprintView,
+  publicAccount,
+  publicSettings,
+  tableNavigationView,
+  matchesView,
+  matchParticipantView,
+  TIMELINE_VIEW_LIMIT
+};

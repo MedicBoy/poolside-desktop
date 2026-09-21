@@ -1976,6 +1976,35 @@ dialog p {
   gap: 8px;
   margin-top: 4px;
 }
+.match-sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.match-sessions li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11.5px;
+}
+.match-sessions li.loaded {
+  border-color: rgba(94, 234, 212, 0.45);
+  color: var(--mint);
+}
+.match-sessions li.unloaded {
+  border-color: rgba(252, 211, 77, 0.4);
+  color: var(--amber);
+}
+.match-sessions small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
 .match-subheading {
   margin: 20px 0 0;
 }

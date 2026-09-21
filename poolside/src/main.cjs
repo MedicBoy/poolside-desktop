@@ -92,6 +92,8 @@ const matches = createMatchService({
   accounts: () => workspace.data.accounts,
   store: matchState,
   journal: createMatchJournal({ root: app.getPath('userData') }),
+  // Starting a match loads both participants' sessions through the same path as "Open ↗".
+  openSession: id => windows.openAccount(id),
   publish,
   log
 });
