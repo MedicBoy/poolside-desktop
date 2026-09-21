@@ -41,7 +41,7 @@ async function runSelfTest(ctx) {
   const { runFixtureScenarios } = require('./self-test-fixtures.cjs');
   const { runFootprintChecks } = require('./self-test-footprint.cjs');
   const { runProfileChecks } = require('./self-test-profiles.cjs');
-  const { app, BrowserWindow, session, model, fs, checkPublicIP, log, workspace } = ctx;
+  const { app, BrowserWindow, session, model, fs, checkPublicIP, log, workspace, sessions } = ctx;
   const dashboard = workspace.dashboard;
   assert.deepEqual(
     { size: ctx.screenReaders.stats().size, workers: ctx.screenReaders.stats().workers, warmed: ctx.screenReaders.stats().warmed },
@@ -100,60 +100,6 @@ async function runSelfTest(ctx) {
     return { buttons: document.querySelectorAll('[data-action="check-ip"]').length, disabled: [...document.querySelectorAll('[data-action="check-ip"]')].every(b => b.disabled), rejected: !closed.ok };
   })()`);
   assert.deepEqual(ipControls, { buttons: 2, disabled: true, rejected: true });
-
-  // --- Local match coordination, driven through the real dashboard bridge ------------------------
-  // The ledger is the production successor to the offline simulator, so it is proven the way the rest
-  // of the app is: two real accounts, a real pairing, a real refusal, and a recorded result, all over
-  // IPC, with the capability report agreeing about what that buys the operator.
-  const matchFlow = await dashboard.webContents.executeJavaScript(`(async () => {
-    const before = await poolside.get();
-    const [first, second] = before.value.accounts.map(account => account.id);
-    // load:false on purpose. This suite must never open a real game window: the session opener
-    // navigates to the live game URL, and an automated check cannot depend on the network or on a
-    // third-party site being reachable. The loading path is covered by unit tests with an injected
-    // opener; here the dashboard shape and the bridge surface are what get proven.
-    const started = await poolside.startMatch({ first, second, load: false });
-    const afterStart = await poolside.get();
-    const refused = await poolside.startMatch({ first, second, load: false });
-    const settled = await poolside.completeMatch({ matchId: started.value.active[0].matchId, winner: second });
-    const refusedResult = await poolside.completeMatch({ matchId: started.value.active[0].matchId, winner: first });
-    const after = await poolside.get();
-    const capability = after.value.capabilityReport.capabilities.find(item => item.id === 'match-coordination');
-    return {
-      started: started.ok,
-      startedActive: started.value.totals.active,
-      refusedOk: refused.ok,
-      refusedError: refused.error,
-      settledOk: settled.ok,
-      settledCompleted: settled.value.totals.completed,
-      secondResultOk: refusedResult.ok,
-      ledger: after.value.matches.totals,
-      winner: after.value.matches.recent[0].winnerName,
-      capabilityMode: capability ? capability.mode : 'missing',
-      navigable: document.querySelectorAll('[data-view="matches"]').length,
-      sessions: afterStart.value.matches.active[0].participants.map(part => part.name + ':' + part.open + ':' + part.session),
-      loadBridge: typeof poolside.loadMatchSessions,
-      logged: after.value.events.filter(event => /in progress|recorded as the winner/i.test(event.message)).length
-    };
-  })()`);
-  assert.equal(matchFlow.started, true, 'two accounts can be paired locally');
-  assert.equal(matchFlow.startedActive, 1);
-  assert.equal(matchFlow.refusedOk, false, 'an account cannot hold two matches at once');
-  assert.match(matchFlow.refusedError, /already in an active match/);
-  assert.equal(matchFlow.settledOk, true);
-  assert.equal(matchFlow.settledCompleted, 1);
-  assert.equal(matchFlow.secondResultOk, false, 'a settled match cannot record a second result');
-  assert.deepEqual(matchFlow.ledger, { recorded: 1, active: 0, completed: 1, cancelled: 0 });
-  assert.equal(matchFlow.winner, 'Test sender');
-  assert.equal(matchFlow.capabilityMode, 'available', 'the capability report agrees the coordinator exists');
-  assert.equal(matchFlow.navigable, 1, 'the coordinator has its own dashboard view');
-  assert.deepEqual(
-    matchFlow.sessions,
-    ['Test receiver:false:closed', 'Test sender:false:closed'],
-    'the dashboard reports each participant session, and nothing was opened by this check'
-  );
-  assert.equal(matchFlow.loadBridge, 'function', 'the profiles can be loaded again from the dashboard');
-  assert.ok(matchFlow.logged >= 2, 'the pairing and the result both reached the activity history');
 
   // --- The configuration schema boundary, through the real IPC bridge ---------------------------
   const configBoundary = await dashboard.webContents.executeJavaScript(`(async () => {
@@ -235,6 +181,91 @@ async function runSelfTest(ctx) {
 
   // --- Profile lifecycle: establishment, integrity, measurement, explicit deletion --------------
   await runProfileChecks(ctx, assert, log);
+
+  // --- Local match coordination, driven through the real dashboard bridge ------------------------
+  // The ledger is the production successor to the offline simulator, so it is proven the way the rest
+  // of the app is: two real accounts, a real pairing, a real refusal, and a recorded result, all over
+  // IPC, with the capability report agreeing about what that buys the operator.
+  //
+  // Starting a match must also BRING UP both profiles, and that path ends in a navigation to the live
+  // game URL. So the game URL is served from a local fixture on each account's own partition first:
+  // the real opener, the real window and the real navigation all run, with nothing sent to the game
+  // site and no dependency on the network. This is the same protocol-handler trick the fixture
+  // scenarios use, applied to a real account rather than a stand-in window.
+  //
+  // It runs last because opening profiles genuinely creates their storage, and the profile-lifecycle
+  // check above asserts what a scan finds when the storage on disk is only what that check made.
+  const { partition } = require('./saved-session.cjs');
+  const matchAccountIds = workspace.data.accounts.slice(0, 2).map(account => account.id);
+  const matchPartitions = matchAccountIds.map(id => session.fromPartition(partition(id)));
+  const localGameFixture = '<title>Poolside fixture game surface</title><h1>9 BALL</h1>';
+  for (const partitionSession of matchPartitions) partitionSession.protocol.handle('https', () => new Response(localGameFixture));
+  const matchFlow = await dashboard.webContents.executeJavaScript(`(async () => {
+    const before = await poolside.get();
+    const [first, second] = before.value.accounts.map(account => account.id);
+    const started = await poolside.startMatch({ first, second });
+    const afterStart = await poolside.get();
+    const refused = await poolside.startMatch({ first, second });
+    const settled = await poolside.completeMatch({ matchId: started.value.active[0].matchId, winner: second });
+    const refusedResult = await poolside.completeMatch({ matchId: started.value.active[0].matchId, winner: first });
+    const after = await poolside.get();
+    const capability = after.value.capabilityReport.capabilities.find(item => item.id === 'match-coordination');
+    return {
+      started: started.ok,
+      startedActive: started.value.totals.active,
+      loaded: started.value.load.map(entry => entry.opened),
+      refusedOk: refused.ok,
+      refusedError: refused.error,
+      settledOk: settled.ok,
+      settledCompleted: settled.value.totals.completed,
+      secondResultOk: refusedResult.ok,
+      ledger: after.value.matches.totals,
+      winner: after.value.matches.recent[0].winnerName,
+      capabilityMode: capability ? capability.mode : 'missing',
+      navigable: document.querySelectorAll('[data-view="matches"]').length,
+      sessions: afterStart.value.matches.active[0].participants.map(part => ({
+        name: part.name,
+        open: part.open,
+        session: part.session
+      })),
+      logged: after.value.events.filter(event => /in progress|recorded as the winner/i.test(event.message)).length
+    };
+  })()`);
+  assert.equal(matchFlow.started, true, 'two accounts can be paired locally');
+  assert.equal(matchFlow.startedActive, 1);
+  assert.deepEqual(matchFlow.loaded, [true, true], 'starting the match brought both profiles up');
+  assert.equal(matchFlow.refusedOk, false, 'an account cannot hold two matches at once');
+  assert.match(matchFlow.refusedError, /already in an active match/);
+  assert.equal(matchFlow.settledOk, true);
+  assert.equal(matchFlow.settledCompleted, 1);
+  assert.equal(matchFlow.secondResultOk, false, 'a settled match cannot record a second result');
+  assert.deepEqual(matchFlow.ledger, { recorded: 1, active: 0, completed: 1, cancelled: 0 });
+  assert.equal(matchFlow.winner, 'Test sender');
+  assert.equal(matchFlow.capabilityMode, 'available', 'the capability report agrees the coordinator exists');
+  assert.equal(matchFlow.navigable, 1, 'the coordinator has its own dashboard view');
+  assert.deepEqual(
+    matchFlow.sessions.map(entry => [entry.name, entry.open, entry.session === 'closed']),
+    [
+      ['Test receiver', true, false],
+      ['Test sender', true, false]
+    ],
+    'the dashboard reports both participant sessions as live, not merely recorded'
+  );
+  assert.ok(matchFlow.logged >= 2, 'the pairing and the result both reached the activity history');
+  // The windows themselves, not just the ledger: a real window per participant, on the game URL, with
+  // an FSM that has left `closed`. This is the part a recorded pairing alone could not prove.
+  for (const id of matchAccountIds) {
+    const group = sessions.get(id);
+    assert.ok(group && !group.window.isDestroyed(), 'starting a match opened a real window for each participant');
+    assert.equal(group.window.webContents.getURL(), ctx.GAME_URL, 'the window loaded the game URL');
+    assert.notEqual(group.fsm.state, 'closed');
+  }
+  // Leave the session map as this check found it, then stop serving the fixture.
+  await dashboard.webContents.executeJavaScript(
+    `(async () => { for (const id of ${JSON.stringify(matchAccountIds)}) await poolside.close(id); })()`
+  );
+  for (const partitionSession of matchPartitions) partitionSession.protocol.unhandle('https');
+  for (const id of matchAccountIds) assert.equal(sessions.has(id), false, 'each window this check opened was closed again');
 
   if (process.argv.includes('--live-ip-check')) {
     await checkPublicIP(receiver);
