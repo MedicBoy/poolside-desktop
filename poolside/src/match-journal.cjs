@@ -17,9 +17,9 @@ function createMatchJournal({ root }) {
   function read() {
     if (!fs.existsSync(file)) return emptyState();
     try {
-      const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (!stored || typeof stored !== 'object' || stored.format !== FORMAT) return emptyState();
-      return cleanState(stored);
+      // `cleanState` owns the format question, including the older shapes it migrates: a document from an
+      // earlier build keeps its matches rather than being read as an empty ledger.
+      return cleanState(JSON.parse(fs.readFileSync(file, 'utf8')));
     } catch {
       return emptyState();
     }

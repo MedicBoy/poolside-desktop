@@ -55,6 +55,46 @@ test('a damaged or foreign ledger degrades to nothing recorded instead of a phan
     assert.deepEqual(journal.read(), coordination.emptyState());
   }));
 
+test('a ledger written before runs existed is migrated rather than thrown away', () =>
+  withRoot(root => {
+    // The v1 document had matches and no runs. A build that gains runs must keep the matches an earlier one
+    // recorded: losing the operator's history to a schema change would be the worst possible upgrade.
+    const journal = createMatchJournal({ root });
+    fs.writeFileSync(
+      journal.file,
+      JSON.stringify({
+        format: 'poolside-match-coordination/v1',
+        sequence: 2,
+        matches: [
+          {
+            handle: 'm2',
+            matchId: 'from-v1',
+            participants: [
+              { id: 'a', name: 'Alice' },
+              { id: 'b', name: 'Bob' }
+            ],
+            state: 'completed',
+            winnerId: 'a',
+            startedAt: '2026-09-21T12:00:00.000Z',
+            endedAt: '2026-09-21T12:05:00.000Z',
+            history: [{ at: '2026-09-21T12:05:00.000Z', from: 'active', to: 'completed', event: 'completed', detail: 'Alice won.' }]
+          }
+        ]
+      })
+    );
+    const read = journal.read();
+    assert.equal(read.format, coordination.FORMAT);
+    assert.equal(read.matches.length, 1);
+    assert.equal(read.matches[0].matchId, 'from-v1');
+    assert.equal(read.matches[0].winnerName, 'Alice');
+    assert.deepEqual(read.runs, []);
+    assert.equal(read.runSequence, 0);
+    // Written back, it is a v2 document, so the migration happens once.
+    assert.equal(JSON.parse(fs.readFileSync(journal.file, 'utf8')).format, 'poolside-match-coordination/v1');
+    journal.write(read);
+    assert.equal(JSON.parse(fs.readFileSync(journal.file, 'utf8')).format, 'poolside-match-coordination/v2');
+  }));
+
 test('hand-edited entries that could not have been produced are dropped on read', () =>
   withRoot(root => {
     const journal = createMatchJournal({ root });

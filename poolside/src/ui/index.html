@@ -179,6 +179,55 @@
               <button class="primary" type="submit" id="match-start" disabled>Start match</button>
             </form>
             <p id="match-hint" class="muted" role="status">Add two accounts to coordinate a match.</p>
+            <section class="run-panel">
+              <h3 class="match-subheading">Run plan</h3>
+              <p class="muted">
+                Decide in advance how long this run is and what makes it stop, then start it with the two accounts above. A run keeps the
+                same two accounts: while it is in progress, <em>Start match</em> adds the next match to it, and the program stops the run
+                itself when a condition is met. Balance-based stops are not offered, because Poolside has no balance readings.
+              </p>
+              <form id="run-form" class="match-form run-form">
+                <label class="match-field"
+                  ><span>Table this run is for</span
+                  ><select id="run-table" aria-label="Table the run is for"></select
+                ></label>
+                <label class="match-field"
+                  ><span>Stop after this many matches with a result</span
+                  ><input
+                    id="run-limit"
+                    aria-label="Matches with a result before the run stops"
+                    type="number"
+                    min="1"
+                    max="50"
+                    step="1"
+                    value="5" /></label
+                ><label class="match-field"
+                  ><span>Stop after this many matches in a row with no result</span
+                  ><input
+                    id="run-failures"
+                    aria-label="Matches in a row with no result before the run stops"
+                    type="number"
+                    min="0"
+                    max="25"
+                    step="1"
+                    value="3" /></label
+                ><label class="match-field"
+                  ><span>Stop after this many minutes</span
+                  ><input
+                    id="run-minutes"
+                    aria-label="Minutes before the run stops"
+                    type="number"
+                    min="0"
+                    max="600"
+                    step="1"
+                    value="90" /></label
+                ><button class="primary" type="submit" id="run-start" disabled>Start run</button>
+              </form>
+              <p id="run-hint" class="muted" role="status"></p>
+              <div id="run-active" class="match-list"></div>
+              <h3 class="match-subheading">Previous runs</h3>
+              <div id="run-recent" class="match-list"></div>
+            </section>
             <div id="match-active" class="match-list"></div>
             <h3 class="match-subheading">Recent results</h3>
             <div id="match-recent" class="match-list"></div>

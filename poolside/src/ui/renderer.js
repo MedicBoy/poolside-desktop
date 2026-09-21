@@ -797,12 +797,70 @@ function paintMatchSelect(selector) {
     .join('');
   if (state.accounts.some(account => account.id === previous)) select.value = previous;
 }
+// --- Run plan ------------------------------------------------------------------------------------
+// A run is the plan above the matches: the same two accounts, a limit, and the conditions that stop it.
+function paintRunTable() {
+  const select = $('#run-table');
+  const previous = select.value;
+  select.innerHTML = (state.tables || []).map(table => `<option value="${escapeHtml(table)}">${escapeHtml(table)}</option>`).join('');
+  select.value = (state.tables || []).includes(previous) ? previous : state.settings.table;
+}
+function runProgress(run) {
+  const progress = run.progress || {};
+  const elapsed = `${Math.round((progress.elapsedMs || 0) / 60000)} min`;
+  return [
+    `${progress.completed || 0} of ${run.plan.matchLimit} with a result`,
+    `${progress.cancelled || 0} with no result${progress.consecutiveFailures ? ` (${progress.consecutiveFailures} in a row)` : ''}`,
+    run.plan.stopAfterMinutes > 0 ? `${elapsed} of ${run.plan.stopAfterMinutes} min` : `${elapsed} so far`
+  ].join(' · ');
+}
+// What the session itself is showing, as an observation rather than a claim: the target table being visible
+// is reported, never required, and "no reading" stays different from "the table is not on screen".
+function runParticipantLine(entry, targetTable) {
+  if (!entry.screen) return 'no screen reading yet';
+  if (entry.screen.onTarget) return `showing ${targetTable}`;
+  return `${entry.screen.state || 'screen not recognized'} — ${targetTable} not seen yet`;
+}
+function runCard(run, actionable) {
+  const active = run.state === 'active';
+  const participants = (run.participants || []).length
+    ? `<ul class="match-sessions">${run.participants
+        .map(
+          entry =>
+            `<li class="${entry.releasable === true ? 'loaded' : 'unloaded'}"><span>${escapeHtml(entry.name)} (${escapeHtml(
+              entry.role
+            )})</span> <small>${escapeHtml(`${sessionText(entry)} · ${runParticipantLine(entry, run.plan.table)}`)}</small></li>`
+        )
+        .join('')}</ul>`
+    : '';
+  const outcome = run.outcomeLabel
+    ? `<small class="match-meta run-outcome">${escapeHtml(`${run.outcomeLabel} — ${run.reason}`)}</small>`
+    : '';
+  const actions =
+    actionable && active
+      ? `<div class="match-actions"><button class="text-button" data-action="run-stop" data-run="${escapeHtml(run.runId)}">Stop run</button></div>`
+      : '';
+  return `<article class="match-card run-card ${escapeHtml(run.state)}">
+      <div class="match-card-head">
+        <strong>${escapeHtml((run.participants || []).map(entry => entry.name).join(' vs '))}</strong>
+        <span class="match-handle">${escapeHtml(run.handle)}</span>
+      </div>
+      <small class="match-meta">${escapeHtml(run.describe)}</small>
+      <ul class="run-bounds">${run.bounds.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
+      <small class="match-meta">${escapeHtml(active ? runProgress(run) : `${runProgress(run)} · ${matchWhen(run)}`)}</small>
+      ${participants}
+      ${outcome}
+      ${actions}
+    </article>`;
+}
 function renderMatches() {
-  const matches = state.matches || { totals: {}, active: [], recent: [] };
+  const matches = state.matches || { totals: {}, active: [], recent: [], runs: { active: null, recent: [] } };
   const totals = matches.totals || {};
+  const runs = matches.runs || { active: null, recent: [] };
   $('#match-total').textContent = totals.active || 0;
   paintMatchSelect('#match-first');
   paintMatchSelect('#match-second');
+  paintRunTable();
   const first = $('#match-first').value;
   const second = $('#match-second').value;
   $('#match-start').disabled = !first || !second || first === second;
@@ -818,6 +876,18 @@ function renderMatches() {
   $('#match-recent').innerHTML = matches.recent.length
     ? matches.recent.map(match => matchCard(match, false)).join('')
     : '<p class="muted">No results recorded yet.</p>';
+  $('#run-start').disabled = !first || !second || first === second || Boolean(runs.active);
+  $('#run-hint').textContent = runs.active
+    ? `${runs.active.handle} is in progress: ${runs.active.describe}. Start match adds the next match to it.`
+    : !first || !second || first === second
+      ? 'Choose two different accounts above, then start a run with them.'
+      : `A run would be between ${state.accounts.find(a => a.id === first).name} and ${state.accounts.find(a => a.id === second).name}, using the plan above.`;
+  $('#run-active').innerHTML = runs.active
+    ? runCard(runs.active, true)
+    : '<p class="muted">No run in progress. A match started on its own is not part of a run.</p>';
+  $('#run-recent').innerHTML = runs.recent.length
+    ? runs.recent.map(run => runCard(run, false)).join('')
+    : '<p class="muted">No runs recorded yet.</p>';
 }
 function render(next) {
   const openDetails = openAccountDisclosureIds();
@@ -945,6 +1015,13 @@ document.addEventListener('click', async event => {
     });
     return;
   }
+  if (button.dataset.action === 'run-stop') {
+    // Stopping a run is the one action that ends a plan early, so it says what happened: the run is over,
+    // and a match it was still holding has been cancelled with the reason.
+    const result = await call(() => poolside.stopRun({ runId: button.dataset.run }));
+    if (result.ok) toast('Run stopped. A match it was still holding has been cancelled.');
+    return;
+  }
   if (['match-load', 'match-complete', 'match-cancel'].includes(button.dataset.action)) {
     const matchId = button.dataset.match;
     const completing = button.dataset.action === 'match-complete';
@@ -1043,6 +1120,32 @@ $('#match-form').addEventListener('submit', async event => {
   );
 });
 for (const id of ['match-first', 'match-second']) $(`#${id}`).addEventListener('change', renderMatches);
+// Starting a run is starting its first match with a plan attached, so it uses the same two account selects
+// as "Start match" and the same loading path.
+$('#run-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const result = await call(() =>
+    poolside.startRun({
+      first: $('#match-first').value,
+      second: $('#match-second').value,
+      plan: {
+        table: $('#run-table').value,
+        matchLimit: Number($('#run-limit').value),
+        stopAfterFailures: Number($('#run-failures').value),
+        stopAfterMinutes: Number($('#run-minutes').value)
+      }
+    })
+  );
+  if (!result.ok) return;
+  const failed = (result.value?.load || []).filter(entry => !entry.opened);
+  const run = result.value?.runs?.active;
+  toast(
+    failed.length
+      ? `Run started, but ${failed[0].name} could not be loaded: ${failed[0].error}`
+      : `${run ? `${run.handle} started: ${run.describe}.` : 'Run started.'} Both profiles are loading.`,
+    failed.length > 0
+  );
+});
 $('.brand').addEventListener('click', event => {
   event.preventDefault();
   view('sessions');

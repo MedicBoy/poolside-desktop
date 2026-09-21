@@ -7,8 +7,11 @@
 
 const crypto = require('node:crypto');
 const coordination = require('./match-coordination.cjs');
+const runPlan = require('./run-plan.cjs');
 const { createBarrier } = require('./match-barrier.cjs');
-const { routeVerdict } = require('./match-preflight.cjs');
+const { createRunKeeper } = require('./match-runs.cjs');
+const { createParticipantLoader } = require('./match-participants.cjs');
+const { text, ID_LIMIT } = require('./match-record.cjs');
 
 /**
  * Whether a participant is actually ready to be released: its own window is up AND its session
@@ -21,7 +24,7 @@ function participantReady({ open, status }) {
 }
 
 /**
- * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
+ * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, runCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
  */
 function createMatchService({
   accounts,
@@ -38,6 +41,7 @@ function createMatchService({
   monotonic = () => performance.now(),
   readyDeadlineMs = 120000,
   readyCheckMs = 1000,
+  runCheckMs = 30000,
   setTimer = (callback, delay) => setInterval(callback, delay),
   clearTimer = timer => clearInterval(timer)
 }) {
@@ -60,7 +64,12 @@ function createMatchService({
     store.current = persist(state);
     if (message) log(message);
     publish();
-    return coordination.dashboardView(store.current);
+    return serviceView();
+  }
+
+  /** What the dashboard and the IPC replies see: the matches, plus the run in progress and recent runs. */
+  function serviceView() {
+    return { ...coordination.dashboardView(store.current), runs: runs.view() };
   }
 
   store.current = journal ? journal.read() : coordination.emptyState();
@@ -82,6 +91,24 @@ function createMatchService({
     clearTimer
   });
 
+  // Runs: a plan between two accounts, its stop conditions, and the time check that enforces the clock.
+  const runs = createRunKeeper({
+    store,
+    persist,
+    log,
+    publish,
+    accounts,
+    now,
+    makeId,
+    runCheckMs,
+    setTimer,
+    clearTimer
+  });
+
+  // Sessions belong to the match, but loading them and proving their exits is a separate job from
+  // coordinating the pairing.
+  const participants = createParticipantLoader({ store, publish, log, openSession, participant, probeExit });
+
   /**
    * Cancel anything whose participant has left the workspace. Called before every read, so the ledger
    * cannot show a match in progress between an account that is no longer there.
@@ -97,44 +124,15 @@ function createMatchService({
       publish();
     }
     barrier.advance();
-    return coordination.dashboardView(store.current);
-  }
-
-  /**
-   * Bring up every participant's own browser session. Opening is idempotent — the session manager
-   * focuses a window that is already open rather than creating a second one — and one participant
-   * failing to load never stops the other. The failure is logged and reported rather than swallowed,
-   * because a match whose participants are not loaded is not a match the operator can play.
-   * @param {string} matchId
-   */
-  async function openParticipants(matchId) {
-    const match = store.current.matches.find(candidate => candidate.matchId === matchId);
-    if (!match) throw new Error('That match is not in the local ledger.');
-    if (match.state !== 'active') throw new Error('That match is no longer active.');
-    if (typeof openSession !== 'function') {
-      log(`${match.handle}: this build cannot open participant sessions, so nothing was loaded.`, 'warning');
-      return [];
-    }
-    const results = await Promise.all(
-      match.participants.map(async participant => {
-        try {
-          await openSession(participant.id);
-          return { id: participant.id, name: participant.name, opened: true, error: null };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          log(`${participant.name}: the session could not be opened for ${match.handle} (${message}).`, 'warning');
-          return { id: participant.id, name: participant.name, opened: false, error: message };
-        }
-      })
-    );
-    publish();
-    if (results.every(result => result.opened)) log(`${match.handle}: both sessions are loading.`);
-    return results;
+    // A run's clock is a stop condition like any other, so reading the state applies it: the dashboard
+    // cannot show a run that its own plan has already ended.
+    runs.enforce();
+    return serviceView();
   }
 
   /** @param {{matchId: string}} input */
   async function load({ matchId }) {
-    const results = await openParticipants(matchId);
+    const results = await participants.open(matchId);
     store.current = persist(
       coordination.requestReadiness(store.current, {
         matchId,
@@ -144,38 +142,21 @@ function createMatchService({
       })
     );
     barrier.noteRequest(matchId);
-    await proveExits(matchId);
+    await participants.proveExits(matchId);
     barrier.advance();
-    return { ...coordination.dashboardView(store.current), load: results };
+    return { ...serviceView(), load: results };
   }
 
   /**
-   * Read the address each participant leaves through — but only where a route is configured, because that
-   * is the only case where the address proves something (that the route is doing what it says). With no
-   * route there is nothing to prove and nothing is requested, which is also what keeps the offline checks
-   * offline. A failure here is not fatal on its own: the barrier sees no exit and decides.
-   * @param {string} matchId
+   * Create a match, open its participants' sessions, and publish it. `base` lets a run be committed in the
+   * same step as its first match, so a match that cannot start does not leave an empty run behind.
+   * @param {{first: string, second: string, runId?: string|null, run?: any, base?: any, load?: boolean}} input
    */
-  async function proveExits(matchId) {
-    if (typeof probeExit !== 'function' || typeof participant !== 'function') return;
-    const match = store.current.matches.find(candidate => candidate.matchId === matchId);
-    if (!match || match.state !== 'active') return;
-    await Promise.all(
-      match.participants.map(async entry => {
-        try {
-          if (!routeVerdict(participant(entry.id) && participant(entry.id).footprint).required) return;
-          await probeExit(entry.id);
-        } catch (error) {
-          log(`${entry.name}: the exit address could not be read (${error instanceof Error ? error.message : String(error)}).`, 'warning');
-        }
-      })
-    );
-  }
-
-  async function start({ first, second, load: shouldLoad = true }) {
-    const created = coordination.start(store.current, { first, second, accounts: roster(), now: now(), matchId: makeId() });
+  async function openMatch({ first, second, runId = null, run = null, base = null, load: shouldLoad = true }) {
+    const from = base || store.current;
+    const created = coordination.start(from, { first, second, accounts: roster(), now: now(), matchId: makeId(), runId });
     const opened = created.matches.find(
-      match => match.state === 'active' && !store.current.matches.some(before => before.matchId === match.matchId)
+      match => match.state === 'active' && !from.matches.some(before => before.matchId === match.matchId)
     );
     if (!opened) throw new Error('The match could not be created.');
     // The barrier exists from the moment the match does, so a restart never finds an active match with
@@ -187,35 +168,92 @@ function createMatchService({
       reason: 'Waiting for both participants to load.'
     });
     barrier.noteRequest(opened.matchId);
-    const view = commit(next, `${opened.participants[0].name} vs ${opened.participants[1].name}: ${opened.handle} is in progress.`);
+    const plan = run ? `${run.handle}: ${runPlan.describe(run.plan)}. ` : '';
+    const view = commit(next, `${plan}${opened.participants[0].name} vs ${opened.participants[1].name}: ${opened.handle} is in progress.`);
     if (shouldLoad === false) {
       barrier.syncPoll();
-      return view;
+      // The same shape either way: "nothing was asked to load" is a list, not a missing key, so a caller
+      // never has to wonder whether it forgot to load or the reply forgot to say.
+      return { ...view, load: [] };
     }
-    const results = await openParticipants(opened.matchId);
-    await proveExits(opened.matchId);
+    const results = await participants.open(opened.matchId);
+    await participants.proveExits(opened.matchId);
     barrier.advance();
-    return { ...coordination.dashboardView(store.current), load: results };
+    return { ...serviceView(), load: results };
+  }
+
+  /**
+   * Start a match. When a run is in progress the match joins it — the run's counters are counted from the
+   * matches that carry its id — and a pair that is not the run's pair is refused rather than played beside
+   * it. With no run in progress this is the standalone pairing it has always been.
+   * @param {{first: string, second: string, load?: boolean}} input
+   */
+  async function start({ first, second, load: shouldLoad = true }) {
+    const bound = runs.binding({ first: text(first, ID_LIMIT), second: text(second, ID_LIMIT) });
+    return await openMatch({ first, second, runId: bound.runId, run: bound.run, load: shouldLoad });
+  }
+
+  /**
+   * Start a run: the plan, and its first match, in one action. Nothing is written unless the match itself
+   * can be created, so a refusal here leaves the ledger exactly as it was.
+   * @param {{first: string, second: string, plan?: any, load?: boolean}} input
+   */
+  async function startRun({ first, second, plan, load: shouldLoad = true }) {
+    const created = runs.start({ first: text(first, ID_LIMIT), second: text(second, ID_LIMIT), plan });
+    return await openMatch({ first, second, runId: created.run.runId, run: created.run, base: created.state, load: shouldLoad });
+  }
+
+  /** Stop a run by hand. A match of its still in progress is cancelled with the reason. */
+  function stopRun({ runId, reason }) {
+    const stopped = runs.stop({ runId: text(runId, ID_LIMIT), reason });
+    const view = commit(stopped.state, `${stopped.run.handle} stopped: ${stopped.run.reason}`);
+    runs.syncPoll();
+    return view;
   }
 
   function complete({ matchId, winner }) {
     const next = coordination.complete(store.current, { matchId, winner, now: now() });
     const settled = next.matches.find(match => match.matchId === matchId);
-    return commit(next, settled ? `${settled.handle}: ${settled.winnerName} recorded as the winner.` : null);
+    return settle(next, settled ? `${settled.handle}: ${settled.winnerName} recorded as the winner.` : null);
   }
 
   function cancel({ matchId, reason }) {
     const next = coordination.cancel(store.current, { matchId, reason, now: now() });
     const settled = next.matches.find(match => match.matchId === matchId);
-    return commit(next, settled ? `${settled.handle}: ${settled.reason}` : null);
+    return settle(next, settled ? `${settled.handle}: ${settled.reason}` : null);
+  }
+
+  /**
+   * Record a settled match and judge the run plans against it in one write: the result and the run it ends
+   * reach the file and the dashboard together, so there is no moment where a run is over and does not say so.
+   */
+  function settle(next, message) {
+    const outcome = runs.judge(next);
+    const view = commit(outcome.state, message);
+    runs.announce(outcome.ended);
+    runs.syncPoll();
+    return view;
   }
 
   /** Stop the barrier check. Used when the app is shutting down and by tests. */
   function dispose() {
     barrier.dispose();
+    runs.dispose();
   }
 
-  return { start, complete, cancel, load, refresh, advance: barrier.advance, dispose, view: refresh, state: () => store.current };
+  return {
+    start,
+    startRun,
+    stopRun,
+    complete,
+    cancel,
+    load,
+    refresh,
+    advance: barrier.advance,
+    dispose,
+    view: refresh,
+    state: () => store.current
+  };
 }
 
 module.exports = { createMatchService, participantReady };

@@ -64,7 +64,7 @@
       "mode": "available",
       "validation": "integration-proven",
       "flag": "on",
-      "detail": "Pairs two of your own accounts into a match, loads both profiles, holds the match at a readiness barrier that reports which participants are ready and blocks release when they are not, records the result and keeps a bounded local ledger. It records what you decide: it does not pair accounts on the game service or verify a real match."
+      "detail": "Pairs two of your own accounts into a match, loads both profiles, holds the match at a readiness barrier that reports which participants are ready and blocks release when they are not, records the result and keeps a bounded local ledger. A run plan sets the table it is for, how many matches it is for, and what stops it — a match limit, matches in a row with no result, a time limit, or the operator — and the program ends the run itself when one of those is met. It records what you decide: it does not pair accounts on the game service or verify a real match."
     },
     {
       "id": "diagnostics",

@@ -59,7 +59,7 @@ function activeMatch(state, matchId) {
 /**
  * Open the barrier: from now until the deadline, this match is waiting for every participant to be
  * ready. Called when a match starts and again whenever release has to be re-requested.
- * @param {{format: string, sequence: number, matches: any[]}} state
+ * @param any state
  * @param {{matchId: string, now?: number, deadlineMs: number, reason?: string}} input
  */
 function requestReadiness(state, { matchId, now = Date.now(), deadlineMs, reason }) {
@@ -81,7 +81,7 @@ function requestReadiness(state, { matchId, now = Date.now(), deadlineMs, reason
 /**
  * Close the barrier with a verdict. `ready` records when release actually happened and how long it
  * took against the monotonic clock the caller measured; `blocked` records why release did not happen.
- * @param {{format: string, sequence: number, matches: any[]}} state
+ * @param any state
  * @param {{matchId: string, verdict: string, reason: string, releasedAt?: number, skewMs?: number|null, now?: number}} input
  */
 function settleReadiness(state, { matchId, verdict, reason, releasedAt, skewMs = null, now = Date.now() }) {
@@ -118,10 +118,10 @@ function activeMatchFor(state, id) {
 }
 
 /**
- * @param {{format: string, sequence: number, matches: any[]}} state
- * @param {{first: string, second: string, accounts: any[], now?: number, matchId: string}} input
+ * @param any state
+ * @param {{first: string, second: string, accounts: any[], now?: number, matchId: string, runId?: string|null}} input
  */
-function start(state, { first, second, accounts, now = Date.now(), matchId }) {
+function start(state, { first, second, accounts, now = Date.now(), matchId, runId = null }) {
   const current = reconcile(state, accounts, now);
   if (!first || !second) throw new Error('Choose two accounts to coordinate.');
   if (first === second) throw new Error('A match needs two different accounts.');
@@ -136,6 +136,9 @@ function start(state, { first, second, accounts, now = Date.now(), matchId }) {
     matchId: text(matchId, ID_LIMIT),
     participants,
     state: 'active',
+    // The run this match belongs to, or null when it was started on its own. The run's counters are
+    // counted from this, so it is recorded here rather than kept in a second place that can drift.
+    runId: text(runId, ID_LIMIT) || null,
     winnerId: null,
     winnerName: null,
     reason: '',
@@ -152,7 +155,7 @@ function start(state, { first, second, accounts, now = Date.now(), matchId }) {
   return { ...current, sequence, matches: [opened, ...current.matches].slice(0, LEDGER_LIMIT) };
 }
 
-/** @param {{format: string, sequence: number, matches: any[]}} state */
+/** @param any state */
 function complete(state, { matchId, winner, now = Date.now() }) {
   const match = locate(state, matchId);
   if (match.state !== 'active') throw new Error('That match is no longer active.');
@@ -162,7 +165,7 @@ function complete(state, { matchId, winner, now = Date.now() }) {
   return replaced(state, { ...next, winnerId: won.id, winnerName: won.name, endedAt: stamp(now) });
 }
 
-/** @param {{format: string, sequence: number, matches: any[]}} state @param {{matchId: string, reason?: string, now?: number}} input */
+/** @param any state @param {{matchId: string, reason?: string, now?: number}} input */
 function cancel(state, { matchId, reason, now = Date.now() }) {
   const match = locate(state, matchId);
   if (match.state !== 'active') throw new Error('That match is no longer active.');
@@ -175,7 +178,7 @@ function cancel(state, { matchId, reason, now = Date.now() }) {
  * A match cannot outlive its participants. An account that was archived or removed while a match was
  * running cancels that match instead of leaving a phantom in progress, which is what the ledger would
  * otherwise show after a workspace edit.
- * @param {{format: string, sequence: number, matches: any[]}} state
+ * @param any state
  * @param {any[]} accounts
  */
 function reconcile(state, accounts, now = Date.now()) {
@@ -198,6 +201,7 @@ function matchView(match) {
     matchId: match.matchId,
     participants: match.participants.map(participant => ({ ...participant })),
     state: match.state,
+    runId: match.runId || null,
     winnerId: match.winnerId,
     winnerName: match.winnerName,
     reason: match.reason,
@@ -210,7 +214,7 @@ function matchView(match) {
 
 /**
  * The dashboard-safe projection: counts, the matches in progress, and the most recent finished ones.
- * @param {{format: string, sequence: number, matches: any[]}} state
+ * @param any state
  */
 function dashboardView(state) {
   const ledger = state.matches;

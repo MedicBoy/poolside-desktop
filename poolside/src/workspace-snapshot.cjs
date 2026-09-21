@@ -10,6 +10,7 @@ const { publicRoutePreset } = require('./proxy-public.cjs');
 const { TABLES } = require('./table-list.cjs');
 const { buildCapabilityReport } = require('./capability-registry.cjs');
 const { dashboardView } = require('./match-coordination.cjs');
+const { view: runsView } = require('./run-coordination.cjs');
 const { participantReady } = require('./match-service.cjs');
 const { participantPreflight } = require('./match-preflight.cjs');
 
@@ -106,7 +107,43 @@ function webRTCPolicyOf(group) {
 function matchesView() {
   const view = dashboardView(matchState.current);
   const decorate = match => ({ ...match, participants: match.participants.map(matchParticipantView) });
-  return { ...view, active: view.active.map(decorate), recent: view.recent.map(decorate) };
+  const runs = runsView(matchState.current);
+  const decorateRun = run => ({
+    ...run,
+    participants: run.participants.map(participant => ({
+      ...matchParticipantView(participant),
+      role: participant.role,
+      // What that session is showing, so the run card can say whether the target table is in front of the
+      // operator. Advisory: nothing about release is gated on it.
+      screen: runScreenView(participant.id, run.plan.table)
+    }))
+  });
+  return {
+    ...view,
+    active: view.active.map(decorate),
+    recent: view.recent.map(decorate),
+    runs: {
+      active: runs.active ? decorateRun(runs.active) : null,
+      recent: runs.recent.map(decorateRun)
+    }
+  };
+}
+
+/**
+ * The run's target table as the session reports it. Null when there is no reading at all, which is a
+ * different answer from "the reading does not show the table yet".
+ * @param {string} id @param {string} targetTable
+ */
+function runScreenView(id, targetTable) {
+  const group = sessions.get(id);
+  const screen = group && group.gameScreen ? group.gameScreen : null;
+  if (!screen || typeof screen !== 'object') return null;
+  const tables = Array.isArray(screen.visibleTables) ? screen.visibleTables : [];
+  return {
+    state: typeof screen.state === 'string' ? screen.state : null,
+    observedAt: screen.observedAt || null,
+    onTarget: tables.includes(targetTable)
+  };
 }
 
 function tableNavigationView(value) {

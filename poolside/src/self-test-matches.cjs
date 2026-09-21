@@ -101,6 +101,72 @@ async function runMatchChecks(ctx, assert) {
   assert.equal(matchFlow.navigable, 1, 'the coordinator has its own dashboard view');
   assert.ok(matchFlow.logged >= 2, 'the pairing and the result both reached the activity history');
 
+  // --- A run plan: the plan stops the run, not the operator watching a counter -------------------------
+  // The whole point of a plan is that its limit is enforced. This drives it through the real bridge: two
+  // matches are recorded under the plan, the plan is met, and the program — not the test — ends the run.
+  const runFlow = await dashboard.webContents.executeJavaScript(`(async () => {
+    const snapshot = await poolside.get();
+    const ids = snapshot.value.accounts.map(account => account.id);
+    const started = await poolside.startRun({
+      first: ids[0],
+      second: ids[1],
+      plan: { table: 'Rome', matchLimit: 2, stopAfterFailures: 3, stopAfterMinutes: 60 },
+      load: false
+    });
+    if (!started.ok) return { error: started.error };
+    const runId = started.value.runs.active.runId;
+    const joined = started.value.active[0].runId === runId;
+    const record = async winner => {
+      const live = (await poolside.get()).value.matches.active[0];
+      return poolside.completeMatch({ matchId: live.matchId, winner });
+    };
+    const one = await record(ids[1]);
+    const afterOne = (await poolside.get()).value.matches.runs.active;
+    const next = await poolside.startMatch({ first: ids[0], second: ids[1], load: false });
+    const two = await record(ids[0]);
+    const after = await poolside.get();
+    const ended = after.value.matches.runs.recent[0];
+    const third = await poolside.startMatch({ first: ids[0], second: ids[1], load: false });
+    const tidy = third.ok ? await poolside.cancelMatch({ matchId: third.value.active[0].matchId }) : null;
+    return {
+      joined,
+      oneOk: one.ok,
+      afterOneActive: Boolean(afterOne),
+      afterOneCompleted: afterOne ? afterOne.progress.completed : -1,
+      nextJoined: next.ok ? next.value.active[0].runId === runId : null,
+      twoOk: two.ok,
+      activeAfterLimit: after.value.matches.runs.active,
+      outcome: ended ? ended.outcome : null,
+      outcomeLabel: ended ? ended.outcomeLabel : null,
+      reason: ended ? ended.reason : null,
+      describe: ended ? ended.describe : null,
+      participants: ended ? ended.participants.map(entry => [entry.name, entry.role]) : [],
+      thirdOk: third.ok,
+      thirdRunId: third.ok ? third.value.active[0].runId : 'none',
+      tidyOk: tidy ? tidy.ok : null
+    };
+  })()`);
+  assert.equal(runFlow.error, undefined, `the run could not be started: ${runFlow.error}`);
+  assert.equal(runFlow.joined, true, 'the first match of a run belongs to the run');
+  assert.equal(runFlow.oneOk, true);
+  assert.equal(runFlow.afterOneActive, true, 'one match is not the whole plan');
+  assert.equal(runFlow.afterOneCompleted, 1);
+  assert.equal(runFlow.nextJoined, true, 'the next match is added to the run in progress');
+  assert.equal(runFlow.twoOk, true);
+  assert.equal(runFlow.activeAfterLimit, null, 'reaching the limit ended the run');
+  assert.equal(runFlow.outcome, 'limit');
+  assert.equal(runFlow.outcomeLabel, 'Match limit reached');
+  assert.match(runFlow.reason, /2 matches with a recorded result/);
+  assert.match(runFlow.describe, /on Rome/);
+  assert.deepEqual(runFlow.participants, [
+    ['Test receiver', 'receiver'],
+    ['Test sender', 'sender']
+  ]);
+  // The plan stops the run; it does not lock the pair out. A match started afterwards is a match on its own.
+  assert.equal(runFlow.thirdOk, true);
+  assert.equal(runFlow.thirdRunId, null);
+  assert.equal(runFlow.tidyOk, true);
+
   // The windows themselves, not just the ledger: a real window per participant, on the game URL, with an
   // FSM that has left `closed`. This is the part a recorded pairing alone could not prove.
   for (const id of matchAccountIds) {

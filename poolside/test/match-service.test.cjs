@@ -115,17 +115,45 @@ test('a ledger that cannot be written is reported without losing the match in me
   assert.equal(logs[0].kind, 'warning');
 });
 
-test('the dashboard surface exposes five channels and passes input through to the engine', async () => {
+test('the dashboard surface exposes the match and run channels and passes input through to the engine', async () => {
   const { service } = harness();
   const handlers = new Map();
   registerMatchIpc({ handle: (name, fn) => handlers.set(name, fn), matches: service });
-  assert.deepEqual([...handlers.keys()].sort(), ['match:cancel', 'match:complete', 'match:load', 'match:start', 'match:state']);
+  assert.deepEqual([...handlers.keys()].sort(), [
+    'match:cancel',
+    'match:complete',
+    'match:load',
+    'match:start',
+    'match:state',
+    'run:start',
+    'run:stop'
+  ]);
   assert.equal(handlers.get('match:state')().totals.recorded, 0);
   assert.equal((await handlers.get('match:start')({ first: 'a', second: 'b', load: false })).totals.active, 1);
   assert.equal(handlers.get('match:complete')({ matchId: 'match-1', winner: 'a' }).totals.completed, 1);
   await assert.rejects(() => handlers.get('match:start')({ first: 'a', second: 'a', load: false }), /two different accounts/);
   await assert.rejects(() => handlers.get('match:start')({ load: false }), /Choose two accounts/);
   assert.throws(() => handlers.get('match:cancel')({ matchId: 42 }), /not in the local ledger/);
+});
+
+test('a run started through the dashboard surface plans the match it begins and stops on request', async () => {
+  const { service } = harness();
+  const handlers = new Map();
+  registerMatchIpc({ handle: (name, fn) => handlers.set(name, fn), matches: service });
+  const started = await handlers.get('run:start')({
+    first: 'a',
+    second: 'b',
+    plan: { table: 'Rome', matchLimit: 3, stopAfterFailures: 2, stopAfterMinutes: 45 },
+    load: false
+  });
+  assert.equal(started.runs.active.handle, 'r1');
+  assert.equal(started.runs.active.plan.table, 'Rome');
+  assert.equal(started.runs.active.progress.completed, 0);
+  assert.equal(started.active[0].runId, started.runs.active.runId, 'the first match belongs to the run');
+  const stopped = handlers.get('run:stop')({ runId: started.runs.active.runId });
+  assert.equal(stopped.runs.active, null);
+  assert.equal(stopped.runs.recent[0].outcomeLabel, 'Stopped by the operator');
+  assert.equal(stopped.totals.cancelled, 1, 'stopping the run cancelled the match it was holding');
 });
 
 test('starting a match loads both participants through the session manager', async () => {

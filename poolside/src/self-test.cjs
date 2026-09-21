@@ -239,7 +239,7 @@ async function runSelfTest(ctx) {
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, capability About view, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a saved network location assigned to one account by ticking its box in the settings list and cleared again by unticking it, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, capability About view, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a saved network location assigned to one account by ticking its box in the settings list and cleared again by unticking it, a run plan whose match limit the program enforced by ending the run itself, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
   );
   app.exit(0);
 }

@@ -212,3 +212,36 @@ test('each saved location offers a labelled tick box per account and reports the
   assert.match(renderer, /presetId: box\.checked \? box\.dataset\.routePresetAssign : ''/);
   assert.match(css, /\.route-preset-accounts\s*\{/);
 });
+
+test('the run plan is a labelled form over the account selects, and a run can be stopped from its card', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  const runPlan = require('../src/run-plan.cjs');
+  assert.match(html, /id="run-form"/);
+  for (const id of ['run-table', 'run-limit', 'run-failures', 'run-minutes', 'run-start', 'run-hint', 'run-active', 'run-recent']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(html, /aria-label="Table the run is for"/);
+  assert.match(html, /aria-label="Matches with a result before the run stops"/);
+  assert.match(html, /aria-label="Minutes before the run stops"/);
+  // The form's defaults are the plan's defaults, so the two cannot drift apart in wording or in numbers.
+  for (const [id, value] of [
+    ['run-limit', runPlan.DEFAULTS.matchLimit],
+    ['run-failures', runPlan.DEFAULTS.stopAfterFailures],
+    ['run-minutes', runPlan.DEFAULTS.stopAfterMinutes]
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"[\\s\\S]*?value="${value}"`));
+  }
+  // The one thing a plan cannot enforce is said out loud rather than offered as a field.
+  assert.match(html, /Balance-based stops are not offered/);
+  assert.match(renderer, /function paintRunTable\(\)/);
+  assert.match(renderer, /function runCard\(run, actionable\)/);
+  assert.match(renderer, /run\.bounds\.map\(/);
+  assert.match(renderer, /poolside\.startRun\(\{/);
+  assert.match(renderer, /plan: \{/);
+  assert.match(renderer, /data-action="run-stop"/);
+  assert.match(renderer, /poolside\.stopRun\(\{ runId: button\.dataset\.run \}\)/);
+  assert.match(css, /\.run-panel\s*\{/);
+  assert.match(css, /\.run-bounds\s*\{/);
+});
