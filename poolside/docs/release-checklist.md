@@ -2,6 +2,8 @@
 
 Use this checklist before handing a portable Poolside build to anyone. A completed checklist is evidence
 for one specific build; it does not make an unsigned executable trustworthy by itself.
+Record results using [the release evidence template](release-evidence-template.md).
+For a release candidate, also use the versioned [evidence folder format](release-evidence/README.md) and run its hash/containment validator with `--release`; an unsigned preview must fail that gate.
 
 ## Prepare the source tree
 
@@ -16,6 +18,8 @@ for one specific build; it does not make an unsigned executable trustworthy by i
 ## Validate the build
 
 - [ ] Run `npm run verify`.
+- [ ] Run `npm run product:check` to confirm generated capability claims and work-item coverage.
+- [ ] After an update, review and update the existing user-owned personal milestone tracker outside the repository, if present. Check off only evidence-backed progress; never bundle or duplicate that personal file.
 - [ ] Run `npm run test:desktop`.
 - [ ] Run `npm run test:persistence` when session persistence or profile code changed.
 - [ ] Run `npm run format:check`.
@@ -24,10 +28,13 @@ for one specific build; it does not make an unsigned executable trustworthy by i
       `Poolside.exe` and `resources/app.asar` that form the portable build.
 - [ ] Start the newly packaged `Poolside.exe` and verify the dashboard opens without a main-process
       error.
+- [ ] Run the packaged self-test with captured output after packaging. Investigate every nonzero exit,
+      including a transient one; later green runs do not by themselves explain the earlier failure.
 
 ## Review the portable folder
 
-- [ ] Confirm `resources/app.asar` contains `docs/SBOM.cdx.json` and `docs/threat-model.md`.
+- [ ] Confirm `resources/app.asar` contains `docs/SBOM.cdx.json`, `docs/threat-model.md`,
+      `docs/CAPABILITIES.md`, and `docs/release-evidence/README.md`; inspect the archive, not just the source tree.
 - [ ] Confirm no saved browser profile, plist/session file, Capture Lab image, diagnostics export,
       password, cookie, token, account label, or personal note is present in the package folder.
 - [ ] Record the Poolside version, Electron version, commit ID, inspection hashes, validation results,

@@ -1,20 +1,14 @@
 // The persisted workspace document, activity feed, and snapshot the dashboard renders.
 
 const fs = require('node:fs');
-const path = require('node:path');
 const model = require('./model.cjs');
-const dashboardTelemetry = require('./dashboard-telemetry.cjs');
 const { messageOf } = require('./errors.cjs');
-const { events, sessions, workspace, profileReports } = require('./state.cjs');
-const { view: timelineView } = require('./timeline-transfer.cjs');
+const { events, workspace } = require('./state.cjs');
 const { createWorkspaceHistory } = require('./workspace-history.cjs');
-const { buildAccountOverview } = require('./account-overview.cjs');
-const { resolveRecovery } = require('./recovery-settings.cjs');
-const { describeReadings } = require('./reading-status.cjs');
+const { buildSnapshot, profileView, TIMELINE_VIEW_LIMIT } = require('./workspace-snapshot.cjs');
+const { writeWorkspace, recoveryAvailable } = require('./workspace-file.cjs');
 
 const MAX_EVENTS = 100;
-/** Bounded because snapshots are broadcast on every state change. */
-const TIMELINE_VIEW_LIMIT = 100;
 
 const accountNames = () => workspace.data.accounts.map(account => account.name);
 const activityHistory = createWorkspaceHistory(events, MAX_EVENTS);
@@ -36,55 +30,8 @@ function log(message, kind = 'info') {
   publish();
 }
 
-/** @param {import('./types.cjs').Account} account @returns {import('./types.cjs').ProfileView|null} */
-function profileView(account) {
-  const persisted = account.profile || {};
-  const live = profileReports.get(account.id) || {};
-  return Object.keys(persisted).length || Object.keys(live).length ? { ...persisted, ...live } : null;
-}
-
-/** @returns {{accounts: object[], archivedAccounts: object[], settings: import('./types.cjs').WorkspaceSettings, events: import('./types.cjs').ActivityEvent[], activityHistory: object, routePresets: object[], timeline: any, telemetry: any, readOnly: boolean, version: string}} */
 function snapshot() {
-  const accountView = a => {
-    const group = sessions.get(a.id);
-    return {
-      ...a,
-      status: group && group.fsm ? group.fsm.state : 'closed',
-      statusReason: group && group.fsm ? group.fsm.reason : null,
-      health: group && group.health ? group.health : null,
-      footprint: group && group.footprint ? group.footprint : null,
-      profile: profileView(a),
-      network: group && group.network ? group.network : null,
-      gameScreen: group && group.gameScreen ? group.gameScreen : null,
-      visibleReadings: describeReadings(group && group.visibleReadings ? group.visibleReadings : {}, Date.now()),
-      monitoring: Boolean(group && group.monitoring),
-      monitorIntervalSeconds: resolveRecovery(a).monitorIntervalSeconds,
-      screenHistory: group && Array.isArray(group.screenHistory) ? group.screenHistory : [],
-      screenAttention: group && group.screenAttention?.message ? group.screenAttention : null,
-      overview: buildAccountOverview(a, { ...workspace.data.settings, routePresets: workspace.data.routePresets || [] }, group || null)
-    };
-  };
-  const accounts = workspace.data.accounts.filter(a => !a.archived).map(accountView);
-  const archivedAccounts = workspace.data.accounts.filter(a => a.archived).map(accountView);
-  const timelines = workspace.data.accounts
-    .map(a => {
-      const group = sessions.get(a.id);
-      return group && group.fsm ? { id: a.id, name: a.name, transitions: group.fsm.history() } : null;
-    })
-    .filter(Boolean);
-  const compiled = timelineView({ sessions: timelines, events, limit: TIMELINE_VIEW_LIMIT });
-  return {
-    accounts,
-    archivedAccounts,
-    settings: workspace.data.settings,
-    routePresets: workspace.data.routePresets || [],
-    events,
-    activityHistory: activityHistory.status(),
-    timeline: compiled,
-    telemetry: dashboardTelemetry.build(accounts, { version: workspace.version, timeline: compiled }),
-    readOnly: workspace.readOnly,
-    version: workspace.version
-  };
+  return buildSnapshot(activityHistory.status());
 }
 
 /** Push the current snapshot to the dashboard, if it is open. */
@@ -101,10 +48,8 @@ function save(next) {
   if (workspace.readOnly)
     throw new Error('Workspace data could not be read. Restart after fixing the workspace file; existing data has not been overwritten.');
   if (!workspace.storeFile) throw new Error('The workspace file is not initialised yet.');
-  fs.mkdirSync(path.dirname(workspace.storeFile), { recursive: true });
-  fs.writeFileSync(workspace.storeFile + '.tmp', JSON.stringify(next, null, 2), { mode: 0o600 });
-  fs.renameSync(workspace.storeFile + '.tmp', workspace.storeFile);
-  workspace.data = next;
+  workspace.data = writeWorkspace(workspace.storeFile, next);
+  workspace.authoritative = true;
   publish();
 }
 
@@ -171,12 +116,33 @@ function updateAccountProfile(id, patch) {
  */
 function load(file) {
   workspace.storeFile = file;
-  if (!fs.existsSync(file)) return;
+  workspace.authoritative = false;
+  if (!fs.existsSync(file)) {
+    if (recoveryAvailable(file)) {
+      workspace.readOnly = true;
+      log(
+        'Workspace file is missing, but recovery data exists. Existing files were preserved; restore is required before editing.',
+        'warning'
+      );
+      return { state: 'recovery-available' };
+    }
+    workspace.readOnly = false;
+    return { state: 'missing' };
+  }
   try {
     workspace.data = model.decode(JSON.parse(fs.readFileSync(file, 'utf8')));
+    workspace.readOnly = false;
+    workspace.authoritative = true;
+    return { state: 'loaded' };
   } catch {
     workspace.readOnly = true;
-    log('Workspace file could not be read. Existing data was preserved.', 'warning');
+    log(
+      recoveryAvailable(file)
+        ? 'Workspace file could not be read. A previous or staged copy exists; existing data was preserved for recovery.'
+        : 'Workspace file could not be read. Existing data was preserved.',
+      'warning'
+    );
+    return { state: 'invalid' };
   }
 }
 

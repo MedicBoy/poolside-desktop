@@ -9,24 +9,25 @@ const { createProfileStore } = require('./profiles.cjs');
 const { attachRecovery } = require('./recovery.cjs');
 const { createSessionFsm } = require('./session-fsm.cjs');
 const { attachSupervision } = require('./supervision.cjs');
-const { arrangeSessions } = require('./window-arrange.cjs');
 const { createSessionWindow, captureGeometry, describeRestore } = require('./session-window.cjs');
 const { attachSessionEvents } = require('./session-events.cjs');
 const { applyTargetFootprint } = require('./target-identity.cjs');
-const { verifyRoute, reportFootprint } = require('./footprint.cjs');
+const { reportFootprint } = require('./footprint.cjs');
 const { createSessionConfig } = require('./session-config.cjs');
 const { messageOf } = require('./errors.cjs');
 const { resolveRecovery } = require('./recovery-settings.cjs');
+const { attachProxyAuthentication } = require('./proxy-auth.cjs');
+const { createSessionActions } = require('./session-actions.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const store = require('./workspace.cjs');
 
 const GAME_URL = 'https://8ballpool.com/game';
 
 /**
- * @param {{log: import('./types.cjs').LogFn, publish: () => void, getAccount: (id: string) => import('./types.cjs').Account, selfTest: boolean, profileManager: any}} deps
+ * @param {{log: import('./types.cjs').LogFn, publish: () => void, getAccount: (id: string) => import('./types.cjs').Account, selfTest: boolean, profileManager: any, onSessionOpened?: ((id: string) => void)|null, onSessionClosed?: ((id: string) => void)|null}} deps
  */
 function createSessionManager(deps) {
-  const { log, publish, getAccount, selfTest, profileManager } = deps;
+  const { log, publish, getAccount, selfTest, profileManager, onSessionOpened, onSessionClosed } = deps;
   const profiles = createProfileStore({ log, publish });
   // The configuration-facing half of a session: the schema boundary and the footprint application.
   const config = createSessionConfig({
@@ -90,6 +91,7 @@ function createSessionManager(deps) {
       remembered: store.savedWindowGeometry(id),
       backgroundThrottling: resolveRecovery(account).backgroundThrottling
     });
+    attachProxyAuthentication(window.webContents, footprint.route);
     if (restore.adjusted) log(`${account.name}: window ${describeRestore(restore)}.`);
     // Every state change republishes; only a degradation is worth an activity-feed entry, or the
     // feed fills with launch/load/ready chatter.
@@ -123,7 +125,11 @@ function createSessionManager(deps) {
         const geometry = captureGeometry(window);
         if (geometry) store.rememberWindowGeometry(id, geometry);
       },
-      onClosed: () => sessions.delete(id)
+      onClosed: () => {
+        void profiles.flushAccount(id).catch(() => log(`${account.name}: session could not be saved while closing.`, 'warning'));
+        if (onSessionClosed) onSessionClosed(id);
+        sessions.delete(id);
+      }
     });
 
     // Target-level overrides need a live target, so they run here rather than with the rest.
@@ -141,53 +147,19 @@ function createSessionManager(deps) {
       return;
     }
     await reportFootprint(group, isolated, { log, accountName: account.name, gameUrl: GAME_URL, publish });
+    if (onSessionOpened && sessions.get(id) === group && !window.isDestroyed()) onSessionOpened(id);
   }
 
-  /**
-   * Ask Chromium what a live session will really use, on demand.
-   * @param {string} id
-   */
-  async function checkRoute(id) {
-    getAccount(id);
-    const group = sessions.get(id);
-    if (!group || group.window.isDestroyed()) throw new Error('Open this account window first.');
-    const verified = await verifyRoute(group.session, group.footprint.route, GAME_URL);
-    group.footprint.verified = verified;
-    publish();
-    return verified;
-  }
-
-  function reloadAccount(id) {
-    const account = getAccount(id);
-    const group = sessions.get(id);
-    if (!group || group.window.isDestroyed()) throw new Error('Open this account window before reloading it.');
-    group.fsm.send('reload', 'manual page reload');
-    log(`${account.name}: reloading the browser page on request.`);
-    group.window.webContents.reload();
-    publish();
-  }
-
-  function closeAccount(id) {
-    const group = sessions.get(id);
-    if (group && !group.window.isDestroyed()) group.window.close();
-  }
-
-  function closeAll() {
-    for (const id of [...sessions.keys()]) closeAccount(id);
-  }
-
-  function arrange() {
-    arrangeSessions({ log, sessions });
-  }
+  const actions = createSessionActions({ getAccount, sessions, publish, log, gameUrl: GAME_URL });
 
   return {
     openAccount,
-    closeAccount,
-    closeAll,
+    closeAccount: actions.closeAccount,
+    closeAll: actions.closeAll,
     returnToGame,
-    reloadAccount,
-    checkRoute,
-    arrange,
+    reloadAccount: actions.reloadAccount,
+    checkRoute: actions.checkRoute,
+    arrange: actions.arrange,
     flushAll: profiles.flushAll,
     hasProfiles: profiles.hasProfiles,
     attachRecoveryFor: (id, group) => attachRecovery(id, group, { log, publish, getAccount, returnToGame })

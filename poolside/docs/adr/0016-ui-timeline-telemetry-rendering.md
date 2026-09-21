@@ -169,7 +169,7 @@ not upgrade it: the scan is a floor under the export, not a guarantee about it.
    **negative control**: `findSecrets` must find planted names, an address, a path and an opaque token in an
    unredacted payload, and must find nothing in the export of that same payload. A scanner that finds nothing
    proves nothing unless it is shown finding something.
-3. `test/architecture.test.cjs` — the six modules are declared pure (no `electron` import) and under the 200-line
+3. `test/architecture.test.cjs` — the six modules are declared pure (no `electron` import) and under the 300-line
    ceiling; the local require graph stays acyclic.
 4. `src/self-test.cjs` — the desktop suite calls `diagnostics:preview` through the real IPC bridge and asserts the
    payload is returned, that it reports itself clean, and that neither of the suite's account names nor a

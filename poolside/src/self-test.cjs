@@ -30,6 +30,7 @@
  * @property {Map<string, any>} sessions
  * @property {string} GAME_URL
  * @property {string} SHOP_PROBE
+ * @property {{stats: Function}} screenReaders
  */
 
 /**
@@ -42,6 +43,11 @@ async function runSelfTest(ctx) {
   const { runProfileChecks } = require('./self-test-profiles.cjs');
   const { app, BrowserWindow, session, model, fs, checkPublicIP, log, workspace } = ctx;
   const dashboard = workspace.dashboard;
+  assert.deepEqual(
+    { size: ctx.screenReaders.stats().size, workers: ctx.screenReaders.stats().workers, warmed: ctx.screenReaders.stats().warmed },
+    { size: 1, workers: 2, warmed: true },
+    'both OCR workers are initialized before the dashboard can capture'
+  );
 
   // --- Cookie isolation between two account sessions -------------------------------------------
   const receiver = session.fromPartition('test-receiver');
@@ -70,6 +76,24 @@ async function runSelfTest(ctx) {
   })()`);
   assert.deepEqual(results, { a: true, b: true, duplicate: false, count: 2, bridge: 'undefined', inspection: 'Waiting' });
   assert.equal(model.decode(JSON.parse(fs.readFileSync(workspace.storeFile, 'utf8'))).accounts.length, 2);
+  assert.equal(model.decode(JSON.parse(fs.readFileSync(`${workspace.storeFile}.previous`, 'utf8'))).accounts.length, 1);
+  const about = await dashboard.webContents.executeJavaScript(`(async () => {
+    const response = await poolside.get();
+    document.querySelector('button[data-view="about"]').click();
+    return {
+      version: response.value.capabilityReport.version,
+      unavailable: response.value.capabilityReport.capabilities.find(item => item.id === 'live-game-input').mode,
+      visible: !document.querySelector('#view-about').classList.contains('hidden'),
+      text: document.querySelector('#about-capabilities').textContent,
+      support: document.querySelector('#about-support').textContent
+    };
+  })()`);
+  assert.equal(about.version, app.getVersion());
+  assert.equal(about.unavailable, 'unavailable');
+  assert.equal(about.visible, true, 'the About navigation opens the rendered capability view');
+  assert.match(about.text, /Live game input/);
+  assert.match(about.text, /No production pointer or keyboard input/);
+  assert.match(about.support, /Windows 11 x64/);
   const ipControls = await dashboard.webContents.executeJavaScript(`(async () => {
     const state = await poolside.get();
     const closed = await poolside.checkIP(state.value.accounts[0].id);
@@ -163,7 +187,7 @@ async function runSelfTest(ctx) {
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, capability About view, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a diagnostics payload that is anonymised, scanned and refused if it still carries a name or a path, and the Activity timeline rendering the merged history rather than only computing it.'
   );
   app.exit(0);
 }

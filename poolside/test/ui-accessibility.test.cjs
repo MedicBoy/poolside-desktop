@@ -34,6 +34,21 @@ test('navigation announces its selected view and all regular controls have visib
   }
 });
 
+test('setting help uses one keyboard-accessible tooltip clamped to the visible window', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  assert.match(html, /id="info-tooltip" class="info-tooltip" role="tooltip" popover="manual"/);
+  assert.match(renderer, /function positionInfoTooltip\(owner\)/);
+  assert.match(renderer, /Math\.min\(Math\.max\(anchor\.left/);
+  assert.match(renderer, /above >= edge \? above : anchor\.bottom \+ gap/);
+  assert.match(renderer, /addEventListener\('focusin'/);
+  assert.match(renderer, /setAttribute\('aria-describedby', 'info-tooltip'\)/);
+  assert.match(renderer, /tooltip\.showPopover\(\)/);
+  assert.match(css, /\.info-tooltip\s*\{[^}]*position: fixed/s);
+  assert.doesNotMatch(css, /\.info-dot::after/);
+});
+
 test('capture corpus filters have labels and preserve a filterable, local-only sample list', () => {
   const html = ui('index.html');
   const renderer = ui('renderer.js');
@@ -44,6 +59,83 @@ test('capture corpus filters have labels and preserve a filterable, local-only s
   }
   assert.match(renderer, /function filteredCaptureSamples\(\)/);
   assert.match(renderer, /No samples match the current filters/);
+});
+
+test('the table label is available only for table-selection captures and starts without a default', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  assert.match(html, /id="capture-table-field" hidden/);
+  assert.match(html, /id="capture-table" disabled/);
+  assert.match(renderer, /function syncCaptureTableField\(\)/);
+  assert.match(renderer, /tableSelect\.disabled = !needsTable/);
+  assert.match(renderer, /<option value="">Choose a table…<\/option>/);
+  assert.match(renderer, /expectedTable: \$\('#capture-state'\)\.value === 'table-selection'/);
+  assert.match(css, /\[hidden\][^{]*\{[^}]*display: none !important/s);
+});
+
+test('the dashboard shows the running app version and only highlights a non-empty review queue', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  assert.doesNotMatch(html, /Poolside v\d+\.\d+\.\d+/);
+  assert.equal((html.match(/class="app-version"/g) || []).length, 2);
+  assert.match(renderer, /element\.textContent = state\.version \? `Poolside v\$\{state\.version\}` : 'Poolside'/);
+  assert.match(renderer, /reviewNeeded > 0 \? 'review' : null/);
+});
+
+test('capture metrics count evidence samples while reporting label coverage separately', () => {
+  const renderer = ui('renderer.js');
+  assert.match(renderer, /'Evidence samples'/);
+  assert.match(renderer, /evaluation\.evidenceSamples \|\| 0/);
+  assert.match(renderer, /screen labels covered/);
+  assert.match(renderer, /detector matches/);
+});
+
+test('capture lab resets the document scroll position whenever the view opens', () => {
+  const renderer = ui('renderer.js');
+  assert.match(renderer, /if \(name === 'capture-lab'\) \{\s*window\.scrollTo\(0, 0\);/s);
+  assert.match(renderer, /requestAnimationFrame\(\(\) => window\.scrollTo\(0, 0\)\)/);
+});
+
+test('workspace status is driven by current browser and observed game state', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  assert.match(html, /id="workspace-state-label"/);
+  assert.match(html, /id="workspace-state-detail"/);
+  assert.match(renderer, /function renderWorkspaceState\(\)/);
+  assert.match(renderer, /gameScreenLabel\(observed\.gameScreen\)/);
+  assert.match(renderer, /Live status starts automatically/);
+});
+
+test('receiving role stays selectable and explains that reassignment requires confirmation', () => {
+  const renderer = ui('renderer.js');
+  assert.match(renderer, /option\[value="receiver"\]'\)\.disabled = false/);
+  assert.match(renderer, /Poolside will ask before changing that account to Sending/);
+  assert.match(renderer, /\$\('#account-role'\)\.addEventListener\('change'/);
+  assert.match(renderer, /\$\('#edit-account-role'\)\.addEventListener\('change'/);
+});
+
+test('table captures expose saved and detected table names and the report tracks every table separately', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  assert.match(html, /id="capture-table-coverage"/);
+  assert.match(renderer, /function captureTableCoverage\(evaluation\)/);
+  assert.match(renderer, /<dt>Expected table<\/dt>/);
+  assert.match(renderer, /<dt>Detected table<\/dt>/);
+  assert.match(renderer, /No supported table name detected/);
+  assert.match(html, /Your Evidence captures and held-out Benchmark captures are separate/);
+  assert.match(renderer, /Benchmark: no held-out images yet/);
+  assert.match(renderer, /Centered table matched against reviewed local Evidence/);
+});
+
+test('table navigation is visibly identified as a no-click dry run with a labelled per-session target', () => {
+  const renderer = ui('renderer.js');
+  assert.match(renderer, /Table navigation · dry run/);
+  assert.match(renderer, /class="outline-badge">No clicks/);
+  assert.match(renderer, /aria-label="Target table for/);
+  for (const action of ['navigation-start', 'navigation-observe', 'navigation-advance', 'navigation-cancel', 'navigation-retry']) {
+    assert.match(renderer, new RegExp(action));
+  }
 });
 
 test('account disclosures preserve both session-details and recent-screen-changes state across dashboard renders', () => {

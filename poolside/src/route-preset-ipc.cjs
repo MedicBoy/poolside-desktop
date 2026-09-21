@@ -1,4 +1,5 @@
 const routePresets = require('./route-presets.cjs');
+const { publicRoutePreset } = require('./proxy-public.cjs');
 
 /** @param {{handle: (name: string, fn: (input: any) => any) => void, workspace: any, save: (value: any) => void, log: (message: string) => void}} deps */
 function registerRoutePresetIpc({ handle, workspace, save, log }) {
@@ -6,7 +7,7 @@ function registerRoutePresetIpc({ handle, workspace, save, log }) {
     const preset = routePresets.create(input, workspace.data.routePresets || []);
     save({ ...workspace.data, routePresets: [...(workspace.data.routePresets || []), preset] });
     log(`Route preset ${preset.name} saved.`);
-    return preset;
+    return publicRoutePreset(preset);
   });
   handle('route-preset:delete', id => {
     const preset = (workspace.data.routePresets || []).find(item => item.id === id);

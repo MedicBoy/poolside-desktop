@@ -6,8 +6,14 @@ test('capture evaluation makes repeated labels and missing coverage visible', ()
   const result = evaluate(
     [
       { expectedState: 'lobby', observedState: 'lobby', score: 0.73 },
-      { expectedState: 'table-selection', observedState: 'table-selection', score: 0.63 },
-      { expectedState: 'table-selection', observedState: 'unknown', score: 0 }
+      {
+        expectedState: 'table-selection',
+        expectedTable: 'Berlin',
+        observedState: 'table-selection',
+        observedTables: ['Berlin'],
+        score: 0.63
+      },
+      { expectedState: 'table-selection', expectedTable: 'Rome', observedState: 'unrecognized', observedTables: [], score: 0 }
     ],
     ['lobby', 'table-selection', 'shop']
   );
@@ -34,7 +40,7 @@ test('capture evaluation makes repeated labels and missing coverage visible', ()
     }
   );
   assert.equal(result.agreement, 2 / 3);
-  assert.equal(result.unknown, 1 / 3);
+  assert.equal(result.unrecognized, 1 / 3);
   assert.deepEqual(result.labels[1], {
     expectedState: 'table-selection',
     count: 2,
@@ -43,7 +49,7 @@ test('capture evaluation makes repeated labels and missing coverage visible', ()
     matches: 1,
     disagreements: 1,
     reviewNeeded: 1,
-    unknown: 1,
+    unrecognized: 1,
     agreement: 0.5,
     meanScore: 0.315
   });
@@ -57,7 +63,7 @@ test('capture evaluation marks a label ready only after enough separate samples'
     [
       { expectedState: 'shop', observedState: 'shop', score: 0.8 },
       { expectedState: 'shop', observedState: 'shop', score: 0.81 },
-      { expectedState: 'shop', observedState: 'unknown', score: 0 }
+      { expectedState: 'shop', observedState: 'unrecognized', score: 0 }
     ],
     ['shop']
   );
@@ -71,7 +77,7 @@ test('benchmark captures are measured separately and do not fill evidence covera
   const result = evaluate(
     [
       { expectedState: 'shop', observedState: 'shop', score: 0.8, cohort: 'benchmark' },
-      { expectedState: 'shop', observedState: 'unknown', score: 0, cohort: 'benchmark' },
+      { expectedState: 'shop', observedState: 'unrecognized', score: 0, cohort: 'benchmark' },
       { expectedState: 'shop', observedState: 'shop', score: 0.8 }
     ],
     ['shop']
@@ -89,7 +95,7 @@ test('benchmark report calculates per-label precision, recall, and F1 without cl
       { expectedState: 'shop', observedState: 'shop', cohort: 'benchmark' },
       { expectedState: 'shop', observedState: 'lobby', cohort: 'benchmark' },
       { expectedState: 'lobby', observedState: 'shop', cohort: 'benchmark' },
-      { expectedState: 'lobby', observedState: 'unknown', cohort: 'benchmark' }
+      { expectedState: 'lobby', observedState: 'unrecognized', cohort: 'benchmark' }
     ],
     ['shop', 'lobby', 'loading']
   );
@@ -98,7 +104,7 @@ test('benchmark report calculates per-label precision, recall, and F1 without cl
   assert.deepEqual({ precision: lobby.precision, recall: lobby.recall, f1: lobby.f1 }, { precision: 0, recall: 0, f1: 0 });
   assert.equal(loading.precision, null);
   assert.equal(loading.recall, null);
-  assert.equal(result.benchmark.unknown, 0.25);
+  assert.equal(result.benchmark.unrecognized, 0.25);
   assert.equal(result.benchmark.macroPrecision, 0.25);
   assert.equal(result.benchmark.macroRecall, 0.25);
   assert.equal(result.benchmark.macroF1, 0.25);
@@ -122,12 +128,72 @@ test('capture evaluation reports local timing medians and p95 only from valid me
 test('review-needed excludes an OCR disagreement once the user has reviewed it', () => {
   const result = evaluate(
     [
-      { expectedState: 'shop', observedState: 'unknown', reviewedAt: '2026-09-20T12:00:00.000Z' },
-      { expectedState: 'shop', observedState: 'unknown' }
+      { expectedState: 'shop', observedState: 'unrecognized', reviewedAt: '2026-09-20T12:00:00.000Z' },
+      { expectedState: 'shop', observedState: 'unrecognized' }
     ],
     ['shop']
   );
   assert.equal(result.disagreements, 2, 'the accuracy record keeps both OCR disagreements');
   assert.equal(result.reviewNeeded, 1, 'the review queue contains only the unresolved item');
   assert.equal(result.labels[0].reviewNeeded, 1);
+});
+
+test('a table-selection sample matches only when the intended table was visible', () => {
+  const result = evaluate(
+    [
+      {
+        expectedState: 'table-selection',
+        expectedTable: 'Berlin',
+        observedState: 'table-selection',
+        observedTables: ['Rome', 'Berlin']
+      },
+      {
+        expectedState: 'table-selection',
+        expectedTable: 'London',
+        observedState: 'table-selection',
+        observedTables: ['Sydney']
+      }
+    ],
+    ['table-selection']
+  );
+  assert.equal(result.agreement, 0.5);
+  assert.equal(result.reviewNeeded, 1);
+});
+
+test('table targets are reported separately instead of being collapsed into one screen-label row', () => {
+  const result = evaluate(
+    [
+      {
+        expectedState: 'table-selection',
+        expectedTable: 'London',
+        observedState: 'table-selection',
+        observedTables: ['London']
+      },
+      {
+        expectedState: 'table-selection',
+        expectedTable: 'London',
+        observedState: 'table-selection',
+        observedTables: []
+      },
+      {
+        cohort: 'benchmark',
+        expectedState: 'table-selection',
+        expectedTable: 'Dubai',
+        observedState: 'table-selection',
+        observedTables: ['Dubai']
+      }
+    ],
+    ['table-selection'],
+    ['London', 'Dubai']
+  );
+  assert.deepEqual(result.evidenceMetrics.tables[0], {
+    table: 'London',
+    count: 2,
+    matches: 1,
+    misses: 1,
+    reviewNeeded: 1,
+    accuracy: 0.5
+  });
+  assert.equal(result.evidenceMetrics.tables[1].count, 0);
+  assert.equal(result.benchmark.tables[1].matches, 1);
 });

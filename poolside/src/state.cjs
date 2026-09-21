@@ -43,6 +43,8 @@ const workspace = {
   /** @type {import('./types.cjs').WorkspaceData} */
   data: { version: 1, accounts: [], settings: { table: 'Bangkok', limit: 10 } },
   readOnly: false,
+  // Orphan removal is allowed only after a complete workspace document was decoded or saved.
+  authoritative: false,
   /** @type {string|null} */
   storeFile: null,
   /** @type {import('electron').BrowserWindow|null} */

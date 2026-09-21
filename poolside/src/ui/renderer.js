@@ -1,7 +1,9 @@
 const $ = selector => document.querySelector(selector);
 let state = { accounts: [], events: [], settings: { table: 'Bangkok', limit: 10 } };
 let toastTimer;
+let infoTooltipOwner = null;
 const dialogOpeners = new WeakMap();
+const navigationTargets = new Map();
 // Session states come from the FSM (src/session-fsm.cjs). `closed` is what a session with no open
 // window reports, so it appears here even though nothing stores it as a state.
 const CLOSED_STATUSES = ['idle', 'closed'];
@@ -15,9 +17,24 @@ const STATUS_LABELS = {
   degraded: '△ Needs attention',
   closing: '○ Closing…'
 };
+const SCREEN_LABELS = {
+  inspecting: 'Inspecting game…',
+  unrecognized: 'Screen not recognized',
+  'inspection-failed': 'Inspection failed',
+  shop: 'Shop visible',
+  loading: 'Loading screen',
+  connecting: 'Connecting screen',
+  lobby: 'Lobby visible',
+  'table-selection': 'Table selector visible',
+  'lucky-promotion': 'Lucky Shot promotion',
+  'lucky-shot': 'Lucky Shot'
+};
 const isClosed = account => CLOSED_STATUSES.includes(account.status);
 const isBusy = account => BUSY_STATUSES.includes(account.status);
 const statusLabel = account => STATUS_LABELS[account.status] || STATUS_LABELS.closed;
+const gameScreenLabel = screen => SCREEN_LABELS[screen?.state] || SCREEN_LABELS.unrecognized;
+const displayStatusLabel = account =>
+  account.status === 'ready' && account.gameScreen ? `● ${gameScreenLabel(account.gameScreen)}` : statusLabel(account);
 // A degraded session explains itself: what went wrong, how many recoveries were tried, and whether
 // the automatic budget is spent (supervision.cjs owns that policy).
 function healthRow(a) {
@@ -32,22 +49,14 @@ function healthRow(a) {
 function screenRow(a) {
   const screen = a.gameScreen;
   const attention = a.screenAttention;
-  const names = {
-    inspecting: 'Inspecting game…',
-    unknown: 'Screen not recognized',
-    shop: 'Shop visible',
-    loading: 'Loading screen',
-    connecting: 'Connecting screen',
-    lobby: 'Lobby visible',
-    'table-selection': 'Table selector visible',
-    'lucky-promotion': 'Lucky Shot promotion',
-    'lucky-shot': 'Lucky Shot'
-  };
   const label = screen
-    ? `${names[screen.state] || names.unknown}${typeof screen.score === 'number' && screen.score > 0 ? ' · ' + Math.round(screen.score * 100) + '%' : ''}${screen.observedAt ? ' · ' + new Date(screen.observedAt).toLocaleTimeString() : ''}`
+    ? `${gameScreenLabel(screen)}${typeof screen.score === 'number' && screen.score > 0 ? ' · ' + Math.round(screen.score * 100) + '%' : ''}${screen.observedAt ? ' · ' + new Date(screen.observedAt).toLocaleTimeString() : ''}`
     : 'Game screen not inspected';
   const evidence = Array.isArray(screen?.evidence)
     ? screen.evidence.filter(value => typeof value === 'string' && value.trim()).slice(0, 4)
+    : [];
+  const tables = Array.isArray(screen?.visibleTables)
+    ? screen.visibleTables.filter(value => typeof value === 'string' && value.trim()).slice(0, 6)
     : [];
   const source =
     screen?.source === 'bottom-band'
@@ -55,7 +64,12 @@ function screenRow(a) {
       : screen?.source === 'full-frame'
         ? 'Read from the game area.'
         : '';
-  const detail = evidence.length ? `Matched: ${evidence.join(', ')}. ${source}`.trim() : source;
+  const tableDetail = tables.length ? `Visible tables: ${tables.join(', ')}.` : '';
+  const visualDetail =
+    screen?.tableMatch?.method === 'local-evidence'
+      ? `Centered table matched against reviewed local Evidence: ${screen.tableMatch.table}.`
+      : '';
+  const detail = `${evidence.length ? `Matched: ${evidence.join(', ')}.` : ''} ${tableDetail} ${visualDetail} ${source}`.trim();
   const canMonitor = !isClosed(a) && !isBusy(a) && screen?.state !== 'inspecting';
   const monitorLabel = a.monitoring ? 'Stop live status' : 'Start live status';
   const monitorTitle = a.monitoring
@@ -65,6 +79,53 @@ function screenRow(a) {
     ? `<small class="screen-detail">Live status is on · local screen reading about every ${a.monitorIntervalSeconds || 30} seconds, paused while this window is not focused.</small>`
     : '';
   return `<div class="network-row screen-row"><span><span class="screen-result">${escapeHtml(label)}</span>${attention ? `<small class="screen-detail screen-attention">${escapeHtml(attention.message)}</small>` : ''}${monitorDetail}${detail ? `<small class="screen-detail">${escapeHtml(detail)}</small>` : ''}</span><span class="screen-actions"><button class="text-button" data-action="inspect" data-id="${a.id}" title="Read one game image locally; this does not verify responsiveness" ${canMonitor ? '' : 'disabled'}>Inspect game ↗</button><button class="text-button" data-action="monitor" data-id="${a.id}" title="${monitorTitle}" ${canMonitor ? '' : 'disabled'}>${monitorLabel}</button></span></div>`;
+}
+function tableNavigationRow(account) {
+  const plan = account.tableNavigation;
+  const terminal = !plan || ['complete', 'cancelled', 'failed'].includes(plan.state);
+  const tables = Array.isArray(state.tables) && state.tables.length ? state.tables : [state.settings.table];
+  const remembered = navigationTargets.get(account.id);
+  const selected =
+    !terminal && plan?.targetTable
+      ? plan.targetTable
+      : tables.includes(remembered)
+        ? remembered
+        : plan?.targetTable || state.settings.table;
+  const labels = {
+    'locating-lobby': 'Locating lobby',
+    'opening-table-selection': 'Open table selection',
+    'locating-table': 'Locating target table',
+    'target-ready': 'Target table visible',
+    'opening-table': 'Opening target table',
+    matchmaking: 'Matchmaking observed',
+    complete: 'Navigation complete',
+    cancelled: 'Dry run cancelled',
+    failed: 'Dry run needs attention'
+  };
+  const options = tables
+    .map(table => `<option value="${escapeHtml(table)}" ${table === selected ? 'selected' : ''}>${escapeHtml(table)}</option>`)
+    .join('');
+  const locked = !terminal;
+  const unavailable = isClosed(account) || isBusy(account);
+  const instruction = plan?.input?.instruction || 'Choose a target table to build a no-click navigation plan.';
+  const recent = Array.isArray(plan?.history) ? plan.history.slice(-4).reverse() : [];
+  const history = recent.length
+    ? `<details class="navigation-history"><summary>Recent plan events</summary><ol>${recent.map(item => `<li><span>${escapeHtml(item.detail)}</span><time>${new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>`).join('')}</ol></details>`
+    : '';
+  let primary;
+  if (plan?.state === 'failed') {
+    primary = `<button class="secondary" data-action="navigation-retry" data-id="${account.id}" ${unavailable ? 'disabled' : ''}>Retry dry run</button>`;
+  } else if (locked && ['opening-table-selection', 'target-ready'].includes(plan.state)) {
+    primary = `<button class="secondary" data-action="navigation-advance" data-id="${account.id}" ${unavailable ? 'disabled' : ''}>I completed this step</button>`;
+  } else if (locked) {
+    primary = `<button class="secondary" data-action="navigation-observe" data-id="${account.id}" ${unavailable ? 'disabled' : ''}>Check visible screen</button>`;
+  } else {
+    primary = `<button class="secondary" data-action="navigation-start" data-id="${account.id}" ${unavailable ? 'disabled' : ''}>Start dry run</button>`;
+  }
+  const cancel = locked
+    ? `<button class="text-button" data-action="navigation-cancel" data-id="${account.id}" ${unavailable ? 'disabled' : ''}>Cancel</button>`
+    : '';
+  return `<section class="navigation-row" aria-label="Table-navigation dry run for ${escapeHtml(account.name)}"><div class="navigation-heading"><span><strong>Table navigation · dry run</strong><small>${escapeHtml(plan ? labels[plan.state] || plan.state : 'Not started')}</small></span><span class="outline-badge">No clicks</span></div><div class="navigation-controls"><label>Target table<select data-navigation-target="${account.id}" aria-label="Target table for ${escapeHtml(account.name)}" ${locked ? 'disabled' : ''}>${options}</select></label><span class="screen-actions">${primary}${cancel}</span></div><p>${escapeHtml(instruction)}</p>${history}</section>`;
 }
 function networkRow(a) {
   const n = a.network;
@@ -136,6 +197,56 @@ function toast(message, error = false) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => $('#toast').classList.add('hidden'), 5500);
 }
+function positionInfoTooltip(owner) {
+  const tooltip = $('#info-tooltip');
+  const edge = 12;
+  const gap = 8;
+  if (!owner?.isConnected) return hideInfoTooltip(owner);
+  if (!tooltip.matches(':popover-open')) tooltip.showPopover();
+  const anchor = owner.getBoundingClientRect();
+  const box = tooltip.getBoundingClientRect();
+  const maximumLeft = Math.max(edge, window.innerWidth - box.width - edge);
+  const left = Math.min(Math.max(anchor.left + anchor.width / 2 - box.width / 2, edge), maximumLeft);
+  const above = anchor.top - box.height - gap;
+  const maximumTop = Math.max(edge, window.innerHeight - box.height - edge);
+  const top = Math.min(Math.max(above >= edge ? above : anchor.bottom + gap, edge), maximumTop);
+  tooltip.style.left = `${Math.round(left)}px`;
+  tooltip.style.top = `${Math.round(top)}px`;
+}
+function showInfoTooltip(owner) {
+  const text = owner?.dataset.tip;
+  if (!text) return;
+  const tooltip = $('#info-tooltip');
+  infoTooltipOwner = owner;
+  tooltip.textContent = text;
+  owner.setAttribute('aria-describedby', 'info-tooltip');
+  positionInfoTooltip(owner);
+}
+function hideInfoTooltip(owner = infoTooltipOwner) {
+  if (owner && owner !== infoTooltipOwner) return;
+  if (infoTooltipOwner?.isConnected) infoTooltipOwner.removeAttribute('aria-describedby');
+  infoTooltipOwner = null;
+  const tooltip = $('#info-tooltip');
+  if (tooltip.matches(':popover-open')) tooltip.hidePopover();
+}
+document.addEventListener('pointerover', event => {
+  const owner = event.target.closest?.('.info-dot[data-tip]');
+  if (owner && !owner.contains(event.relatedTarget)) showInfoTooltip(owner);
+});
+document.addEventListener('pointerout', event => {
+  const owner = event.target.closest?.('.info-dot[data-tip]');
+  if (owner && !owner.contains(event.relatedTarget) && document.activeElement !== owner) hideInfoTooltip(owner);
+});
+document.addEventListener('focusin', event => {
+  const owner = event.target.closest?.('.info-dot[data-tip]');
+  if (owner) showInfoTooltip(owner);
+});
+document.addEventListener('focusout', event => {
+  const owner = event.target.closest?.('.info-dot[data-tip]');
+  if (owner && !owner.matches(':hover')) hideInfoTooltip(owner);
+});
+document.addEventListener('scroll', () => infoTooltipOwner && positionInfoTooltip(infoTooltipOwner), true);
+window.addEventListener('resize', () => infoTooltipOwner && positionInfoTooltip(infoTooltipOwner));
 async function call(fn) {
   try {
     const result = await fn();
@@ -148,7 +259,7 @@ async function call(fn) {
   }
 }
 function view(name) {
-  if (!['sessions', 'activity', 'accounts', 'capture-lab', 'settings'].includes(name)) return;
+  if (!['sessions', 'activity', 'accounts', 'capture-lab', 'settings', 'about'].includes(name)) return;
   document.querySelectorAll('.view').forEach(el => el.classList.toggle('hidden', el.id !== `view-${name}`));
   document.querySelectorAll('.nav-item').forEach(el => {
     const active = el.dataset.view === name;
@@ -156,14 +267,27 @@ function view(name) {
     el.toggleAttribute('aria-current', active);
   });
   $('#breadcrumb').textContent = name === 'capture-lab' ? 'Capture lab' : name[0].toUpperCase() + name.slice(1);
-  if (name === 'capture-lab') loadCaptureLab();
+  if (name === 'capture-lab') {
+    window.scrollTo(0, 0);
+    requestAnimationFrame(() => window.scrollTo(0, 0));
+    loadCaptureLab();
+  }
+}
+function updateReceiverRoleHint(selectId, hintId, excludedId = null) {
+  const selected = $(`#${selectId}`).value;
+  const current = state.accounts.find(account => account.id !== excludedId && account.role === 'receiver');
+  $(`#${hintId}`).textContent =
+    selected === 'receiver' && current
+      ? `${current.name} is currently receiving. Poolside will ask before changing that account to Sending.`
+      : '';
 }
 function openDialog() {
   $('#account-form').reset();
   $('#account-error').textContent = '';
   const hasReceiver = state.accounts.some(a => a.role === 'receiver');
   $('#account-role').value = hasReceiver ? 'sender' : 'receiver';
-  $('#account-role option[value="receiver"]').disabled = hasReceiver;
+  $('#account-role option[value="receiver"]').disabled = false;
+  updateReceiverRoleHint('account-role', 'account-role-hint');
   showDialog('#account-dialog', '#account-name');
 }
 function renderAccounts() {
@@ -181,7 +305,7 @@ function renderAccounts() {
   $('#accounts').innerHTML = accounts
     .map(
       a =>
-        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(statusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${footprintRow(a)}${profileRow(a)}${networkRow(a)}${screenRow(a)}<div class="network-row"><span>Page tools</span><span class="screen-actions"><button class="text-button" data-action="reload" data-id="${a.id}" title="Reload this browser page while keeping its isolated saved sign-in." ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Reload page ↗</button><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></span></div></article>`
+        `<article class="account-card"><span class="account-avatar ${a.role}">${escapeHtml(a.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(a.name)}</div><span class="account-role">${a.role === 'receiver' ? 'Receiving account' : 'Sending account'}</span></div><div class="account-actions"><button class="secondary" data-action="${isClosed(a) ? 'open' : 'focus'}" data-id="${a.id}">${isClosed(a) ? 'Open ↗' : 'Focus ↗'}</button>${!isClosed(a) ? `<button class="icon-button" aria-label="Close ${escapeHtml(a.name)} window" data-action="close" data-id="${a.id}">×</button>` : ''}</div><div class="account-bottom"><span class="status ${a.status}">${escapeHtml(displayStatusLabel(a))}</span><button class="archive" data-action="archive" data-id="${a.id}" ${!isClosed(a) ? 'disabled' : ''}>Archive</button></div>${healthRow(a)}${footprintRow(a)}${profileRow(a)}${networkRow(a)}${screenRow(a)}${tableNavigationRow(a)}<div class="network-row"><span>Page tools</span><span class="screen-actions"><button class="text-button" data-action="reload" data-id="${a.id}" title="Reload this browser page while keeping its isolated saved sign-in." ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Reload page ↗</button><button class="text-button" data-action="return-game" data-id="${a.id}" ${isClosed(a) || isBusy(a) ? 'disabled' : ''}>Return to game ↗</button></span></div></article>`
     )
     .join('');
 }
@@ -307,7 +431,8 @@ async function runBulk(action) {
 }
 function managedCard(account, archived = false) {
   const screen = account.gameScreen;
-  const screenState = screen?.state && screen.state !== 'unknown' ? screen.state.replaceAll('-', ' ') : 'not inspected';
+  const screenState =
+    screen?.state && !['unrecognized', 'inspection-failed'].includes(screen.state) ? screen.state.replaceAll('-', ' ') : 'not inspected';
   const live = !isClosed(account);
   // Only the active list is selectable: an archived slot has no session to open or close, and its two
   // remaining actions are already single-click on its own card.
@@ -316,7 +441,7 @@ function managedCard(account, archived = false) {
       ? `<input type="checkbox" class="card-picker" data-select-account="${escapeHtml(account.id)}" aria-label="Select ${escapeHtml(account.name)}" ${managerSelection.has(account.id) ? 'checked' : ''} />`
       : '';
   return `<article class="managed-card ${archived ? 'archived' : ''}">
-    <div class="managed-card-heading">${picker}<span class="account-avatar ${account.role}">${escapeHtml(account.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(account.name)}</div><span class="account-role">${account.role === 'receiver' ? 'Receiving account' : 'Sending account'} · ${escapeHtml(statusLabel(account))}</span></div><div class="managed-actions">${archived ? `<button class="secondary" data-action="restore" data-id="${account.id}">Restore</button>` : `<button class="secondary" data-action="edit-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Edit</button><button class="secondary" data-action="account-preferences" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Session preferences</button><button class="secondary" data-action="archive" data-id="${account.id}" ${live ? 'disabled' : ''}>Archive</button>`}<button class="danger-button" data-action="delete-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Remove…</button></div></div>
+    <div class="managed-card-heading">${picker}<span class="account-avatar ${account.role}">${escapeHtml(account.name[0].toUpperCase())}</span><div><div class="account-name">${escapeHtml(account.name)}</div><span class="account-role">${account.role === 'receiver' ? 'Receiving account' : 'Sending account'} · ${escapeHtml(displayStatusLabel(account))}</span></div><div class="managed-actions">${archived ? `<button class="secondary" data-action="restore" data-id="${account.id}">Restore</button>` : `<button class="secondary" data-action="edit-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Edit</button><button class="secondary" data-action="account-preferences" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Session preferences</button><button class="secondary" data-action="archive" data-id="${account.id}" ${live ? 'disabled' : ''}>Archive</button>`}<button class="danger-button" data-action="delete-account" data-id="${account.id}" ${live ? 'disabled title="Close this browser window first"' : ''}>Remove…</button></div></div>
     ${account.note ? `<p class="account-note"><strong>Local note:</strong> ${escapeHtml(account.note)}</p>` : ''}
     <dl class="managed-details"><div><dt>Browser profile</dt><dd>${escapeHtml(profileSummary(account))}</dd></div><div><dt>Current screen</dt><dd>${escapeHtml(screenState)}${typeof screen?.score === 'number' ? ` · ${Math.round(screen.score * 100)}% match` : ''}</dd></div><div><dt>Public IP check</dt><dd>${account.network?.status === 'checked' ? escapeHtml(account.network.ip) : 'Not checked'}</dd></div><div><dt>Created</dt><dd>${account.createdAt ? escapeHtml(new Date(account.createdAt).toLocaleDateString()) : 'Unknown'}</dd></div></dl>${visibleReadings(account)}${screenHistory(account)}${accountOverview(account)}
   </article>`;
@@ -343,9 +468,9 @@ function openEditDialog(id) {
   $('#edit-account-id').value = account.id;
   $('#edit-account-name').value = account.name;
   $('#edit-account-note').value = account.note || '';
-  const receiverExists = state.accounts.some(candidate => candidate.id !== account.id && candidate.role === 'receiver');
   $('#edit-account-role').value = account.role;
-  $('#edit-account-role').querySelector('option[value="receiver"]').disabled = receiverExists;
+  $('#edit-account-role').querySelector('option[value="receiver"]').disabled = false;
+  updateReceiverRoleHint('edit-account-role', 'edit-account-role-hint', account.id);
   $('#edit-account-error').textContent = '';
   showDialog('#edit-account-dialog', '#edit-account-name');
 }
@@ -403,7 +528,8 @@ const SETTINGS_HELP = {
   'identity.colorScheme': 'Whether websites are told this browser prefers a light or dark appearance.',
   'identity.quotaBytes': 'A warning ceiling for the browser cache. Poolside reports when it is exceeded; Chromium does not enforce it.',
   'proxy.enabled': 'Turns the route below on for newly opened sessions. Leave it off to use your normal network connection.',
-  'proxy.spec': 'Optional proxy address in host:port or scheme://host:port form. It is applied to the isolated session only.',
+  'proxy.spec':
+    'Optional proxy address in host:port, scheme://host:port, or user:password@host:port form. It is applied to the isolated session only.',
   'proxy.bypass': 'Optional hosts that should skip the route, separated with commas. Most people can leave this blank.',
   'recovery.shopReturnDelaySeconds':
     'How many seconds Poolside waits after confirming the shop before returning this browser window to the game. This does not affect gameplay.',
@@ -504,6 +630,32 @@ function restoreAccountDisclosureIds(ids) {
     document.querySelector(`${selector}[data-account-id="${id}"]`)?.setAttribute('open', '');
   }
 }
+function renderWorkspaceState() {
+  const openAccounts = state.accounts.filter(account => !isClosed(account));
+  const label = $('#workspace-state-label');
+  const detail = $('#workspace-state-detail');
+  if (!openAccounts.length) {
+    label.textContent = 'No browser sessions open';
+    detail.textContent = 'Open a game window to begin local screen observation.';
+    return;
+  }
+  const receiver = openAccounts.find(account => account.role === 'receiver');
+  const ordered = receiver ? [receiver, ...openAccounts.filter(account => account.id !== receiver.id)] : openAccounts;
+  const observed = ordered.find(account => account.gameScreen && account.gameScreen.state !== 'inspecting');
+  if (observed) {
+    label.textContent = gameScreenLabel(observed.gameScreen);
+    detail.textContent = `${observed.name} · live local screen status${observed.monitoring ? '' : ' (monitor paused)'}.`;
+    return;
+  }
+  const busy = ordered.find(isBusy);
+  if (busy) {
+    label.textContent = statusLabel(busy).replace(/^[○◌●△]\s*/, '');
+    detail.textContent = `${busy.name} · waiting for the first local screen reading.`;
+    return;
+  }
+  label.textContent = 'Browser session ready — waiting for game screen';
+  detail.textContent = 'Live status starts automatically and updates while a game window is focused.';
+}
 let activityFilter = 'all';
 function filteredActivity(entries) {
   if (activityFilter === 'warning') return entries.filter(entry => entry.level === 'warning');
@@ -521,9 +673,39 @@ function renderRoutePresets() {
         .join('')
     : '<p class="muted">No saved route presets yet.</p>';
 }
+function renderCapabilityReport() {
+  const report = state.capabilityReport;
+  if (!report || !Array.isArray(report.capabilities)) {
+    $('#about-build').textContent = 'Capability status unavailable.';
+    $('#about-capabilities').textContent = '';
+    $('#about-support').textContent = '';
+    return;
+  }
+  $('#about-build').textContent = `Poolside v${report.version} · ${report.channel}`;
+  $('#about-capabilities').innerHTML = report.capabilities
+    .map(
+      item =>
+        `<article class="capability-item"><div><strong>${escapeHtml(item.name)}</strong><span class="capability-mode">${escapeHtml(item.mode)} · ${escapeHtml(item.validation)} · flag ${escapeHtml(item.flag)}</span></div><p>${escapeHtml(item.detail)}</p></article>`
+    )
+    .join('');
+  const support = report.support || {};
+  const labels = {
+    stage: 'Stage',
+    targetWindows: 'Windows target',
+    gameLocale: 'Game locale',
+    display: 'Display target',
+    lifetime: 'Support lifetime'
+  };
+  $('#about-support').innerHTML = Object.entries(labels)
+    .map(([key, label]) => `<dt>${label}</dt><dd>${escapeHtml(support[key] || 'Not specified')}</dd>`)
+    .join('');
+}
 function render(next) {
   const openDetails = openAccountDisclosureIds();
   state = next;
+  document.querySelectorAll('.app-version').forEach(element => {
+    element.textContent = state.version ? `Poolside v${state.version}` : 'Poolside';
+  });
   const open = state.accounts.filter(a => !isClosed(a)).length;
   $('#account-count').textContent = state.accounts.length;
   $('#open-count').textContent = open;
@@ -533,15 +715,16 @@ function render(next) {
   const inspected = state.accounts.filter(
     account => account.gameScreen && account.gameScreen.state && account.gameScreen.state !== 'inspecting'
   );
-  const recognized = inspected.filter(account => account.gameScreen.state !== 'unknown');
-  $('#inspection-status').textContent = !open ? 'Waiting' : !inspected.length ? 'Ready' : recognized.length ? 'Observed' : 'Unknown';
+  const recognized = inspected.filter(account => !['unrecognized', 'inspection-failed'].includes(account.gameScreen.state));
+  $('#inspection-status').textContent = !open ? 'Waiting' : !inspected.length ? 'Ready' : recognized.length ? 'Observed' : 'Not recognized';
   $('#inspection-hint').textContent = !open
     ? 'Open a game window to inspect its screen'
     : !inspected.length
-      ? 'Use Inspect game to read one screen locally'
+      ? 'Live status starts automatically while a game window is focused'
       : recognized.length
         ? `${recognized.length} current screen${recognized.length === 1 ? '' : 's'} recognized locally`
         : 'The last inspected screen could not be recognized';
+  renderWorkspaceState();
   $('#receiver-name').textContent = state.accounts.find(a => a.role === 'receiver')?.name || 'Not selected';
   $('#sender-count').textContent = state.accounts.filter(a => a.role === 'sender').length;
   $('#table-value').textContent = state.settings.table;
@@ -566,6 +749,7 @@ function render(next) {
   renderAccounts();
   renderManagedAccounts();
   renderRoutePresets();
+  renderCapabilityReport();
   restoreAccountDisclosureIds(openDetails);
 }
 document.addEventListener('click', async event => {
@@ -643,6 +827,25 @@ document.addEventListener('click', async event => {
   }
   if (button.dataset.action) {
     const { action, id } = button.dataset;
+    if (action.startsWith('navigation-')) {
+      const selected =
+        navigationTargets.get(id) ||
+        state.accounts.find(account => account.id === id)?.tableNavigation?.targetTable ||
+        state.settings.table;
+      const result = await call(() =>
+        action === 'navigation-start'
+          ? poolside.startTableNavigation({ id, targetTable: selected })
+          : action === 'navigation-observe'
+            ? poolside.observeTableNavigation(id)
+            : action === 'navigation-advance'
+              ? poolside.advanceTableNavigation(id)
+              : action === 'navigation-retry'
+                ? poolside.retryTableNavigation(id)
+                : poolside.cancelTableNavigation(id)
+      );
+      if (result.ok && action === 'navigation-start') toast(`Dry-run navigation planned for ${selected}.`);
+      return;
+    }
     await call(() =>
       action === 'inspect'
         ? poolside.inspect(id)
@@ -676,6 +879,10 @@ document.addEventListener('click', async event => {
     );
   }
 });
+document.addEventListener('change', event => {
+  const select = event.target.closest('select[data-navigation-target]');
+  if (select) navigationTargets.set(select.dataset.navigationTarget, select.value);
+});
 // Subscribe and paint before the element-by-element wiring below. A missing node used to abort the
 // whole script and leave an empty workspace with no accounts, which read as "everything was deleted".
 // Keeping the render path first means the workspace still paints even if one control fails to wire.
@@ -690,6 +897,10 @@ $('.brand').addEventListener('click', event => {
 $('#cancel-dialog').addEventListener('click', () => $('#account-dialog').close());
 $('#cancel-edit-dialog').addEventListener('click', () => $('#edit-account-dialog').close());
 $('#cancel-account-preferences-dialog').addEventListener('click', () => $('#account-preferences-dialog').close());
+$('#account-role').addEventListener('change', () => updateReceiverRoleHint('account-role', 'account-role-hint'));
+$('#edit-account-role').addEventListener('change', () =>
+  updateReceiverRoleHint('edit-account-role', 'edit-account-role-hint', $('#edit-account-id').value)
+);
 $('#account-form').addEventListener('submit', async event => {
   event.preventDefault();
   const button = event.submitter;
@@ -827,25 +1038,31 @@ $('#managed-accounts').addEventListener('change', event => {
   renderBulkBar();
 });
 
-let captureLab = { samples: [], states: [] };
-const captureLabel = value => String(value || 'unknown').replaceAll('-', ' ');
+let captureLab = { samples: [], states: [], tables: [] };
+const captureLabel = value => String(value || 'unavailable').replaceAll('-', ' ');
 const capturePercent = value => (Number.isFinite(value) ? `${Math.round(value * 100)}%` : '—');
 const captureDuration = value => (Number.isFinite(value) ? `${Math.round(value)} ms` : '—');
 function captureMetrics(evaluation) {
+  const reviewNeeded = Math.max(0, Number(evaluation.reviewNeeded) || 0);
   return [
     ['Samples', evaluation.samples],
-    ['Evidence', `${evaluation.labelsReady || 0}/${evaluation.labelsAvailable}`],
+    [
+      'Evidence samples',
+      evaluation.evidenceSamples || 0,
+      null,
+      `${evaluation.labelsReady || 0}/${evaluation.labelsAvailable || 0} screen labels covered`
+    ],
     ['Benchmark', evaluation.benchmark?.samples || 0],
     ['Benchmark match', capturePercent(evaluation.benchmark?.agreement)],
     ['Benchmark F1', capturePercent(evaluation.benchmark?.macroF1)],
     ['Capture median', captureDuration(evaluation.timing?.surface?.medianMs)],
     ['OCR median', captureDuration(evaluation.timing?.recognition?.medianMs)],
-    ['Review needed', evaluation.reviewNeeded || 0, 'review']
+    ['Review needed', reviewNeeded, reviewNeeded > 0 ? 'review' : null]
   ]
-    .map(([label, value, action]) =>
+    .map(([label, value, action, detail]) =>
       action
         ? `<button class="capture-metric actionable" type="button" data-capture-filter="${action}"><span>${label}</span><strong>${escapeHtml(value)}</strong><small>Open queue</small></button>`
-        : `<div class="capture-metric"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`
+        : `<div class="capture-metric"><span>${label}</span><strong>${escapeHtml(value)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}</div>`
     )
     .join('');
 }
@@ -857,13 +1074,25 @@ function captureBenchmarkReport(evaluation) {
     .filter(label => label.recall !== null || label.precision !== null)
     .map(
       label =>
-        `<tr><th scope="row">${escapeHtml(captureLabel(label.expectedState))}</th><td>${capturePercent(label.precision)}</td><td>${capturePercent(label.recall)}</td><td>${capturePercent(label.f1)}</td></tr>`
+        `<tr><th scope="row">${escapeHtml(captureLabel(label.expectedState))}</th><td>${label.truePositive + label.falseNegative}</td><td>${label.truePositive}/${label.truePositive + label.falseNegative}</td><td>${capturePercent(label.precision)}</td><td>${capturePercent(label.recall)}</td><td>${capturePercent(label.f1)}</td></tr>`
     )
     .join('');
-  const summary = `Based on ${benchmark.samples} separate benchmark sample${benchmark.samples === 1 ? '' : 's'}; ${benchmark.unknown || 0} returned unknown (${capturePercent(benchmark.unknown)}).`;
+  const summary = `Based on ${benchmark.samples} separate benchmark sample${benchmark.samples === 1 ? '' : 's'}; unrecognized rate ${capturePercent(benchmark.unrecognized)}.`;
   return rows
-    ? `<div class="capture-report"><p>${escapeHtml(summary)}</p><table><thead><tr><th>Screen label</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    ? `<div class="capture-report"><p>${escapeHtml(summary)}</p><table><thead><tr><th>Screen label</th><th>Samples</th><th>Detected</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : `<p class="muted capture-report-empty">${escapeHtml(summary)} No recognized label has enough data for per-label measures yet.</p>`;
+}
+function captureValidationReport(evaluation) {
+  const validation = evaluation.validation;
+  if (!validation) return '<p class="muted capture-report-empty">Validation gate is unavailable.</p>';
+  const status = validation.ready ? 'Ready for the production corpus gate.' : 'Not ready for the production corpus gate.';
+  const gates = (validation.gates || [])
+    .map(
+      item =>
+        `<li class="${item.pass ? 'passed' : 'failed'}"><span aria-hidden="true">${item.pass ? '✓' : '×'}</span><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></div></li>`
+    )
+    .join('');
+  return `<div class="capture-validation ${validation.ready ? 'ready' : 'not-ready'}"><p><strong>${escapeHtml(status)}</strong> ${validation.passedGates} of ${validation.totalGates} checks pass. This is the held-out Benchmark gate; saved Evidence images do not count toward its per-table minimum.</p><ul>${gates}</ul></div>`;
 }
 function filteredCaptureSamples() {
   const expectedState = $('#capture-filter-state').value;
@@ -872,8 +1101,8 @@ function filteredCaptureSamples() {
   return captureLab.samples.filter(sample => {
     if (expectedState && sample.expectedState !== expectedState) return false;
     if (cohort && sample.cohort !== cohort) return false;
-    if (result === 'review' && (sample.expectedState === sample.observedState || sample.reviewedAt)) return false;
-    if (result === 'match' && sample.expectedState !== sample.observedState) return false;
+    if (result === 'review' && (sample.matches || sample.reviewedAt)) return false;
+    if (result === 'match' && !sample.matches) return false;
     return true;
   });
 }
@@ -891,13 +1120,40 @@ function captureCoverage(evaluation) {
       const sampleNoun = `sample${label.count === 1 ? '' : 's'}`;
       const detail =
         label.evidenceStatus === 'ready'
-          ? `${label.count} ${sampleNoun} · review-ready · ${label.reviewNeeded || 0} need review`
+          ? `${label.count} ${sampleNoun} · ${label.matches}/${label.count} detector matches · ${label.reviewNeeded || 0} need review`
           : label.count
-            ? `${label.count} ${sampleNoun} · needs ${label.samplesNeeded} more · ${label.reviewNeeded || 0} need review`
+            ? `${label.count} ${sampleNoun} · ${label.matches}/${label.count} detector matches · needs ${label.samplesNeeded} more · ${label.reviewNeeded || 0} need review`
             : `Needs ${label.samplesNeeded || evaluation.minimumEvidencePerLabel || 1} distinct samples`;
       return `<div class="capture-coverage-row ${label.evidenceStatus || (label.count ? 'limited' : 'missing')}"><span>${escapeHtml(captureLabel(label.expectedState))}</span><strong>${escapeHtml(detail)}</strong></div>`;
     })
     .join('');
+}
+function captureTableCoverage(evaluation) {
+  const evidence = evaluation.evidenceMetrics?.tables || [];
+  const benchmark = new Map((evaluation.benchmark?.tables || []).map(item => [item.table, item]));
+  if (!evidence.length) return '<p class="muted">No supported table labels are available.</p>';
+  return evidence
+    .map(item => {
+      const heldOut = benchmark.get(item.table) || { count: 0, matches: 0 };
+      const evidenceResult = item.count
+        ? `Evidence: ${item.count} images · ${item.matches}/${item.count} identified at capture`
+        : 'Evidence: no images';
+      const benchmarkResult = heldOut.count
+        ? `Benchmark: ${heldOut.count} held-out images · ${heldOut.matches}/${heldOut.count} identified`
+        : 'Benchmark: no held-out images yet';
+      const readiness = item.count >= 3 ? 'ready' : item.count ? 'limited' : 'missing';
+      return `<div class="capture-coverage-row ${readiness}"><span>${escapeHtml(item.table)}</span><strong>${escapeHtml(evidenceResult)} · ${escapeHtml(benchmarkResult)}</strong></div>`;
+    })
+    .join('');
+}
+function syncCaptureTableField() {
+  const needsTable = $('#capture-state').value === 'table-selection';
+  const tableField = $('#capture-table-field');
+  const tableSelect = $('#capture-table');
+  tableField.hidden = !needsTable;
+  tableSelect.disabled = !needsTable;
+  tableSelect.required = needsTable;
+  if (!needsTable) tableSelect.value = '';
 }
 function renderCaptureLab() {
   const select = $('#capture-account');
@@ -914,6 +1170,13 @@ function renderCaptureLab() {
     .map(value => `<option value="${escapeHtml(value)}">${escapeHtml(captureLabel(value))}</option>`)
     .join('');
   if (captureLab.states.includes(selectedState)) stateSelect.value = selectedState;
+  const tableSelect = $('#capture-table');
+  const selectedTable = tableSelect.value;
+  tableSelect.innerHTML =
+    '<option value="">Choose a table…</option>' +
+    (captureLab.tables || []).map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+  if ((captureLab.tables || []).includes(selectedTable)) tableSelect.value = selectedTable;
+  syncCaptureTableField();
   const evaluation = captureLab.evaluation || {
     samples: captureLab.samples.length,
     labelsWithEvidence: 0,
@@ -929,6 +1192,8 @@ function renderCaptureLab() {
   $('#capture-count').textContent = evaluation.samples;
   $('#capture-metrics').innerHTML = captureMetrics(evaluation);
   $('#capture-coverage').innerHTML = captureCoverage(evaluation);
+  $('#capture-table-coverage').innerHTML = captureTableCoverage(evaluation);
+  $('#capture-validation-report').innerHTML = captureValidationReport(evaluation);
   $('#capture-benchmark-report').innerHTML = captureBenchmarkReport(evaluation);
   const samples = filteredCaptureSamples();
   $('#capture-visible-count').textContent = `${samples.length} of ${captureLab.samples.length} shown`;
@@ -936,7 +1201,7 @@ function renderCaptureLab() {
     ? samples
         .map(
           sample =>
-            `<article class="managed-card"><div class="managed-card-heading"><div><div class="account-name">${escapeHtml(captureLabel(sample.expectedState))}</div><span class="account-role">Expected screen · ${escapeHtml(new Date(sample.capturedAt).toLocaleString())}</span></div><div class="capture-sample-actions"><button class="secondary" data-capture-action="preview" data-id="${sample.id}" ${sample.imageAvailable ? '' : 'disabled'}>View image</button>${sample.expectedState !== sample.observedState && !sample.reviewedAt ? `<button class="secondary" data-capture-action="mark-reviewed" data-id="${sample.id}">Mark reviewed</button>` : ''}<button class="secondary" data-capture-action="set-cohort" data-id="${sample.id}" data-cohort="${sample.cohort === 'benchmark' ? 'evidence' : 'benchmark'}">${sample.cohort === 'benchmark' ? 'Use as evidence' : 'Set aside'}</button><button class="danger-button" data-capture-action="delete" data-id="${sample.id}">Delete…</button></div></div><dl class="managed-details"><div><dt>Detector result</dt><dd>${escapeHtml(captureLabel(sample.observedState))} · ${Math.round(Number(sample.score || 0) * 100)}%</dd></div><div><dt>Review</dt><dd>${sample.expectedState === sample.observedState ? 'OCR matched your label' : sample.reviewedAt ? `Reviewed ${new Date(sample.reviewedAt).toLocaleDateString()}` : 'Needs your decision'}</dd></div><div><dt>Capture set</dt><dd>${sample.cohort === 'benchmark' ? 'Benchmark' : 'Evidence'}</dd></div><div><dt>Capture size</dt><dd>${sample.width && sample.height ? `${sample.width} × ${sample.height}` : 'Unknown'}</dd></div><div><dt>Timing</dt><dd>${sample.timing ? `Capture ${captureDuration(sample.timing.surfaceMs)} · OCR ${captureDuration(sample.timing.recognitionMs)} · Total ${captureDuration(sample.timing.totalMs)}` : 'Not measured'}</dd></div><div><dt>OCR pass</dt><dd>${escapeHtml(sample.source || 'unknown')}</dd></div></dl></article>`
+            `<article class="managed-card"><div class="managed-card-heading"><div><div class="account-name">${escapeHtml(captureLabel(sample.expectedState))}${sample.expectedTable ? ` · ${escapeHtml(sample.expectedTable)}` : ''}</div><span class="account-role">Expected screen · ${escapeHtml(new Date(sample.capturedAt).toLocaleString())}</span></div><div class="capture-sample-actions"><button class="secondary" data-capture-action="preview" data-id="${sample.id}" ${sample.imageAvailable ? '' : 'disabled'}>View image</button>${!sample.matches && !sample.reviewedAt ? `<button class="secondary" data-capture-action="mark-reviewed" data-id="${sample.id}">Mark reviewed</button>` : ''}<button class="secondary" data-capture-action="set-cohort" data-id="${sample.id}" data-cohort="${sample.cohort === 'benchmark' ? 'evidence' : 'benchmark'}">${sample.cohort === 'benchmark' ? 'Use as evidence' : 'Set aside'}</button><button class="danger-button" data-capture-action="delete" data-id="${sample.id}">Delete…</button></div></div><dl class="managed-details"><div><dt>Detector result</dt><dd>${escapeHtml(captureLabel(sample.observedState))} · ${Math.round(Number(sample.score || 0) * 100)}%</dd></div>${sample.expectedTable ? `<div><dt>Expected table</dt><dd>${escapeHtml(sample.expectedTable)}</dd></div><div><dt>Detected table</dt><dd>${sample.observedTables?.length ? escapeHtml(sample.observedTables.join(', ')) : 'No supported table name detected'}</dd></div>` : ''}<div><dt>Review</dt><dd>${sample.matches ? 'OCR matched your label and table target' : sample.reviewedAt ? `Reviewed ${new Date(sample.reviewedAt).toLocaleDateString()}` : 'Needs your decision'}</dd></div><div><dt>Capture set</dt><dd>${sample.cohort === 'benchmark' ? 'Benchmark' : 'Evidence'}</dd></div><div><dt>Capture size</dt><dd>${sample.width && sample.height ? `${sample.width} × ${sample.height}` : 'Unavailable'}</dd></div><div><dt>Timing</dt><dd>${sample.timing ? `Capture ${captureDuration(sample.timing.surfaceMs)} · OCR ${captureDuration(sample.timing.recognitionMs)} · Total ${captureDuration(sample.timing.totalMs)}` : 'Not measured'}</dd></div><div><dt>OCR pass</dt><dd>${escapeHtml(sample.source || 'unavailable')}</dd></div></dl></article>`
         )
         .join('')
     : `<div class="manager-empty">${captureLab.samples.length ? 'No samples match the current filters.' : 'No local samples yet. Open a game window and capture a screen you have labeled.'}</div>`;
@@ -953,7 +1218,7 @@ async function openCapturePreview(id) {
   const sample = captureLab.samples.find(entry => entry.id === id);
   $('#capture-preview-title').textContent = `${captureLabel(sample?.expectedState)} sample`;
   $('#capture-preview-detail').textContent =
-    `Expected ${captureLabel(sample?.expectedState)}; detected ${captureLabel(sample?.observedState)} at ${Math.round(Number(sample?.score || 0) * 100)}%.`;
+    `Expected ${captureLabel(sample?.expectedState)}${sample?.expectedTable ? ` for ${sample.expectedTable}` : ''}; detected ${captureLabel(sample?.observedState)}${sample?.observedTables?.length ? ` with ${sample.observedTables.join(', ')} visible` : ''} at ${Math.round(Number(sample?.score || 0) * 100)}%.`;
   $('#capture-preview-image').src = `data:image/png;base64,${result.value.png}`;
   showDialog('#capture-preview-dialog', '#cancel-capture-preview');
 }
@@ -966,6 +1231,7 @@ $('#capture-form').addEventListener('submit', async event => {
     poolside.captureRecord({
       id: $('#capture-account').value,
       expectedState: $('#capture-state').value,
+      expectedTable: $('#capture-state').value === 'table-selection' ? $('#capture-table').value : null,
       cohort: $('#capture-benchmark').checked ? 'benchmark' : 'evidence',
       confirmedSafe: $('#capture-confirmed').checked
     })
@@ -979,8 +1245,10 @@ $('#capture-form').addEventListener('submit', async event => {
     `Saved. Detector reported ${captureLabel(result.value.state)} at ${Number.isFinite(result.value.score) ? Math.round(result.value.score * 100) + '%' : 'an unavailable confidence'}.`;
   $('#capture-confirmed').checked = false;
   $('#capture-benchmark').checked = false;
+  $('#capture-table').value = '';
   await loadCaptureLab();
 });
+$('#capture-state').addEventListener('change', syncCaptureTableField);
 $('#capture-metrics').addEventListener('click', event => {
   const button = event.target.closest('button[data-capture-filter]');
   if (!button) return;

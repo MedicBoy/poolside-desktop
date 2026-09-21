@@ -1,0 +1,137 @@
+// Public product claims. Keep modes conservative: tests establish implementation,
+// not real-game reliability, legal permission, or a signed-release qualification.
+const CAPABILITIES = Object.freeze([
+  {
+    id: 'isolated-sessions',
+    name: 'Isolated browser sessions',
+    mode: 'available',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail: 'Separate local Chromium profiles; a window being ready does not verify sign-in.'
+  },
+  {
+    id: 'account-management',
+    name: 'Account slots and roles',
+    mode: 'available',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail: 'Local account records, one receiving role, and independent sending roles.'
+  },
+  {
+    id: 'session-persistence',
+    name: 'Saved session storage',
+    mode: 'available',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail: 'Local profile storage and encrypted session-cookie carry-over; site sign-in can still expire.'
+  },
+  {
+    id: 'capture-lab',
+    name: 'Capture Lab',
+    mode: 'available',
+    validation: 'fixture-proven',
+    flag: 'on',
+    detail: 'Local labelled captures and separate Evidence and Benchmark sets; samples are user-reviewed.'
+  },
+  {
+    id: 'screen-recognition',
+    name: 'Screen recognition',
+    mode: 'limited',
+    validation: 'fixture-proven',
+    flag: 'on',
+    detail: 'Local English-screen observations; representative live accuracy is not established.'
+  },
+  {
+    id: 'table-navigation',
+    name: 'Table navigation',
+    mode: 'dry-run',
+    validation: 'fixture-proven',
+    flag: 'dry-run',
+    detail: 'Plans and observes manual steps; never sends game input.'
+  },
+  {
+    id: 'diagnostics',
+    name: 'Diagnostics export',
+    mode: 'limited',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail: 'Local redacted activity/telemetry export with a refusing secret-shape scan; not a privacy proof.'
+  },
+  {
+    id: 'workspace-recovery',
+    name: 'Workspace recovery',
+    mode: 'limited',
+    validation: 'fixture-proven',
+    flag: 'on',
+    detail: 'Preserves damaged primary data and detects recovery candidates; in-app restore choice is unfinished.'
+  },
+  {
+    id: 'authentication-verification',
+    name: 'Authentication verification',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'Sign-in occurs manually on the game website; Poolside does not verify account authentication.'
+  },
+  {
+    id: 'live-game-input',
+    name: 'Live game input',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'No production pointer or keyboard input to the game; service-rule authorization is unresolved.'
+  },
+  {
+    id: 'matchmaking-pairing',
+    name: 'Matchmaking and pairing',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'No multi-account match coordinator or opponent-pairing proof.'
+  },
+  {
+    id: 'match-accounting',
+    name: 'Match outcome and balance accounting',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'No verified result or transfer ledger.'
+  },
+  {
+    id: 'signed-installer',
+    name: 'Signed installer',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'Portable development package only; no signed installer or clean-VM qualification.'
+  },
+  {
+    id: 'automatic-updates',
+    name: 'Automatic updates and rollback',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'No updater, signed update metadata, or rollback transaction.'
+  }
+]);
+
+const SUPPORT = Object.freeze({
+  stage: 'Development preview; no production-certified configuration',
+  targetWindows: 'Windows 11 x64, currently serviced 25H2; Windows 10 is outside the target',
+  gameLocale: 'English game text only for current recognition rules',
+  display:
+    'Single monitor, 100% scale, at least 1280 × 720 is the conservative preview target; other scales and layouts remain unvalidated',
+  lifetime: 'Preview builds are superseded by the next preview; there is no guaranteed support term or service-level agreement before 1.0'
+});
+
+function buildCapabilityReport(version) {
+  return {
+    format: 'poolside-capabilities/v1',
+    version: String(version || 'unknown'),
+    channel: 'development-preview',
+    support: { ...SUPPORT },
+    capabilities: CAPABILITIES.map(item => ({ ...item }))
+  };
+}
+
+module.exports = { CAPABILITIES, SUPPORT, buildCapabilityReport };

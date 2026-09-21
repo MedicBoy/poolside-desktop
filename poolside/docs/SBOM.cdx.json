@@ -1,19 +1,19 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:7861288d8953dd7a6dc822919f412094",
+  "serialNumber": "urn:uuid:851089cfd6e4ca23a5dc27b8ff137584",
   "version": 1,
   "metadata": {
     "component": {
       "type": "application",
       "name": "poolside",
-      "version": "0.2.0",
-      "purl": "pkg:npm/poolside@0.2.0"
+      "version": "0.3.11",
+      "purl": "pkg:npm/poolside@0.3.11"
     },
     "properties": [
       {
         "name": "poolside:source-lockfile-sha256",
-        "value": "7861288d8953dd7a6dc822919f412094329ebc80a0af464ab9f495fa0323ccdf"
+        "value": "851089cfd6e4ca23a5dc27b8ff137584c0271150db34bd63016109a2dac7a233"
       }
     ]
   },

@@ -46,6 +46,26 @@ test('a backup carries the workspace file, the encrypted session, and the browse
   assert.ok(fs.existsSync(path.join(result.folder, backup.PROFILES_DIR, partitionName(ID), 'Cookies', 'data')));
 });
 
+test('a backup keeps proxy targets but never exports their credentials', () => {
+  const root = sourceRoot();
+  fs.writeFileSync(
+    path.join(root, 'workspace.json'),
+    JSON.stringify({
+      version: 1,
+      accounts: [{ id: ID, name: 'Master', proxy: { spec: 'http://nicho:hunter2@proxy.example:3128' } }],
+      settings: { proxy: { spec: 'global:secret@127.0.0.1:8080' } },
+      routePresets: [{ spec: 'preset:secret@10.0.0.1:9000' }]
+    })
+  );
+  const destination = tempRoot();
+  const result = backup.create({ root, destination, accounts, appVersion: '0.2.0', at: Date.now() });
+  const exported = fs.readFileSync(path.join(result.folder, 'workspace.json'), 'utf8');
+  assert.equal(exported.includes('hunter2'), false);
+  assert.equal(exported.includes('secret'), false);
+  assert.match(exported, /http:\/\/proxy\.example:3128/);
+  assert.match(exported, /127\.0\.0\.1:8080/);
+});
+
 test('a restore into an empty data directory brings the account and its profile back', () => {
   const source = tempRoot();
   const bundle = backup.create({ root: sourceRoot(), destination: source, accounts, appVersion: '0.2.0', at: Date.now() }).folder;

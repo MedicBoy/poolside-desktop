@@ -53,7 +53,7 @@ function refusal(reason, message) {
  *
  * The three rounding rules are deliberate, not incidental:
  * - **floor the origin** — a crop that starts even one pixel late loses text at the edge. Text lost at an
- *   edge is a missing term, a missing term is `unknown`, and an `unknown` from a misaligned crop is the
+ *   edge is a missing term, a missing term is unrecognized, and an unrecognized result from a misaligned crop is the
  *   result the classifier cannot debug.
  * - **round the extent** — the region's own width is a measurement, and rounding it is symmetric.
  * - **never below one pixel** — `sharp.extract()` refuses a zero-sized rectangle, and a caller that has to
@@ -103,7 +103,7 @@ function toPageRect(rect, zoomFactor) {
  * to the viewport, so a partial overlap means the surface is partly scrolled out of view, and a clipped
  * capture still carries the text in the visible part. A rectangle with nothing left inside the bounds *is*
  * refused, because an empty crop would be handed to the recogniser as a blank image and read as
- * `unknown` — which looks like a recognition failure rather than a measurement one.
+ * unrecognized — which looks like a recognition failure rather than a measurement one.
  *
  * @param {{x: number, y: number, width: number, height: number}} rect
  * @param {{width: number, height: number}} bounds

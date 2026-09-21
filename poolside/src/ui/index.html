@@ -54,12 +54,13 @@
             </svg>
             <span>Settings</span>
           </button>
+          <button class="nav-item" data-view="about"><span>About</span></button>
         </nav>
         <div class="topnav-right">
           <span class="private-badge"><span class="tiny-dot"></span> Dedicated browser sessions</span>
           <div class="user">
             <span class="avatar">P</span>
-            <span class="user-text"><b>Local workspace</b><small>Poolside v0.2.0</small></span>
+            <span class="user-text"><b>Local workspace</b><small class="app-version">Poolside</small></span>
           </div>
         </div>
       </header>
@@ -125,8 +126,8 @@
               <div class="run-row"><span>Match limit</span><strong id="limit-value">10</strong></div>
               <button class="text-button preferences-link" data-view="settings">Edit preferences <span>↗</span></button>
               <div class="integration-note" id="workspace-note">
-                <strong><span class="amber-dot"></span> Browser session ready</strong>
-                <p>Opening a window confirms the browser session is running. Account sign-in is private and is not inferred by this app.</p>
+                <strong><span class="amber-dot"></span> <span id="workspace-state-label">No browser sessions open</span></strong>
+                <p id="workspace-state-detail">Open a game window to begin local screen observation.</p>
               </div>
               <button class="secondary full" id="close-all">Close all game windows</button>
             </aside>
@@ -243,6 +244,7 @@
               <p class="muted">Open a game window, bring the expected screen into view, and label what you see before recording.</p>
               <label>Open account<select id="capture-account" required></select></label
               ><label>Expected screen<select id="capture-state" required></select></label
+              ><label id="capture-table-field" hidden>Table shown in this sample<select id="capture-table" disabled></select></label
               ><label class="capture-confirm"
                 ><input id="capture-benchmark" type="checkbox" /> Keep this as a benchmark sample for future local OCR checks.</label
               ><label class="capture-confirm"
@@ -256,6 +258,19 @@
               <p class="muted">Use the cards to jump to the samples that need attention. These results stay on this PC.</p>
               <div id="capture-metrics" class="capture-metrics"></div>
               <div id="capture-coverage" class="capture-coverage" aria-label="Screen-label evidence coverage"></div>
+              <section class="capture-benchmark-section" aria-labelledby="capture-table-coverage-heading">
+                <h3 id="capture-table-coverage-heading">Table-label coverage</h3>
+                <p class="muted">
+                  Your Evidence captures and held-out Benchmark captures are separate. Enough Evidence means the table is labelled for
+                  development; the production gate still needs independent Benchmark images. Detection counts below record the original
+                  result when each image was captured and do not change after a recognizer update.
+                </p>
+                <div id="capture-table-coverage" class="capture-coverage" aria-label="Table-label evidence and benchmark coverage"></div>
+              </section>
+              <section class="capture-validation-section" aria-labelledby="capture-validation-heading">
+                <h3 id="capture-validation-heading">Production corpus gate</h3>
+                <div id="capture-validation-report"></div>
+              </section>
               <section class="capture-benchmark-section" aria-labelledby="capture-benchmark-heading">
                 <h3 id="capture-benchmark-heading">Benchmark report</h3>
                 <div id="capture-benchmark-report"></div>
@@ -309,6 +324,7 @@
                 <span
                   class="info-dot"
                   tabindex="0"
+                  aria-label="Help about settings"
                   data-tip="Each setting has a short explanation beside it. Your choices apply only when a session opens; they do not control the game."
                   >i</span
                 >
@@ -361,9 +377,29 @@
             </div>
           </div>
         </section>
+        <section class="view hidden" id="view-about" aria-labelledby="about-title">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">PRODUCT STATUS</div>
+              <h1 id="about-title">About Poolside</h1>
+              <p id="about-build"></p>
+            </div>
+          </div>
+          <div class="panel about-panel">
+            <h2>Current capability and evidence</h2>
+            <p class="muted">
+              Available means code exists. It does not mean the real game, every Windows setup, or a release package has been validated.
+            </p>
+            <div id="about-capabilities" class="capability-list"></div>
+          </div>
+          <div class="panel about-panel">
+            <h2>Preview support boundary</h2>
+            <dl id="about-support"></dl>
+          </div>
+        </section>
         <footer class="main-footer">
           <span>POOLSIDE <span class="separator">·</span> Built for a clearer session</span
-          ><span>Poolside v0.2.0 <span class="separator">·</span> Local workspace</span>
+          ><span><span class="app-version">Poolside</span> <span class="separator">·</span> Local workspace</span>
         </footer>
       </main>
     </div>
@@ -389,6 +425,7 @@
             <option value="sender">Sending account</option>
           </select></label
         >
+        <p class="form-status" id="account-role-hint"></p>
         <p class="form-status error" id="account-error" role="alert"></p>
         <button class="primary full" type="submit">Create account slot <span>→</span></button>
       </form>
@@ -409,6 +446,7 @@
             <option value="sender">Sending account</option>
           </select></label
         >
+        <p class="form-status" id="edit-account-role-hint"></p>
         <label
           >Local note<textarea
             id="edit-account-note"
@@ -452,6 +490,7 @@
       <img id="capture-preview-image" class="capture-preview-image" alt="Captured game screen sample" />
       <p id="capture-preview-detail" class="muted"></p>
     </dialog>
+    <div id="info-tooltip" class="info-tooltip" role="tooltip" popover="manual"></div>
     <div id="toast" role="status" class="toast hidden"></div>
     <script src="renderer.js"></script>
   </body>

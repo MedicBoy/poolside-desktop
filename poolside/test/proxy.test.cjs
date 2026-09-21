@@ -42,6 +42,17 @@ test('a scheme prefix is preserved, including SOCKS', () => {
   assert.equal(parsed('  Proxy.Example:3128  ').proxyRules, 'Proxy.Example:3128', 'trimmed');
 });
 
+test('proxy credentials are separated from Chromium rules and decoded for authentication', () => {
+  const bare = parsed('nicho:hunter2@127.0.0.1:8080');
+  assert.equal(bare.proxyRules, '127.0.0.1:8080');
+  assert.deepEqual(bare.credentials, { username: 'nicho', password: 'hunter2' });
+  assert.equal(bare.label, 'http proxy at 127.0.0.1:8080', 'the label never carries credentials');
+
+  const encoded = parsed('http://name:p%40ssword@proxy.example:3128');
+  assert.equal(encoded.proxyRules, 'http://proxy.example:3128');
+  assert.deepEqual(encoded.credentials, { username: 'name', password: 'p@ssword' });
+});
+
 test('DIRECT is a route, not an error', () => {
   assert.deepEqual(parseProxySpec('DIRECT'), {
     ok: true,

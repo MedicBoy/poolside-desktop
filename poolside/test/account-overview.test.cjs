@@ -1,6 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { buildAccountOverview } = require('../src/account-overview.cjs');
+const { footprintView, publicAccount, publicSettings } = require('../src/workspace-snapshot.cjs');
+const { publicRoutePreset } = require('../src/proxy-public.cjs');
 
 const account = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -51,4 +53,32 @@ test('closed accounts receive an explicit closed-state overview and ordinary def
   assert.equal(view.session.persistence, 'Profile will be established when opened');
   assert.equal(view.route.configured, true);
   assert.equal(view.identity.locale, 'en-CA');
+});
+
+test('the legacy footprint row receives no proxy credentials across IPC', () => {
+  const view = footprintView({
+    summary: 'not configured',
+    route: {
+      configured: true,
+      label: 'http proxy at proxy.example:3128',
+      proxyRules: 'http://proxy.example:3128',
+      credentials: { username: 'nicho', password: 'hunter2' }
+    },
+    verified: { ok: true, matches: true, route: { label: 'http proxy at proxy.example:3128' } },
+    storage: { cacheBytes: 1024, quotaBytes: 2048, overQuota: false }
+  });
+  assert.ok(view);
+  assert.equal(JSON.stringify(view).includes('hunter2'), false);
+  assert.deepEqual(view.route, { configured: true, label: 'http proxy at proxy.example:3128' });
+});
+
+test('workspace configuration and saved presets expose no proxy credentials across IPC', () => {
+  const secret = 'http://nicho:hunter2@proxy.example:3128';
+  const safeAccount = publicAccount({ ...account, proxy: { spec: secret } });
+  const safeSettings = publicSettings({ table: 'Bangkok', limit: 10, proxy: { spec: secret } });
+  const safePreset = publicRoutePreset({ id: 'route-1', name: 'Private', enabled: true, spec: secret, bypass: '<local>' });
+  const serialised = JSON.stringify({ safeAccount, safeSettings, safePreset });
+  assert.equal(serialised.includes('nicho'), false);
+  assert.equal(serialised.includes('hunter2'), false);
+  assert.equal(safePreset.spec, 'http proxy at proxy.example:3128 · credentials set');
 });

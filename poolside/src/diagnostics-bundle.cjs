@@ -9,11 +9,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const telemetryRedaction = require('./telemetry-redaction.cjs');
 const timelineTransfer = require('./timeline-transfer.cjs');
+const { buildCapabilityReport } = require('./capability-registry.cjs');
 
 /** @param {any} snapshot */
 function prepare(snapshot) {
   const current = snapshot && typeof snapshot === 'object' ? snapshot : {};
   const payload = telemetryRedaction.exportLayer(current.telemetry);
+  // Build from the fixed registry, never from an arbitrary snapshot field.
+  payload.capabilityReport = buildCapabilityReport(current.version);
   const accounts = Array.isArray(current.accounts) ? current.accounts : [];
   const timeline = current.timeline && Array.isArray(current.timeline.entries) ? current.timeline.entries : [];
   payload.timeline = timelineTransfer.redact(timeline, accounts).entries.map(entry => ({

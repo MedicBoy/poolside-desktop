@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { describeRelease, renderInspection } = require('../scripts/inspect-release.cjs');
+const { describeRelease, renderInspection, missingArchiveFiles, unsafeArchiveFiles } = require('../scripts/inspect-release.cjs');
 
 function withRelease(run) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'poolside-release-'));
@@ -37,4 +37,18 @@ test('release inspection refuses a folder missing required packaged files', () =
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('archive-content gate detects omitted product-truth and release-evidence documents', () => {
+  const present = ['\\docs\\SBOM.cdx.json', '\\docs\\threat-model.md', '\\docs\\CAPABILITIES.md', '\\docs\\capabilities.json'];
+  assert.deepEqual(missingArchiveFiles(present), ['/docs/release-evidence/README.md']);
+  assert.deepEqual(missingArchiveFiles([...present, '\\docs\\release-evidence\\README.md']), []);
+});
+
+test('archive-content gate refuses unrelated root files and local user data', () => {
+  assert.deepEqual(unsafeArchiveFiles(['\\src', '\\docs', '\\package.json']), []);
+  assert.deepEqual(unsafeArchiveFiles(['\\test-output.log', '\\docs\\recognition-lab\\capture.png']), [
+    '/test-output.log',
+    '/docs/recognition-lab/capture.png'
+  ]);
 });

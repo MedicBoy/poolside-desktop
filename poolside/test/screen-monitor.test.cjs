@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createScreenMonitor, MIN_INTERVAL_MS } = require('../src/screen-monitor.cjs');
-test('screen monitoring is opt-in, needs an open window, and stops cleanly', async () => {
+test('the monitor service requires an open window and stops cleanly', async () => {
   const open = new Set(['a']);
   let calls = 0;
   let published = 0;

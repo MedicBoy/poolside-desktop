@@ -22,7 +22,7 @@ async function runProfileChecks(ctx, assert, log) {
   const paths = require('./profile-paths.cjs');
   const root = app.getPath('userData');
 
-  const account = model.account({ name: 'Profile lifecycle check', role: 'receiver' });
+  const account = model.account({ name: 'Profile lifecycle check', role: 'sender' }, workspace.data.accounts);
   store.save({ ...workspace.data, accounts: [...workspace.data.accounts, account] });
   const reread = () => store.getAccount(account.id);
   const directory = paths.profileDirectory(root, account.id);

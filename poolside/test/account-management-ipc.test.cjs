@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const model = require('../src/model.cjs');
 const { registerAccountManagement } = require('../src/account-management-ipc.cjs');
 
-function fixture() {
+function fixture({ confirmRoleChange = async () => true } = {}) {
   const main = model.account({ name: 'Main', role: 'receiver' });
   const slave = model.account({ name: 'Slave', role: 'sender' }, [main]);
   const workspace = { data: { routePresets: [], accounts: [main, slave], windows: { [main.id]: { x: 10 }, [slave.id]: { x: 20 } } } };
@@ -40,13 +40,14 @@ function fixture() {
         return { removed: ['profile'], failures: [] };
       }
     },
+    confirmRoleChange,
     confirmDestructive: async () => true,
     activeAccounts: () => workspace.data.accounts.filter(account => !account.archived)
   });
   return { handlers, workspace, main, slave, removed, sessions, opened, closed };
 }
 
-test('account management archives, restores, and edits the same workspace entries that Sessions renders', () => {
+test('account management archives, restores, and edits the same workspace entries that Sessions renders', async () => {
   const { handlers, workspace, slave } = fixture();
   handlers.get('account:archive')(slave.id);
   const archived = workspace.data.accounts.find(account => account.id === slave.id);
@@ -56,12 +57,50 @@ test('account management archives, restores, and edits the same workspace entrie
   const restored = workspace.data.accounts.find(account => account.id === slave.id);
   assert.ok(restored);
   assert.equal(restored.archived, false);
-  handlers.get('account:update')({ id: slave.id, name: 'Support', role: 'sender', note: 'Local reminder.' });
+  await handlers.get('account:update')({ id: slave.id, name: 'Support', role: 'sender', note: 'Local reminder.' });
   const updated = workspace.data.accounts.find(account => account.id === slave.id);
   assert.ok(updated);
   assert.equal(updated.name, 'Support');
   assert.equal(updated.note, 'Local reminder.');
   assert.equal(updated.id, slave.id, 'renaming cannot create a second account slot');
+});
+
+test('adding a new receiver confirms once and atomically demotes the previous receiver', async () => {
+  const prompts = [];
+  const { handlers, workspace, main } = fixture({
+    confirmRoleChange: async (...args) => {
+      prompts.push(args);
+      return true;
+    }
+  });
+  await handlers.get('account:add')({ name: 'New Main', role: 'receiver' });
+  assert.equal(prompts.length, 1);
+  const previous = workspace.data.accounts.find(account => account.id === main.id);
+  const created = workspace.data.accounts.find(account => account.name === 'New Main');
+  assert.ok(previous);
+  assert.ok(created);
+  assert.equal(previous.role, 'sender');
+  assert.equal(created.role, 'receiver');
+  assert.equal(workspace.data.accounts.filter(account => account.role === 'receiver').length, 1);
+});
+
+test('cancelling a receiving-account reassignment leaves every account unchanged', async () => {
+  const { handlers, workspace } = fixture({ confirmRoleChange: async () => false });
+  const before = structuredClone(workspace.data.accounts);
+  await assert.rejects(handlers.get('account:add')({ name: 'New Main', role: 'receiver' }), /cancelled/);
+  assert.deepEqual(workspace.data.accounts, before);
+});
+
+test('editing a sender into the receiver role confirms and preserves exactly one receiver', async () => {
+  const { handlers, workspace, main, slave } = fixture();
+  await handlers.get('account:update')({ id: slave.id, name: 'Slave', role: 'receiver', note: '' });
+  const previous = workspace.data.accounts.find(account => account.id === main.id);
+  const updated = workspace.data.accounts.find(account => account.id === slave.id);
+  assert.ok(previous);
+  assert.ok(updated);
+  assert.equal(previous.role, 'sender');
+  assert.equal(updated.role, 'receiver');
+  assert.equal(workspace.data.accounts.filter(account => account.role === 'receiver').length, 1);
 });
 
 test('permanent account removal clears the slot and its saved window reference only after local profile removal', async () => {
@@ -158,6 +197,7 @@ test('a cancelled bulk removal destroys nothing', async () => {
         return { removed: ['profile'], failures: [] };
       }
     },
+    confirmRoleChange: async () => false,
     confirmDestructive: async () => false,
     activeAccounts: () => workspace.data.accounts.filter(account => !account.archived)
   });

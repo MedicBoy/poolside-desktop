@@ -1,17 +1,9 @@
-const SAMPLE_STATES = [
-  'loading',
-  'connecting',
-  'lucky-promotion',
-  'lucky-shot',
-  'lobby',
-  'table-selection',
-  'shop',
-  'blank',
-  'error',
-  'unknown'
-];
+const { TABLES } = require('./table-list.cjs');
+
+const SAMPLE_STATES = ['loading', 'connecting', 'lucky-promotion', 'lucky-shot', 'lobby', 'table-selection', 'shop'];
+const OBSERVED_STATES = [...SAMPLE_STATES, 'unrecognized'];
 const COHORTS = ['evidence', 'benchmark'];
-const OCR_SOURCES = ['full-frame', 'bottom-band', 'unknown'];
+const OCR_SOURCES = ['full-frame', 'bottom-band', 'unavailable'];
 
 function validId(id) {
   return typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id);
@@ -20,6 +12,11 @@ function validId(id) {
 function validState(state) {
   if (!SAMPLE_STATES.includes(state)) throw new Error('Choose a supported expected screen state.');
   return state;
+}
+
+function validExpectedTable(state, table) {
+  if (state === 'table-selection' && !TABLES.includes(table)) throw new Error('Choose the table this sample is meant to locate.');
+  return state === 'table-selection' ? table : null;
 }
 
 /** @param {unknown} value */
@@ -58,6 +55,8 @@ function normaliseSample(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const sample = /** @type {any} */ (value);
   if (!validId(sample.id) || !SAMPLE_STATES.includes(sample.expectedState)) return null;
+  const expectedTable = sample.expectedState === 'table-selection' && TABLES.includes(sample.expectedTable) ? sample.expectedTable : null;
+  if (sample.expectedState === 'table-selection' && !expectedTable) return null;
   if (typeof sample.imageHash !== 'string' || !/^[a-f0-9]{64}$/i.test(sample.imageHash)) return null;
   const capturedAt = typeof sample.capturedAt === 'string' && !Number.isNaN(Date.parse(sample.capturedAt)) ? sample.capturedAt : null;
   if (!capturedAt) return null;
@@ -68,9 +67,11 @@ function normaliseSample(value) {
     imageHash: sample.imageHash.toLowerCase(),
     cohort: normaliseCohort(sample.cohort),
     expectedState: sample.expectedState,
-    observedState: SAMPLE_STATES.includes(sample.observedState) ? sample.observedState : 'unknown',
+    expectedTable,
+    observedState: OBSERVED_STATES.includes(sample.observedState) ? sample.observedState : 'unrecognized',
+    observedTables: Array.isArray(sample.observedTables) ? [...new Set(sample.observedTables.filter(table => TABLES.includes(table)))] : [],
     score: Number.isFinite(sample.score) ? Math.max(0, Math.min(1, Number(sample.score))) : 0,
-    source: OCR_SOURCES.includes(sample.source) ? sample.source : 'unknown',
+    source: OCR_SOURCES.includes(sample.source) ? sample.source : 'unavailable',
     capturedAt,
     width,
     height
@@ -83,10 +84,12 @@ function normaliseSample(value) {
 
 module.exports = {
   SAMPLE_STATES,
+  OBSERVED_STATES,
   COHORTS,
   OCR_SOURCES,
   validId,
   validState,
+  validExpectedTable,
   validCohort,
   normaliseCohort,
   milliseconds,

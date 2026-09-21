@@ -7,12 +7,16 @@ const model = require('./model.cjs');
 const { checkPublicIP } = require('./network.cjs');
 const { SHOP_PROBE } = require('./shop-recovery.cjs');
 const { createScreenReaderPool } = require('./screen-reader-pool.cjs');
+const { createScreenReader } = require('./game-screen.cjs');
+const { createTableVisualMatcher } = require('./table-visual.cjs');
 const workspaceStore = require('./workspace.cjs');
 const { log, save, load, publish, getAccount, rememberWindowGeometry } = workspaceStore;
 const { sessions, workspace } = require('./state.cjs');
 const { createSessionManager, GAME_URL } = require('./windows.cjs');
 const { createSessionFsm } = require('./session-fsm.cjs');
 const { createObservationServices } = require('./observation-services.cjs');
+const { createTableNavigationService } = require('./table-navigation-service.cjs');
+const { createTableNavigationJournal } = require('./table-navigation-journal.cjs');
 const { createCaptureLab } = require('./capture-lab.cjs');
 const { createActivityJournal } = require('./activity-journal.cjs');
 const { createIpc } = require('./ipc.cjs');
@@ -32,16 +36,20 @@ app.setName('Poolside');
 if (testing) app.setPath('userData', path.join(app.getPath('temp'), `poolside-test-${process.pid}`));
 if (!testing && !app.requestSingleInstanceLock()) app.exit(0);
 
-const screenReaders = createScreenReaderPool({ size: 1, idleMs: 120000 });
-
 const profileManager = createProfileManager({
   log,
   root: app.getPath('userData'),
   crypto: safeStorage
 });
 const activityJournal = createActivityJournal({ root: app.getPath('userData') });
-const windows = createSessionManager({ log, publish, getAccount, selfTest, profileManager });
+const tableNavigationJournal = createTableNavigationJournal({ root: app.getPath('userData') });
 const captureLab = createCaptureLab({ root: app.getPath('userData') });
+const tableMatcher = createTableVisualMatcher({ references: () => captureLab.tableReferences() });
+const screenReaders = createScreenReaderPool({
+  size: 1,
+  idleMs: 0,
+  create: () => createScreenReader({ tableMatcher })
+});
 const { inspector, monitor } = createObservationServices({
   getAccount,
   publish,
@@ -51,19 +59,49 @@ const { inspector, monitor } = createObservationServices({
   deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor,
   sessions
 });
-const { confirmDestructive, chooseDirectory } = createNativeDialogs({ dialog, dashboard: () => workspace.dashboard, selfTest });
+const windows = createSessionManager({
+  log,
+  publish,
+  getAccount,
+  selfTest,
+  profileManager,
+  onSessionOpened: testing
+    ? null
+    : id => {
+        const group = sessions.get(id);
+        if (group) group.monitoring = true;
+        screenReaders.prewarm().catch(error => log(`Screen reader warm-up failed: ${messageOf(error)}`, 'warning'));
+        monitor.start(id);
+      },
+  onSessionClosed: testing ? null : id => monitor.stop(id)
+});
+const tableNavigation = createTableNavigationService({
+  sessions,
+  getAccount,
+  inspector,
+  publish,
+  log,
+  journal: tableNavigationJournal
+});
+const { confirmChange, confirmDestructive, chooseDirectory } = createNativeDialogs({
+  dialog,
+  dashboard: () => workspace.dashboard,
+  selfTest
+});
 const ipc = createIpc({
   ipcMain,
   UI_URL,
   windows,
   inspector,
   monitor,
+  tableNavigation,
   profiles: profileManager,
   captureLab,
   diagnosticsRoot: app.getPath('userData'),
   dataRoot: app.getPath('userData'),
   openPath: destination => shell.openPath(destination),
   chooseDirectory,
+  confirmChange,
   confirmDestructive
 });
 
@@ -135,7 +173,8 @@ function selfTestContext() {
     sessions,
     GAME_URL,
     SHOP_PROBE,
-    monitor
+    monitor,
+    screenReaders
   };
 }
 
@@ -153,10 +192,20 @@ app
     // profile directory is not, and the window should not wait for it.
     profileManager.scan(workspace.data.accounts, { measure: false });
     ipc.register();
+    // Do not expose a capture action until the pinned OCR worker is initialized. If startup
+    // fails, inspections can retry creation through acquire(), and the warning remains visible.
+    try {
+      await screenReaders.prewarm();
+    } catch (error) {
+      log(`Screen reader warm-up failed: ${messageOf(error)}`, 'warning');
+    }
     await createDashboard();
     log('Workspace ready. Account profiles and encrypted session backups are saved on this PC.');
     // Then measure, once the dashboard is on screen and the result has somewhere to appear.
     setImmediate(() => profileManager.measure(workspace.data.accounts));
+    // Decode local Evidence logos after first paint, so the first table inspection does not pay
+    // the one-time image feature cost. An unreadable sample is skipped by the matcher.
+    if (!testing) setImmediate(() => tableMatcher.warm().catch(() => {}));
     if (selfTest) await require('./self-test.cjs').runSelfTest(selfTestContext());
     if (gameCheck) await runGameCheck();
   })
@@ -175,6 +224,7 @@ app.on('before-quit', event => {
   quitting = true;
   windows.flushAll().then(async results => {
     monitor.dispose();
+    tableNavigation.dispose();
     await screenReaders.closeAll().catch(() => {});
     if (results.some(r => r.status === 'rejected')) {
       dialog.showErrorBox('Session save incomplete', 'Some login state could not be saved. Existing profile files remain on this PC.');

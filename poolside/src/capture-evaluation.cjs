@@ -9,15 +9,27 @@ function cohort(sample) {
   return sample && typeof sample === 'object' && sample.cohort === 'benchmark' ? 'benchmark' : 'evidence';
 }
 
-/** @param {{expectedState?: unknown, observedState?: unknown}[]} samples */
+function screenMatches(sample) {
+  return sample && sample.expectedState === sample.observedState;
+}
+
+function sampleMatches(sample) {
+  if (!screenMatches(sample)) return false;
+  if (sample.expectedState !== 'table-selection') return true;
+  return (
+    typeof sample.expectedTable === 'string' && Array.isArray(sample.observedTables) && sample.observedTables.includes(sample.expectedTable)
+  );
+}
+
+/** @param {{expectedState?: unknown, expectedTable?: unknown, observedState?: unknown, observedTables?: unknown}[]} samples */
 function summary(samples) {
-  const matches = samples.filter(sample => sample.expectedState === sample.observedState).length;
-  const unknown = samples.filter(sample => sample.observedState === 'unknown').length;
+  const matches = samples.filter(sampleMatches).length;
+  const unrecognized = samples.filter(sample => sample.observedState === 'unrecognized').length;
   return {
     samples: samples.length,
     agreement: samples.length ? matches / samples.length : null,
     disagreements: samples.length - matches,
-    unknown: samples.length ? unknown / samples.length : null
+    unrecognized: samples.length ? unrecognized / samples.length : null
   };
 }
 
@@ -52,6 +64,22 @@ function cohortMetrics(samples, states) {
     macroF1: average('f1'),
     labels
   };
+}
+
+function tableTargetMetrics(samples, tables) {
+  const supported = Array.isArray(tables) ? tables.filter(table => typeof table === 'string') : [];
+  return supported.map(table => {
+    const captured = samples.filter(sample => sample.expectedState === 'table-selection' && sample.expectedTable === table);
+    const matches = captured.filter(sampleMatches).length;
+    return {
+      table,
+      count: captured.length,
+      matches,
+      misses: captured.length - matches,
+      reviewNeeded: captured.filter(sample => !sampleMatches(sample) && !sample.reviewedAt).length,
+      accuracy: captured.length ? matches / captured.length : null
+    };
+  });
 }
 
 function timingValues(samples, key) {
@@ -91,17 +119,17 @@ function score(value) {
  * @param {unknown} samples
  * @param {unknown} states
  */
-function evaluate(samples, states) {
+function evaluate(samples, states, tables = []) {
   const list = records(samples);
   const evidence = list.filter(sample => cohort(sample) === 'evidence');
   const benchmark = list.filter(sample => cohort(sample) === 'benchmark');
   const supported = Array.isArray(states) ? states.filter(state => typeof state === 'string') : [];
   const labels = supported.map(expectedState => {
     const captured = evidence.filter(sample => sample.expectedState === expectedState);
-    const matches = captured.filter(sample => sample.observedState === expectedState);
-    const unknown = captured.filter(sample => sample.observedState === 'unknown');
+    const matches = captured.filter(sampleMatches);
+    const unrecognized = captured.filter(sample => sample.observedState === 'unrecognized');
     const disagreements = captured.length - matches.length;
-    const reviewNeeded = captured.filter(sample => sample.expectedState !== sample.observedState && !sample.reviewedAt).length;
+    const reviewNeeded = captured.filter(sample => !sampleMatches(sample) && !sample.reviewedAt).length;
     const values = captured.map(sample => score(sample.score)).filter(value => value !== null);
     return {
       expectedState,
@@ -111,19 +139,19 @@ function evaluate(samples, states) {
       matches: matches.length,
       disagreements,
       reviewNeeded,
-      unknown: unknown.length,
+      unrecognized: unrecognized.length,
       agreement: captured.length ? matches.length / captured.length : null,
       meanScore: values.length ? values.reduce((total, value) => total + value, 0) / values.length : null
     };
   });
   const totals = summary(list);
-  const reviewNeeded = list.filter(sample => sample.expectedState !== sample.observedState && !sample.reviewedAt).length;
+  const reviewNeeded = list.filter(sample => !sampleMatches(sample) && !sample.reviewedAt).length;
   return {
     ...totals,
     reviewNeeded,
     evidenceSamples: evidence.length,
-    benchmark: cohortMetrics(benchmark, supported),
-    evidenceMetrics: cohortMetrics(evidence, supported),
+    benchmark: { ...cohortMetrics(benchmark, supported), tables: tableTargetMetrics(benchmark, tables) },
+    evidenceMetrics: { ...cohortMetrics(evidence, supported), tables: tableTargetMetrics(evidence, tables) },
     timing: durationSummary(list),
     labelsWithEvidence: labels.filter(label => label.count > 0).length,
     labelsAvailable: labels.length,
@@ -142,8 +170,11 @@ module.exports = {
   summary,
   labelMetrics,
   cohortMetrics,
+  tableTargetMetrics,
   timingValues,
   percentile,
   durationSummary,
+  screenMatches,
+  sampleMatches,
   MINIMUM_EVIDENCE_PER_LABEL
 };

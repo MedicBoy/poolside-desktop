@@ -27,7 +27,10 @@ function attachSessionEvents(deps) {
 
   window.webContents.on('did-finish-load', () => {
     if (window.isDestroyed()) return;
-    fsm.send('loaded');
+    // A sign-in redirect can finish another main-frame load after the first one already moved the
+    // session to ready. Treat that browser event as idempotent here; refused transitions elsewhere
+    // still remain visible because they normally signal a real lifecycle bug.
+    if (fsm.canSend('loaded')) fsm.send('loaded');
     log(`${accountName}: page loaded. Sign-in is managed in the game window.`);
   });
 

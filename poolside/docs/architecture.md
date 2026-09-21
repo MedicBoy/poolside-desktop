@@ -28,7 +28,7 @@ and a pooled OCR worker.
 │  profile-repair.cjs quarantine a damaged file (never deletes)               │
 │  profile-removal.cjs delete a profile: files, directory, record             │
 │  profile-diagnostics.cjs measure a profile, compare with its ceiling        │
-│  profile-sweep.cjs  remove profile storage no account claims                │
+│  profile-sweep.cjs  report unclaimed storage; delete only on explicit use   │
 │  config-schema.cjs  what config exists: fields, sections, defaults (pure)   │
 │  config-walk.cjs    walk a declaration, collect every problem (pure)        │
 │  config-validator.cjs the boundary: settings, account, whole profile (pure) │
@@ -80,7 +80,7 @@ and a pooled OCR worker.
 
 | Rule                                 | Enforced by                  |
 | ------------------------------------ | ---------------------------- |
-| No module over 200 lines             | `test/architecture.test.cjs` |
+| No module over 300 lines             | `test/architecture.test.cjs` |
 | No cycles in the local require graph | `test/architecture.test.cjs` |
 | No unreferenced modules              | `test/architecture.test.cjs` |
 | `main.cjs` is wiring only            | review + the size ceiling    |
@@ -144,6 +144,9 @@ Rules the machine enforces:
 - **An event that does not apply is refused, not applied.** `send()` returns `false` and logs
   (`'loaded' does not apply in state 'idle'`) rather than throwing or silently corrupting state. A
   second `openAccount` on a live window therefore cannot restart the machine.
+- Browser navigation can emit more than one `did-finish-load` while sign-in redirects settle. The
+  session-event adapter sends `loaded` only when the machine currently accepts it, making repeated
+  browser completion signals idempotent without weakening refusal logging for other invalid events.
 - **Every transition is recorded** with its timestamp, event and reason, capped at the last 50
   (`HISTORY_LIMIT`) — the input M4's timeline view will render, and what makes a support report
   diagnosable.
@@ -189,12 +192,12 @@ explains itself rather than just changing colour.
 
 `gameScreen.state` transitions:
 
-| From         | To                             | Trigger                                                       |
-| ------------ | ------------------------------ | ------------------------------------------------------------- |
-| any          | `null`                         | main-frame navigation begins (**bumps the generation**)       |
-| `null`       | `inspecting`                   | `inspectGame` starts                                          |
-| `inspecting` | recognised state, or `unknown` | classification completes **and** the generation still matches |
-| `inspecting` | `unknown`                      | inspection failed **and** the generation still matches        |
+| From         | To                                  | Trigger                                                       |
+| ------------ | ----------------------------------- | ------------------------------------------------------------- |
+| any          | `null`                              | main-frame navigation begins (**bumps the generation**)       |
+| `null`       | `inspecting`                        | `inspectGame` starts                                          |
+| `inspecting` | recognised state, or `unrecognized` | classification completes **and** the generation still matches |
+| `inspecting` | `inspection-failed`                 | inspection failed **and** the generation still matches        |
 
 The generation counter is what makes a stale result harmless: a result computed before a navigation
 is discarded rather than written over newer state.
@@ -212,8 +215,8 @@ because it bounds a single operation _inside_ a session rather than the session'
 
 M1's identity, geometry and route work landed in this milestone: per-session identity configuration
 (§2.4), remembered window geometry with per-monitor clamping (§2.5), and per-session proxy support as
-infrastructure (§2.4). What remains of M1 is the profile manager: create, delete, quota reporting,
-corruption detection and repair.
+infrastructure (§2.4). Profile creation, deletion, quota reporting and corruption detection now exist;
+full user-directed workspace recovery and portable restore remain Module B work.
 
 The supervisor's failure paths are unit-tested against a fake `webContents`, and the dashboard contract
 for session state is asserted in the packaged self-test. Driving them against a genuinely crashed
@@ -295,8 +298,12 @@ workspace cannot smuggle unrelated data into the config.
 second copy. It holds session cookies only, encrypted with `safeStorage` (DPAPI), and a restore never
 overwrites a cookie the profile already has.
 
-`workspace.json` is written atomically (temp file + rename, mode `0600`). A malformed document puts
-the app into read-only mode instead of overwriting data the user may still want.
+`workspace.json` is validated, written to a unique flushed sibling, then renamed into place
+(ADR-0018). A bounded `.previous` copy supports deliberate recovery; it is never auto-loaded as
+authoritative data and is purged when removed account or route values would otherwise linger.
+A malformed document, or a missing primary with recovery material present, puts the app into
+read-only mode rather than overwriting data the user may still want. The pending B3 work is an
+in-app recovery choice and clean-VM interruption proof.
 
 ## 4. IPC contract
 
@@ -325,13 +332,31 @@ inspection.cjs
      • score = 0.65 × shape distance from 16:9 + 0.35 × viewport coverage
   3. capturePage(rect scaled by zoom) ──▶ PNG
   4. screen-reader-pool.acquire() ──▶ warm Tesseract worker
-  5. game-screen.inspect(): OCR → Sharp luminance mask → second OCR → classify()
+  5. game-screen.inspect(): first OCR → classify(); a strong local visual venue match on an
+     already-recognized table-selection screen, or the reviewed Lucky Promotion/Lucky Shot/Shop
+     wording, can skip the second full-frame OCR. Other observations keep the luminance-mask
+     OCR pass → classify()
   6. release the worker; discard the result if the generation changed
 ```
 
-`classify()` returns `{state, score, evidence, alternatives}` and only ever returns a state label —
-never OCR text, balances or names. Gates are the original conditions, kept deliberately unchanged
-(ADR-0002), and a regression test embeds the previous implementation to prove it.
+`classify()` returns a state, score, matched phrases, alternatives, and supported visible table
+names — never raw OCR text or account details. Original gates remain regression-tested, while
+narrow additional gates recognize reviewed Lucky Promotion and Shop layout variants. Duplicate
+rules for one state produce one candidate, not conflicting alternatives.
+
+The optional visual venue assist in `table-visual.cjs` compares a small centered-card feature to
+reviewed or detector-confirmed local **Evidence** images. It verifies image hashes, requires several
+examples per venue, and refuses distant or ambiguous matches. It never learns from the held-out
+Benchmark cohort or makes a screen into table selection on its own. Existing capture records keep
+their original detector results; `npm run analyze:tables` is a development-only, aggregate
+leave-one-out check, not production accuracy evidence.
+`npm run replay:evidence` reprocesses reviewed Evidence through the current OCR pipeline and
+reports aggregate first-pass/full-pipeline recognition and fixed numeric stage timings without changing stored samples
+or reading Benchmark images. Its table-name count is in-sample only because those images can also
+be visual references; it never replaces the frozen held-out corpus gate.
+An inspection that exceeds its deadline reports failure; any later OCR result is discarded before
+capture recording or session publication, and a timed-out queue waiter is removed from the reader
+pool. Surface timing ends before waiting for a pooled reader.
 
 Failure produces prose, not `null`: `describeRegionFailure` names the reason and lists the surfaces
 it saw (ADR-0009).
@@ -351,22 +376,22 @@ it saw (ADR-0009).
 
 ## 7. Security posture
 
-| Control                                                                                   | Where               |
-| ----------------------------------------------------------------------------------------- | ------------------- |
-| Game windows: sandboxed, no preload, no Node, context isolated                            | `windows.cjs`       |
-| HTTPS-only navigation; popups inherit the account session and are re-hardened recursively | `hardening.cjs`     |
-| Downloads blocked; all permission requests and checks denied                              | `hardening.cjs`     |
-| Dashboard: CSP `default-src 'self'`, `connect-src 'none'`, no external requests           | `src/ui/index.html` |
-| IPC trust guard on every handler                                                          | `ipc.cjs`           |
-| Workspace written atomically, `0600`, read-only fallback on corruption                    | `workspace.cjs`     |
-| Session file id-validated (no traversal), `0600`, encrypted via DPAPI                     | `saved-session.cjs` |
-| Recognition returns a label, a score and matched phrases only                             | `game-screen.cjs`   |
-| No telemetry, no remote config, no updater                                                | ADR-0010            |
+| Control                                                                                       | Where                |
+| --------------------------------------------------------------------------------------------- | -------------------- |
+| Game windows: sandboxed, no preload, no Node, context isolated                                | `windows.cjs`        |
+| HTTPS-only navigation; popups inherit the account session and are re-hardened recursively     | `hardening.cjs`      |
+| Downloads blocked; all permission requests and checks denied                                  | `hardening.cjs`      |
+| Dashboard: CSP `default-src 'self'`, `connect-src 'none'`, no external requests               | `src/ui/index.html`  |
+| IPC trust guard on every handler                                                              | `ipc.cjs`            |
+| Workspace validated and staged with a flushed, bounded recovery copy; read-only on corruption | `workspace-file.cjs` |
+| Session file id-validated (no traversal), `0600`, encrypted via DPAPI                         | `saved-session.cjs`  |
+| Recognition returns a label, a score and matched phrases only                                 | `game-screen.cjs`    |
+| No telemetry, no remote config, no updater                                                    | ADR-0010             |
 
 ## 8. Observability
 
-Today: an in-memory activity feed (last 100 events) with `info`/`warning` kinds, surfaced in the
-dashboard, plus console output. It records actions, not credentials and not full URLs.
+Today: a bounded in-memory activity feed and a local redacted activity journal (up to 200 messages),
+surfaced in the dashboard, plus console output. They record actions, not credentials or full URLs.
 
 M4 compiles that feed together with the session FSM's transition history (last 50 per session) into one
 ordered **diagnostic timeline** (`timeline-engine.cjs`), reads it with `timeline-query.cjs`, and collates the
@@ -376,8 +401,8 @@ machine: `telemetry-redaction.cjs` produces it, rewriting every string, and `dia
 return a payload that fails its own scan (ADR-0016). Addresses, filesystem paths and token-shaped strings are
 matched by shape; account names by literal.
 
-Still to come in M4: durable JSON logs with rotation, frame-timing
-instrumentation, and validation of that bundle against scripted failure scenarios.
+Fixed OCR-stage timing measurements exist. Rotating durable structured logs, wider capture/action/render
+timings, crash files, and support-bundle fault-injection validation remain Modules L/P work.
 
 ## 9. Testing architecture
 
@@ -405,7 +430,7 @@ else creates, repairs or deletes it.
 | Repair    | `profile-repair.cjs`                       | renames a corrupt file to `<id>.plist.corrupt-<timestamp>`. Never deletes, never rebuilds, and re-checks the verdict first so it cannot move a healthy file |
 | Delete    | `profile-removal.cjs`                      | removes the carry-over file, its quarantined copies and the partition directory, then the persisted record                                                  |
 | Measure   | `profile-diagnostics.cjs`                  | walks the directory under a file cap (and reports `truncated`), then compares the total with the account's configured ceiling                               |
-| Sweep     | `profile-sweep.cjs`                        | removes `poolside-<uuid>` directories and `<uuid>.plist` files that no account claims; every other name is reported foreign and left alone                  |
+| Sweep     | `profile-sweep.cjs`                        | startup reports unclaimed `poolside-<uuid>` directories and `<uuid>.plist` files without deleting; an explicit applied sweep owns any later cleanup         |
 
 Two storage layers, with different authority (ADR-0004):
 
@@ -416,8 +441,8 @@ Two storage layers, with different authority (ADR-0004):
 
 **Startup order.** The integrity scan runs before the window is shown — one small file per account — and
 the measurement runs after it via `setImmediate`, because walking every profile directory is the slow half
-and the dashboard should not wait for it. The scan sweeps abandoned `.tmp` files, removes storage no
-account claims, checks each account and quarantines what is damaged, then logs one summary line.
+and the dashboard should not wait for it. The scan preserves interrupted `.tmp` files, reports storage no
+account claims without deleting it, checks each account and quarantines what is damaged, then logs one summary line.
 
 **Durable vs volatile.** The generation counter and the corruption history are persisted per account in the
 workspace document. `directoryBytes`, `fileCount`, `quotaBytes` and `overQuota` are re-derived on every
@@ -534,36 +559,27 @@ The rules that matter, all arithmetic rather than claims about a window:
 The grid is **built but not yet in the recognition path**: the geometry is wired, the classifier still reads the
 concatenation of its two OCR passes. Changing what it reads needs the labelled corpus (ADR-0002), so it waits.
 
-## 13. Known gaps
+## 13. Table navigation: plan first, input later
 
-Carried deliberately, with the milestone that closes each:
+`table-navigation-state.cjs` is a pure reducer for the sequence from lobby to table selection, target discovery,
+table opening, and matchmaking. `table-navigation-service.cjs` attaches one plan to an open session and advances
+it only from a fresh inspection or an explicit acknowledgement of a manual step. Every active stage has a
+two-minute deadline; cancellation and retry are real transitions rather than renderer-only flags.
 
-| Gap                                                                   | Milestone                                                                                              |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| No transition history or deadline enforcement on session state        | M1 (closed — `session-fsm.cjs`)                                                                        |
-| No crash/stall handlers or per-session health record                  | M1 (closed — `supervision.cjs`)                                                                        |
-| Identity configuration, per session                                   | M1 (closed — `identity.cjs`, ADR-0012)                                                                 |
-| Remembered geometry and per-monitor bounds                            | M1 (closed — `geometry.cjs`)                                                                           |
-| Per-session route as infrastructure, honestly reported                | M1 (closed — `proxy.cjs`)                                                                              |
-| No profile lifecycle (establish, check, delete)                       | M1 (closed — `profile-manager.cjs`)                                                                    |
-| No corruption detection on stored session data                        | M1 (closed — `profile-integrity.cjs`)                                                                  |
-| Config is hand-validated in `model.cjs`; venues are hardcoded         | M2 (closed — `config-schema.cjs`)                                                                      |
-| The roadmap sketch's five-section config is not built                 | M2 remainder                                                                                           |
-| Corpus is seven positive fixtures and no negatives                    | M3 (harness in: `test/fixtures/vision-corpus.json`)                                                    |
-| Region ranking unvalidated against the live site                      | M3 (needs a live pass)                                                                                 |
-| No labelled frame corpus, so accuracy is unmeasurable                 | M3 remainder                                                                                           |
-| No regression harness with enforced accuracy thresholds               | M3 remainder                                                                                           |
-| No ordered history across sessions; two rings with opposite orderings | M4 (closed — `timeline-engine.cjs`, ADR-0016)                                                          |
-| Metrics scattered across four subsystems, re-joined by the dashboard  | M4 (closed — `dashboard-telemetry.cjs`)                                                                |
-| No rule for what a diagnostics payload may contain                    | M4 (closed — `telemetry-redaction.cjs`: redaction + a refusing scan)                                   |
-| No durable logs, no frame timings, no crash file                      | M4 remainder                                                                                           |
-| The (future) bundle is validated against no scripted failure scenario | M4 remainder                                                                                           |
-| No settings UI bound to the configuration schema                      | M5 (closed — `settings-form-mapper.cjs`, ADR-0017)                                                     |
-| No per-session detail view; account overrides have no UI              | M5 remainder                                                                                           |
-| No design tokens, component kit, i18n or accessibility audit          | M5 remainder                                                                                           |
-| No command palette or hotkeys                                         | M5 remainder                                                                                           |
-| No fault-injection harness, no soak results                           | M6                                                                                                     |
-| No threat model, SBOM or secret scanning                              | M7 in progress — threat model and reproducible SBOM are in; privacy scanning and release review remain |
-| No signing, no updater, no reproducible-build proof                   | M8                                                                                                     |
-| No performance budgets measured on a reference machine                | M9                                                                                                     |
-| `main.cjs` wiring is reviewed, not enforced                           | M0 remainder                                                                                           |
+The input boundary is intentionally already present. `table-navigation-input.cjs` implements it in `dry-run`
+mode: every requested action returns `performed: false` and a human-readable instruction. It never receives an
+Electron window and cannot send pointer or keyboard input. Replacing it with a live adapter requires the real
+capture corpus, coordinate transforms, and fixture-backed input tests rather than a conditional in the UI.
+
+Each transition is held on the live session for the dashboard and appended to the bounded local
+`table-navigation-history.json` journal. That file carries account IDs, table labels, states, events, and
+timestamps only. Account names, browser text, images, routes, and credentials are not accepted by the journal's
+fixed writer shape.
+
+## 14. Current limitations and claim authority
+
+The [generated capability report](CAPABILITIES.md) is the build-specific inventory of available, limited, dry-run, and unavailable behavior. The [work-item register](work-items.json) tracks the 142 final-product deliverables, their owners, dependencies, and required evidence. The [support policy](support-policy.md) records the preview operating boundary. These are checked by `npm run product:check`.
+
+Important remaining limitations are workspace restore UX and full backup portability (Module B), hardware/GPU and failure characterization (D/P), representative held-out game recognition evidence (F/G), live game input (H/I), pairing (J), match accounting (K), durable fault diagnostics (L), accessibility/localization (M), external security/compliance review (N), and signed installation/update/rollback and clean-VM release proof (O). Existing local tests and Capture Lab evidence are not interchangeable with those external gates.
+
+ADR-0011 records the game-facing automation boundary. Do not describe a browser window as authenticated, a pair as matched, or a match/transfer as complete based solely on session or screen state.

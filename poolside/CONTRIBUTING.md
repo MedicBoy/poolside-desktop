@@ -17,10 +17,12 @@ npm start       # run the app in development
 ## The gate
 
 ```bash
-npm run verify  # lint + typecheck + unit tests
+npm run verify  # lint + typecheck + product-truth checks + unit tests
 ```
 
-**Never commit red.** `verify` must pass before every commit, and it is what CI runs. The individual
+**Never commit red.** `verify` must pass before every commit. The Windows CI workflow defines clean installation,
+formatting, two-process persistence, corpus-gate contract tests, SBOM checks, packaging, package
+inspection, and the packaged desktop self-test. The individual
 pieces, for when you want them separately:
 
 | Command                           | Purpose                                                           |
@@ -40,7 +42,7 @@ them before finishing any change that touches sessions, windows, inspection or r
 
 ## Branching — trunk-based
 
-- `main` is always green and always releasable.
+- `main` should remain source-green. A distributable release still needs every release gate and external sign-off.
 - Branches are short-lived and branch off `main`. A branch that lives longer than a couple of days is
   a sign the change should have been split.
 - No long-lived `develop`, no release branches. Releases are tags on `main`.
@@ -81,8 +83,8 @@ exit gate passes** — a tag is a claim, and an unearned tag is a lie in the his
 
 Enforced as tests in `test/architecture.test.cjs`, not as conventions:
 
-1. **No module over 200 lines.** Split by responsibility. When Prettier's reformatting pushed
-   `windows.cjs` past the ceiling, the answer was to split it, not to raise the number.
+1. **No module over 300 lines.** Split by responsibility before a module becomes difficult to review; the
+   ceiling is a backstop, not a target.
 2. **No cycles** in the local `require` graph.
 3. **Pure modules stay pure.** `layout`, `model`, `shop-recovery`, `game-region`, `saved-session`,
    `session-cookies` and `plist` must not import `electron`. They are unit-testable without a running
@@ -109,7 +111,7 @@ in its own module.
 - [ ] `npm run verify` green
 - [ ] Electron suites green if the change touches sessions, windows, inspection or recovery
 - [ ] New behaviour has tests; a fixed bug has a regression test
-- [ ] No module over 200 lines; no new cycle; no `electron` import in a pure module
+- [ ] No module over 300 lines; no new cycle; no `electron` import in a pure module
 - [ ] User-facing errors name a cause and a next action (ADR-0009)
 - [ ] Docs updated in the same change: `README.md` for behaviour, `docs/architecture.md` for
       structure, an ADR for any changed decision

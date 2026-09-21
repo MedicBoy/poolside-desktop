@@ -35,6 +35,8 @@ test('diagnostics bundle writes only a scanned, anonymised local document', () =
     assert.ok(result.bytes > 0);
     const saved = JSON.parse(fs.readFileSync(path.join(root, 'diagnostics', result.fileName), 'utf8'));
     assert.equal(saved.format, 'poolside-diagnostics/v1');
+    assert.equal(saved.payload.capabilityReport.format, 'poolside-capabilities/v1');
+    assert.equal(saved.payload.capabilityReport.capabilities.find(item => item.id === 'live-game-input').flag, 'off');
     assert.deepEqual(redaction.findSecrets(saved, { forbidden: ['Private Main'] }), []);
     assert.equal(JSON.stringify(saved).includes('Private Main'), false);
     assert.equal(JSON.stringify(saved).includes('192.168.1.40'), false);

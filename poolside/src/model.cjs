@@ -2,8 +2,9 @@ const { randomUUID } = require('node:crypto');
 const { IDENTITY_FIELDS } = require('./identity-fields.cjs');
 const { RECOVERY_FIELDS } = require('./recovery-settings.cjs');
 const routePresets = require('./route-presets.cjs');
-const { normaliseRemembered } = require('./geometry.cjs');
+const { pickProfile, windowGeometry } = require('./model-storage.cjs');
 const { TABLES } = require('./config-schema.cjs');
+const { migrateStoredTable } = require('./table-list.cjs');
 
 const PROXY_FIELDS = ['enabled', 'spec', 'bypass'];
 
@@ -83,60 +84,6 @@ function settings(input) {
 }
 
 /**
- * Profile bookkeeping: how many times this account's storage has been established, and what damage has
- * been found in it. App-managed and disposable — a damaged entry is dropped rather than being allowed
- * to fail the whole document, because it is not worth someone's account list.
- * @param {unknown} input
- */
-function pickProfile(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
-  const source = /** @type {Record<string, any>} */ (input);
-  /** @type {Record<string, unknown>} */
-  const picked = {};
-  if (Number.isInteger(source.generation) && source.generation >= 0) picked.generation = source.generation;
-  if (source.established === true || source.established === false) picked.established = source.established;
-  if (typeof source.firstSeenAt === 'string') picked.firstSeenAt = source.firstSeenAt;
-  const corruption = source.corruption;
-  if (corruption && typeof corruption === 'object' && !Array.isArray(corruption) && Number.isInteger(corruption.count)) {
-    picked.corruption = {
-      count: corruption.count,
-      lastAt: typeof corruption.lastAt === 'string' ? corruption.lastAt : null,
-      lastReason: typeof corruption.lastReason === 'string' ? corruption.lastReason : null,
-      lastAction: typeof corruption.lastAction === 'string' ? corruption.lastAction : null
-    };
-  }
-  return Object.keys(picked).length ? picked : undefined;
-}
-
-/**
- * Remembered window geometry, keyed by account id.
- *
- * This is **disposable** data. Unlike an account, a damaged geometry entry costs the user nothing, so it
- * is dropped rather than being allowed to make the workspace unreadable — a corrupt rectangle must never
- * cost anyone their account list. `geometry.cjs` owns the definition of a usable record, so "usable"
- * means the same thing here as it does when a window is restored.
- * @param {unknown} input
- * @param {Set<string>} ids
- */
-function windowGeometry(input, ids) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
-  /** @type {Record<string, object>} */
-  const result = {};
-  for (const [id, value] of Object.entries(/** @type {Record<string, unknown>} */ (input))) {
-    if (!ids.has(id)) continue;
-    const clean = normaliseRemembered(value);
-    if (!clean) continue;
-    const raw = /** @type {Record<string, unknown>} */ (value);
-    result[id] = {
-      ...clean,
-      displayId: Number.isInteger(raw.displayId) ? raw.displayId : null,
-      at: typeof raw.at === 'string' ? raw.at : null
-    };
-  }
-  return result;
-}
-
-/**
  * Rebuild a workspace document from stored JSON. Every field it keeps must survive a round trip, or a
  * setting silently vanishes on the next save (the D3 defect).
  * @param {any} value
@@ -175,7 +122,11 @@ function decode(value) {
     return kept;
   });
   /** @type {{version: number, accounts: any[], settings: any, windows?: Record<string, object>, routePresets?: any[]}} */
-  const document = { version: 1, accounts, settings: settings(value.settings) };
+  const storedSettings =
+    value.settings && typeof value.settings === 'object'
+      ? { ...value.settings, table: migrateStoredTable(value.settings.table) }
+      : value.settings;
+  const document = { version: 1, accounts, settings: settings(storedSettings) };
   if (presets.length) document.routePresets = presets;
   const geometry = windowGeometry(value.windows, ids);
   if (Object.keys(geometry).length) document.windows = geometry;

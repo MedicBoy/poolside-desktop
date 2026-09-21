@@ -66,7 +66,7 @@ Responsibility split, enforced by module boundaries:
   Windows user (DPAPI). Those paths raise a clear error and preserve the file.
 - The v1→v2 narrowing is permanent compatibility code; it can be deleted once no v1 file can exist.
 - Two modules now exist where one did (`session-cookies.cjs` + `saved-session.cjs`). That split was
-  forced by the 200-line ceiling, and it happens to match the concern boundary.
+  forced by the then-current 200-line ceiling, and it happens to match the concern boundary.
 
 ## Alternatives considered
 

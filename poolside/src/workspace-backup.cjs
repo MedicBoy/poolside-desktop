@@ -14,6 +14,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const manifest = require('./backup-manifest.cjs');
 const { ACCOUNTS_DIR, PARTITIONS_DIR, isInside, partitionName } = require('./profile-paths.cjs');
+const { redactWorkspaceProxyCredentials } = require('./proxy-public.cjs');
 
 const WORKSPACE_FILE = 'workspace.json';
 const MANIFEST_FILE = 'manifest.json';
@@ -72,7 +73,17 @@ function create(input) {
   };
 
   const workspaceFile = path.join(root, WORKSPACE_FILE);
-  if (fs.existsSync(workspaceFile)) copyFile(workspaceFile, WORKSPACE_FILE);
+  if (fs.existsSync(workspaceFile)) {
+    const to = path.join(folder, WORKSPACE_FILE);
+    let document;
+    try {
+      document = redactWorkspaceProxyCredentials(JSON.parse(fs.readFileSync(workspaceFile, 'utf8')));
+    } catch {
+      throw new Error('The workspace file could not be safely included in the backup.');
+    }
+    fs.writeFileSync(to, `${JSON.stringify(document, null, 2)}\n`);
+    files.push({ path: WORKSPACE_FILE, bytes: fs.statSync(to).size, sha256: sha256(to) });
+  }
 
   const listed = [];
   for (const account of accounts) {

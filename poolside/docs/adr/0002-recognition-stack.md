@@ -5,6 +5,11 @@
 - **Date:** 2026-09-18
 - **Related:** `src/game-screen.cjs`, `src/screen-reader-pool.cjs`, `src/vision-frame.cjs`, `test/fixtures/`, roadmap M3
 
+**Current threshold note (2026-09-21):** The original 800 ms criterion below records this ADR's
+historical decision. The local corpus validator now uses a provisional 2,000 ms capture-plus-OCR
+p95 target. This does not approve Gate 1, and it does not enable live game input; fresh independent
+measurements and the other corpus and observation gates remain required.
+
 ## Context
 
 Screen recognition has to answer one question offline: which of a small set of known screens is
@@ -27,8 +32,8 @@ against the labelled corpus, using these criteria:
 
 1. **Accuracy** — will it reach ≥ 0.90 macro-F1 on a held-out split of ≥ 300 labelled frames?
 2. **Latency** — can capture → classified state stay ≤ 800 ms p95 with the worker pool?
-3. **Negative behaviour** — does it return `unknown` rather than a confident wrong answer on the
-   negative set (blank frames, mid-load partials, dialogs, the shop, wrong-aspect surfaces,
+3. **Non-screen behaviour** — does it return the `unrecognized` outcome rather than a confident wrong screen on
+   non-screen or degraded inputs (empty frames, mid-load partials, dialogs, the shop, wrong-aspect surfaces,
    non-English)?
 
 If any criterion fails and template/feature matching or a small ONNX classifier measurably beats it,
@@ -40,11 +45,11 @@ that swap is contained in one module.
 M3 landed the foundations this record depends on and did **not** settle it. Recorded here so the next reader
 knows exactly where the evidence stops:
 
-| Criterion                                                          | State after M3's foundations                                                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. ≥ 0.90 macro-F1 on a held-out split of ≥ 300 labelled frames    | **Cannot be measured.** There are seven recorded fixtures; the corpus added in M3 is 15 _synthetic layouts_ derived from them and from the named failure modes. They drive the matching logic and pin the coordinate rules, and they are explicitly not a labelled frame set.                                     |
-| 2. ≤ 800 ms p95 capture → classified                               | Unmeasured. The pool and the timeout exist; no latency series has been recorded on a reference machine (roadmap M9 owns the reference machine).                                                                                                                                                                   |
-| 3. `unknown` rather than a confident wrong answer on the negatives | **Partly answered, and the answer is uncomfortable.** The negative classes now exist as fixtures, and the result is that a _single misread gate term_ turns a known screen into `unknown` — see the `scaled-window` frame. The stack does not return a confident wrong answer; it returns an unhelpful right one. |
+| Criterion                                                                   | State after M3's foundations                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. ≥ 0.90 macro-F1 on a held-out split of ≥ 300 labelled frames             | **Cannot be measured.** There are seven recorded fixtures; the corpus added in M3 is 15 _synthetic layouts_ derived from them and from the named failure modes. They drive the matching logic and pin the coordinate rules, and they are explicitly not a labelled frame set.                                       |
+| 2. ≤ 800 ms p95 capture → classified                                        | Unmeasured. The pool and the timeout exist; no latency series has been recorded on a reference machine (roadmap M9 owns the reference machine).                                                                                                                                                                     |
+| 3. `unrecognized` rather than a confident wrong screen on non-screen inputs | **Partly answered, and the answer is uncomfortable.** The non-screen inputs exist as fixtures, and the result is that a _single misread gate term_ turns a known screen into `unrecognized` — see the `scaled-window` frame. The stack does not return a confident wrong answer; it returns an unhelpful right one. |
 
 So the stack stays provisional on evidence, not on preference. Two things would settle it, in order: label real
 frames (the seven fixtures plus live captures) to the ≥ 300 the criterion asks for, then run the regression

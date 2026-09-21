@@ -102,15 +102,15 @@
       ]
     },
     {
-      "id": "blank-transition",
-      "state": "unknown",
+      "id": "empty-transition",
+      "state": "unrecognized",
       "source": "none (negative)",
       "note": "A blank or dark frame between screens. No text at all is the correct input, and the classifier must not invent a state from nothing.",
       "lines": []
     },
     {
       "id": "mid-load-partial",
-      "state": "unknown",
+      "state": "unrecognized",
       "source": "none (negative)",
       "note": "Words still drawing: truncated fragments at low confidence. 'LOAD' is not 'loading', and a partial frame must not be reported as the state it is becoming.",
       "lines": [
@@ -120,7 +120,7 @@
     },
     {
       "id": "dialog-covering",
-      "state": "unknown",
+      "state": "unrecognized",
       "source": "none (negative)",
       "note": "A dialog over the game. The region probe refuses this case before capture as login-or-dialog; this frame exists for the race where a dialog appears after the probe passes.",
       "lines": [
@@ -131,7 +131,7 @@
     },
     {
       "id": "shop-page",
-      "state": "unknown",
+      "state": "unrecognized",
       "source": "none (negative)",
       "note": "The web shop rather than the game. Shop detection is a separate mechanism from classification; this asserts the classifier does not mistake shop wording for a game state.",
       "lines": [
@@ -154,7 +154,7 @@
     },
     {
       "id": "non-english",
-      "state": "unknown",
+      "state": "unrecognized",
       "source": "none (negative)",
       "note": "A localised interface. The recogniser is English-only, so non-English wording must be unknown rather than a confident guess from a partly-similar word.",
       "lines": [
@@ -164,7 +164,7 @@
     },
     {
       "id": "wrong-aspect-surface",
-      "state": "unknown",
+      "state": "unrecognized",
       "source": "none (negative)",
       "note": "A page-wide background canvas selected by mistake: browser chrome wording, and one cell whose box runs past the right edge so the clipping rule is exercised on a real frame.",
       "clipped": true,
@@ -176,9 +176,9 @@
     },
     {
       "id": "scaled-window",
-      "state": "unknown",
+      "state": "unrecognized",
       "source": "none (negative)",
-      "note": "The decisive negative: a window captured at half density, where one gate term is misread. The gate fails and the result is unknown, because the classifier scores but does not recover from a single misread term. This frame is the measured justification for loosening the gates in classifier v2.",
+      "note": "The decisive recognition miss: a window captured at half density, where one gate term is misread. The gate fails and the result is unrecognized, because the classifier scores but does not recover from a single misread term. This frame is the measured justification for loosening the gates in classifier v2.",
       "surface": { "width": 600, "height": 338, "zoom": 1, "deviceScaleFactor": 0.5 },
       "lines": [
         { "text": "PLAY", "box": { "x": 274, "y": 300, "width": 52, "height": 18 }, "confidence": 61 },

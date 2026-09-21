@@ -21,7 +21,7 @@ const { createAccountIpCheck } = require('./network-ipc.cjs');
 const PREFS_SAVED = 'Transfer preferences saved. Automation is not yet connected.';
 
 /**
- * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, monitor: any, profiles: any, captureLab: any, diagnosticsRoot: string, dataRoot: string, openPath: (path: string) => Promise<string>, confirmDestructive: (title: string, detail: string) => Promise<boolean>, chooseDirectory: (title: string, allowCreate: boolean) => Promise<string|null>}} deps
+ * @param {{ipcMain: import('electron').IpcMain, UI_URL: string, windows: any, inspector: any, monitor: any, tableNavigation: any, profiles: any, captureLab: any, diagnosticsRoot: string, dataRoot: string, openPath: (path: string) => Promise<string>, confirmChange: (title: string, detail: string, label?: string) => Promise<boolean>, confirmDestructive: (title: string, detail: string) => Promise<boolean>, chooseDirectory: (title: string, allowCreate: boolean) => Promise<string|null>}} deps
  */
 function createIpc(deps) {
   const {
@@ -30,11 +30,13 @@ function createIpc(deps) {
     windows,
     inspector,
     monitor,
+    tableNavigation,
     profiles,
     captureLab,
     diagnosticsRoot,
     dataRoot,
     openPath,
+    confirmChange,
     confirmDestructive,
     chooseDirectory
   } = deps;
@@ -72,11 +74,6 @@ function createIpc(deps) {
   function register() {
     handle('workspace:get', () => snapshot());
     registerRoutePresetIpc({ handle, workspace, save, log });
-    handle('account:add', input => {
-      const account = model.account(input, activeAccounts());
-      save({ ...workspace.data, accounts: [...workspace.data.accounts, account] });
-      log(`${account.name}: account slot created.`);
-    });
     handle('account:open', id => windows.openAccount(id));
     handle('account:close', id => {
       getAccount(id);
@@ -125,6 +122,11 @@ function createIpc(deps) {
     handle('account:return-game', id => windows.returnToGame(id));
     handle('account:reload', id => windows.reloadAccount(id));
     handle('account:inspect', id => inspector.inspectGame(id));
+    handle('table-navigation:start', input => tableNavigation.start(input));
+    handle('table-navigation:observe', id => tableNavigation.observe(id));
+    handle('table-navigation:advance', id => tableNavigation.advance(id));
+    handle('table-navigation:cancel', id => tableNavigation.cancel(id));
+    handle('table-navigation:retry', id => tableNavigation.retry(id));
     handle('account:monitor-start', id => {
       getAccount(id);
       const group = sessions.get(id);
@@ -149,6 +151,7 @@ function createIpc(deps) {
       log,
       getAccount,
       profiles,
+      confirmRoleChange: confirmChange,
       confirmDestructive,
       activeAccounts
     });

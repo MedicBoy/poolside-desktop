@@ -5,25 +5,26 @@ costs us. They are written for whoever reads this codebase in six months — pos
 
 ## Index
 
-| ADR                                                | Title                                                      | Status                 |
-| -------------------------------------------------- | ---------------------------------------------------------- | ---------------------- |
-| [0001](0001-commonjs-for-the-main-process.md)      | CommonJS for the main process                              | Accepted               |
-| [0002](0002-recognition-stack.md)                  | Recognition stack: Tesseract + Sharp, revisited at M3      | Accepted (provisional) |
-| [0003](0003-persistent-chromium-partitions.md)     | Persistent Chromium partitions per account                 | Accepted               |
-| [0004](0004-session-storage-authority.md)          | One authority for session storage (defect D3)              | Accepted               |
-| [0005](0005-ipc-contract-versioning.md)            | IPC contract shape and versioning                          | Accepted               |
-| [0006](0006-electron-version-pinning.md)           | Exact Electron version pinning                             | Accepted               |
-| [0007](0007-game-facing-test-strategy.md)          | Game-facing test strategy                                  | Accepted               |
-| [0008](0008-config-schema-tooling.md)              | Config schema tooling                                      | Accepted               |
-| [0009](0009-error-taxonomy.md)                     | Error taxonomy and user-facing messages                    | Accepted               |
-| [0010](0010-local-only-telemetry.md)               | Telemetry is local-only by default                         | Accepted               |
-| [0011](0011-game-automation-gaps.md)               | Game automation remains unimplemented                      | Current record         |
-| [0012](0012-session-identity-surface.md)           | Session identity surface, and the limits of it             | Accepted               |
-| [0013](0013-profile-lifecycle-and-repair.md)       | Profile lifecycle, generation, and what repair may do      | Accepted               |
-| [0014](0014-configuration-validation-semantics.md) | Configuration validation semantics and the drift guard     | Accepted               |
-| [0015](0015-vision-recognition-processing.md)      | Vision capture: coordinates, transforms, boundaries        | Accepted               |
-| [0016](0016-ui-timeline-telemetry-rendering.md)    | Timeline, telemetry layers and what may leave the machine  | Accepted               |
-| [0017](0017-settings-ui-configuration-binding.md)  | Settings UI binding: generated controls, refusals by field | Accepted               |
+| ADR                                                      | Title                                                      | Status                 |
+| -------------------------------------------------------- | ---------------------------------------------------------- | ---------------------- |
+| [0001](0001-commonjs-for-the-main-process.md)            | CommonJS for the main process                              | Accepted               |
+| [0002](0002-recognition-stack.md)                        | Recognition stack: Tesseract + Sharp, revisited at M3      | Accepted (provisional) |
+| [0003](0003-persistent-chromium-partitions.md)           | Persistent Chromium partitions per account                 | Accepted               |
+| [0004](0004-session-storage-authority.md)                | One authority for session storage (defect D3)              | Accepted               |
+| [0005](0005-ipc-contract-versioning.md)                  | IPC contract shape and versioning                          | Accepted               |
+| [0006](0006-electron-version-pinning.md)                 | Exact Electron version pinning                             | Accepted               |
+| [0007](0007-game-facing-test-strategy.md)                | Game-facing test strategy                                  | Accepted               |
+| [0008](0008-config-schema-tooling.md)                    | Config schema tooling                                      | Accepted               |
+| [0009](0009-error-taxonomy.md)                           | Error taxonomy and user-facing messages                    | Accepted               |
+| [0010](0010-local-only-telemetry.md)                     | Telemetry is local-only by default                         | Accepted               |
+| [0011](0011-game-automation-gaps.md)                     | Game automation remains unimplemented                      | Current record         |
+| [0012](0012-session-identity-surface.md)                 | Session identity surface, and the limits of it             | Accepted               |
+| [0013](0013-profile-lifecycle-and-repair.md)             | Profile lifecycle, generation, and what repair may do      | Accepted               |
+| [0014](0014-configuration-validation-semantics.md)       | Configuration validation semantics and the drift guard     | Accepted               |
+| [0015](0015-vision-recognition-processing.md)            | Vision capture: coordinates, transforms, boundaries        | Accepted               |
+| [0016](0016-ui-timeline-telemetry-rendering.md)          | Timeline, telemetry layers and what may leave the machine  | Accepted               |
+| [0017](0017-settings-ui-configuration-binding.md)        | Settings UI binding: generated controls, refusals by field | Accepted               |
+| [0018](0018-workspace-atomic-write-and-recovery-copy.md) | Workspace atomic write and bounded recovery copy           | Accepted               |
 
 ## Template
 

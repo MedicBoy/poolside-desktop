@@ -17,7 +17,8 @@ const integrity = require('./profile-integrity.cjs');
 const { repair } = require('./profile-repair.cjs');
 const { removeAccount } = require('./profile-removal.cjs');
 const diagnostics = require('./profile-diagnostics.cjs');
-const { sweep, describeSweep } = require('./profile-sweep.cjs');
+const { sweep } = require('./profile-sweep.cjs');
+const { scanProfiles } = require('./profile-scan.cjs');
 const paths = require('./profile-paths.cjs');
 const store = require('./workspace.cjs');
 const { sessions, profileReports, workspace } = require('./state.cjs');
@@ -130,36 +131,14 @@ function createProfileManager(deps) {
   }
 
   /**
-   * The startup pass: sweep abandoned files, check and repair every account, then measure.
+   * The startup pass: preserve interrupted-write temporary files, report unclaimed storage without
+   * deleting it, check and repair every claimed account, then measure.
    * @param {import('./types.cjs').Account[]} accounts every account, archived included
    * @param {{measure?: boolean}} [options] `measure: false` lets a caller show the window first, because
    *   measuring walks every profile directory and that is the slow half of this
    */
   function scan(accounts, options = {}) {
-    ensureRoots();
-    const temporary = diagnostics.sweepTemporaryFiles(root);
-    if (temporary.removed.length) log(`Removed ${temporary.removed.length} abandoned temporary file(s) left by an interrupted write.`);
-    if (temporary.failed.length) log(`Temporary files could not all be removed: ${temporary.failed.join('; ')}`, 'warning');
-
-    const orphaned = sweep(root, accounts);
-    const orphanNote = describeSweep(orphaned);
-    if (orphanNote) log(`Profile storage sweep: ${orphanNote}.`);
-    if (orphaned.failed.length) log(`Some unclaimed storage could not be removed: ${orphaned.failed.join('; ')}`, 'warning');
-
-    /** @type {ReturnType<typeof integrity.inspect>[]} */
-    const verdicts = [];
-    for (const account of accounts) verdicts.push(inspectAndRepair(account).verdict);
-    const summary = integrity.summarise(verdicts);
-    const described = Object.entries(summary)
-      .map(([state, count]) => `${count} ${state}`)
-      .join(', ');
-    const damaged = (summary.corrupt || 0) + (summary.unverifiable || 0);
-    log(
-      damaged ? `Saved-session check: ${described}.` : `Saved-session check: ${described || 'nothing to check'}.`,
-      damaged ? 'warning' : 'info'
-    );
-    if (options.measure !== false) measure(accounts);
-    return { verdicts, summary, orphans: orphaned, temporary };
+    return scanProfiles({ root, accounts, options, authoritative: workspace.authoritative, ensureRoots, inspectAndRepair, measure, log });
   }
 
   /**

@@ -79,7 +79,7 @@ Deletion removes the carry-over file, its quarantined copies, the partition dire
 record, and every failure is named. `ipc.cjs` turns any failure into an error message that says what was
 removed and what was not, rather than returning success because most of it worked.
 
-### 13.7 The sweep is conservative by rule
+### 13.7 Startup discovery is non-destructive by rule
 
 | Rule                                                                         | Why                                                                                                                                     |
 | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -88,6 +88,13 @@ removed and what was not, rather than returning success because most of it worke
 | Every path is rebuilt here and re-checked against the data directory         | a corrupted workspace record cannot direct a delete elsewhere                                                                           |
 | `apply: false` reports without touching anything                             | the same code produces a report and a change, so a report cannot describe a different set of files than the change acted on             |
 | `unclaimed` means still on disk afterwards                                   | recording an entry as kept on its way past a successful delete reported it as both removed and left alone                               |
+
+Startup always invokes the sweep in report-only mode. A valid workspace is still not evidence that an
+unlisted profile is disposable: recreating or restoring an account slot changes its durable id while an
+older partition may hold the only working login. Applying the sweep is reserved for a deliberate cleanup
+flow; ordinary account and profile removal already has its own native confirmation and guarded deletion.
+Likewise, startup preserves `.plist.tmp`: after an interrupted first save, it may be the only encrypted
+session payload available for diagnosis or recovery.
 
 ### 13.8 Diagnostics are split by lifetime
 
@@ -132,6 +139,8 @@ enforced, because Electron exposes no per-session quota to enforce it with (ADR-
   intended way to clear them.
 - The generation counter is not a monotonic clock: deleting the profile directory outside the app and
   letting it be recreated moves the counter, which is intended but is not a "profile was edited" signal.
+- Startup never applies the orphan sweep, even after a complete workspace document decodes successfully.
+  A current account list cannot prove that unlisted login storage is abandoned.
 - The sweep can only recognise our own two naming schemes. Anything else is reported and left, so a future
   change to the partition naming has to update `profile-paths.cjs` or the sweep will stop collecting.
 - `repair` reads the file twice (once for its own verdict, once for the caller's). Accepted: the extra read
@@ -146,6 +155,6 @@ enforced, because Electron exposes no per-session quota to enforce it with (ADR-
 | Measurement, truncation and the ceiling comparison                               | `test/profile-diagnostics.test.cjs`                         |
 | Lifecycle, generation semantics, archived-account safety, refusal while open     | `test/profile-manager.test.cjs`                             |
 | The same through the real app, real data root and real encryption backend        | `src/self-test-profiles.cjs`, run by `npm run test:desktop` |
-| No module over 200 lines; no cycles; all five profile modules stay Electron-free | `test/architecture.test.cjs`                                |
+| No module over 300 lines; no cycles; all five profile modules stay Electron-free | `test/architecture.test.cjs`                                |
 
 `npm run verify` must stay green, and the desktop suite must report 8 PASS.

@@ -1,6 +1,6 @@
-// Opt-in local screen observation scheduler. It only calls the existing inspector; it never emits
-// page input, navigates, or reads page credentials. A session must be open, an account left in the
-// background is paused until it is focused again, and monitoring stops when its window disappears.
+// Local screen observation scheduler. Production sessions start it automatically and the UI can stop
+// or restart it. It only calls the existing inspector; it never emits page input, navigates, or reads
+// page credentials. A background account is paused until focused and a closed window is removed.
 const DEFAULT_INTERVAL_MS = 30000;
 const MIN_INTERVAL_MS = 10000;
 
@@ -37,7 +37,7 @@ function createScreenMonitor({ inspect, isOpen, isFocused = () => true, publish,
       try {
         await inspect(id);
       } catch {
-        /* the inspector publishes an honest unknown state on a capture failure */
+        /* the inspector publishes an explicit inspection-failed status on a capture failure */
       }
     }
     if (active.size) scheduleTimer();

@@ -41,9 +41,10 @@ function describeRegionFailure(region) {
 function recordNewState(captureLab, { png, result, frame, timing }) {
   if (!captureLab || typeof captureLab.record !== 'function') return null;
   const state = result && result.state;
-  // `unknown` is a supported capture label for a person to assert, but it is not a state the reader
-  // recognised, so it is never what a frame is filed under automatically.
-  if (typeof state !== 'string' || state === 'unknown' || !captureLab.states.includes(state)) return null;
+  // An unrecognized result is a classifier outcome, not a real screen label. Table-selection also needs a
+  // person to name the intended table, so neither is filed automatically.
+  if (typeof state !== 'string' || state === 'unrecognized' || state === 'table-selection' || !captureLab.states.includes(state))
+    return null;
   if (captureLab.list().some(sample => sample.observedState === state || sample.expectedState === state)) return null;
   try {
     return captureLab.record({ png, expectedState: state, observed: result, frame, cohort: 'evidence', timing }).id;
@@ -54,16 +55,17 @@ function recordNewState(captureLab, { png, result, frame, timing }) {
 }
 
 /**
- * @param {{getAccount: Function, publish: Function, log: Function, screenReaders: {acquire: Function, release: Function}, captureLab?: {record: Function}, deviceScaleFactor?: () => number, now?: () => number}} deps
+ * @param {{getAccount: Function, publish: Function, log: Function, screenReaders: {acquire: Function, release: Function}, captureLab?: {record: Function}, deviceScaleFactor?: () => number, now?: () => number, inspectionTimeoutMs?: number}} deps
  */
 function createInspector(deps) {
   const { getAccount, publish, log, screenReaders, captureLab, deviceScaleFactor, now = () => performance.now() } = deps;
+  const deadlineMs = deps.inspectionTimeoutMs ?? INSPECTION_TIMEOUT_MS;
 
   /**
    * Capture the game surface once and classify it. The result is a timestamped observation, never
    * proof of responsiveness.
    * @param {string} id
-   * @param {{expectedState: string, cohort?: string}|null} [capture]
+   * @param {{expectedState: string, expectedTable?: string, cohort?: string}|null} [capture]
    */
   async function inspectGame(id, capture = null) {
     const account = getAccount(id);
@@ -82,6 +84,7 @@ function createInspector(deps) {
     /** @type {NodeJS.Timeout|undefined} */
     let timeout;
     let expired = false;
+    const acquisition = new AbortController();
     const startedAt = now();
     try {
       const work = async () => {
@@ -116,7 +119,9 @@ function createInspector(deps) {
           frame = captured.frame;
           captureNotes = captured.notes;
         }
-        const entry = await screenReaders.acquire();
+        const png = picture.resize({ width: CAPTURE_WIDTH }).toPNG();
+        const surfaceMs = now() - surfaceStartedAt;
+        const entry = await screenReaders.acquire({ signal: acquisition.signal });
         try {
           if (expired) throw new Error('Screen inspection timed out.');
           if (captureNotes.length) {
@@ -124,16 +129,20 @@ function createInspector(deps) {
             log(`${account.name}: capture note — ${described}: ${captureNotes.join('; ')}.`, 'warning');
           }
           const reader = await entry.reader;
-          const png = picture.resize({ width: CAPTURE_WIDTH }).toPNG();
-          const surfaceMs = now() - surfaceStartedAt;
+          if (expired) throw new Error('Screen inspection timed out.');
           const recognitionStartedAt = now();
           const result = await reader.inspect(png);
+          // OCR may settle after the deadline. A late result must not enter either the session
+          // model or the local capture corpus, even though the timed-out call already rejected.
+          if (expired) throw new Error('Screen inspection timed out.');
+          if (!stillCurrent()) throw new Error('The game window changed during inspection.');
           const timing = { surfaceMs, recognitionMs: now() - recognitionStartedAt, totalMs: now() - startedAt };
           if (!capture) return { ...result, sampleId: recordNewState(captureLab, { png, result, frame, timing }) };
           if (!captureLab) throw new Error('The local capture lab is unavailable.');
           const sample = captureLab.record({
             png,
             expectedState: capture.expectedState,
+            expectedTable: capture.expectedTable,
             observed: result,
             frame,
             cohort: capture.cohort,
@@ -149,8 +158,9 @@ function createInspector(deps) {
         new Promise((_resolve, reject) => {
           timeout = setTimeout(() => {
             expired = true;
+            acquisition.abort(new Error('Screen inspection timed out.'));
             reject(new Error('Screen inspection timed out.'));
-          }, INSPECTION_TIMEOUT_MS);
+          }, deadlineMs);
         })
       ]);
       if (stillCurrent()) {
@@ -167,7 +177,7 @@ function createInspector(deps) {
       return result;
     } catch (error) {
       if (stillCurrent()) {
-        group.gameScreen = { state: 'unknown', observedAt: new Date().toISOString() };
+        group.gameScreen = { state: 'inspection-failed', observedAt: new Date().toISOString() };
         publish();
       }
       throw error;
