@@ -193,7 +193,7 @@ description to carry._
 | `self-test-context.cjs`        | What the self-test suite is allowed to inspect.                                                                      |
 | `self-test-dropout.cjs`        | The dropout scenario of the self-test: a match with no session behind it.                                            |
 | `self-test-fixtures.cjs`       | The fixture-session scenarios of the packaged self-test: navigation back to the game, automatic                      |
-| `self-test-footprint.cjs`      | Footprint assertions for the packaged self-test: what a session _claims_ to be, read back out of a                   |
+| `self-test-footprint.cjs`      | Footprint assertions for the packaged self-test: what a session *claims* to be, read back out of a                   |
 | `self-test-matches.cjs`        | The match-coordination scenario of the self-test: pairing two real accounts, loading both profiles,                  |
 | `self-test-outputs.cjs`        | The self-test's view of the files Poolside wrote itself.                                                             |
 | `self-test-profiles.cjs`       | Profile management checks for --self-test.                                                                           |
@@ -219,7 +219,7 @@ description to carry._
 | `table-navigation-service.cjs` | Runtime bridge between screen inspection and the pure table-navigation state machine.                                |
 | `table-navigation-state.cjs`   | Pure table-navigation state machine. It describes what must happen without sending game input.                       |
 | `table-visual.cjs`             | A conservative, local visual assist for the selected 1-on-1 venue card.                                              |
-| `target-identity.cjs`          | The target half of a session footprint: the CDP overrides that make a _live page_ claim a configured                 |
+| `target-identity.cjs`          | The target half of a session footprint: the CDP overrides that make a *live page* claim a configured                 |
 | `telemetry-redaction.cjs`      | What may leave the machine.                                                                                          |
 | `timeline-engine.cjs`          | The diagnostic timeline: one ordered history, compiled from the two rings that already record one.                   |
 | `timeline-query.cjs`           | Reading the compiled timeline: the questions a failure asks.                                                         |

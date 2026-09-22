@@ -20,13 +20,14 @@ test('every source module is in the architecture inventory, and every module has
   assert.ok(described.length > 100, 'the inventory covers the application, not a corner of it');
 });
 
-test('the document matches the source exactly, which is what makes the inventory worth reading', () => {
+test('the document matches the source exactly, which is what makes the inventory worth reading', async () => {
   const current = document();
-  assert.equal(modules.apply(current), current, 'run `npm run docs:modules` after adding or renaming a module');
+  assert.equal(await modules.apply(current), current, 'run `npm run docs:modules` after adding or renaming a module');
   assert.ok(current.includes(modules.BEGIN) && current.includes(modules.END));
   // Spot checks against the drift that caused this: the match and run machinery, and the modules added overnight.
   for (const name of ['match-coordination.cjs', 'run-coordination.cjs', 'run-report.cjs', 'pairing-evidence.cjs', 'attention.cjs'])
-    assert.match(current, new RegExp('\\| `' + name.replace('.', '\\.') + '` \\|'), `${name} must be listed`);
+    // The table is padded by Prettier, so only the cell itself is asserted, not the spacing around it.
+    assert.match(current, new RegExp('\\|\\s+`' + name.replace('.', '\\.') + '`\\s+\\|'), `${name} must be listed`);
 });
 
 test('a module without a description is reported rather than listed as unknown', () => {

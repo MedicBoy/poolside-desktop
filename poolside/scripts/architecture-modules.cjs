@@ -84,20 +84,47 @@ function render() {
   ].join('\n');
 }
 
-/** Replace the marked section in the document. @param {string} document */
-function apply(document) {
+/** The project's own Prettier settings for a markdown file, so the written form is the checked form. */
+function markdownOptions() {
+  const rc = JSON.parse(fs.readFileSync(path.join(ROOT, '.prettierrc.json'), 'utf8'));
+  const options = { ...rc, parser: 'markdown' };
+  for (const override of rc.overrides || []) {
+    if (typeof override.files === 'string' && override.files.endsWith('.md')) Object.assign(options, override.options);
+  }
+  delete options.overrides;
+  return options;
+}
+
+/**
+ * Replace the marked section in the document, then format it the way `format:check` will.
+ *
+ * The formatting is not decoration. A generated table is padded and normalised by Prettier (`*emphasis*` becomes
+ * `_emphasis_`, cells are aligned), so an inventory written raw would fail the formatting gate the moment it was
+ * produced — and an inventory that fails the gate is one somebody deletes instead of regenerating.
+ * @param {string} document
+ */
+async function apply(document) {
   const start = document.indexOf(BEGIN);
   const end = document.indexOf(END);
   if (start < 0 || end < 0 || end < start)
     throw new Error(`docs/architecture.md is missing the ${BEGIN} … ${END} markers the inventory is written between.`);
-  return `${document.slice(0, start)}${render()}${document.slice(end + END.length)}`;
+  const inserted = `${document.slice(0, start)}${render()}${document.slice(end + END.length)}`;
+  if (typeof document !== 'string' || !document.includes('#')) return inserted;
+  try {
+    return await require('prettier').format(inserted, markdownOptions());
+  } catch (error) {
+    // Formatting is a convenience here; the inventory itself is the point. A missing formatter must not make the
+    // document uncheckable.
+    if (/** @type {any} */ (error).code === 'MODULE_NOT_FOUND') return inserted;
+    throw error;
+  }
 }
 
-function main() {
+async function main() {
   const write = process.argv.includes('--write');
   const document = fs.readFileSync(DOC, 'utf8');
   const { undescribed } = inventory();
-  const next = apply(document);
+  const next = await apply(document);
   if (write) {
     fs.writeFileSync(DOC, `${next.replace(/\s*$/, '')}\n`, 'utf8');
     console.log(`architecture inventory written: ${inventory().described.length} modules.`);
