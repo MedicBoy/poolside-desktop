@@ -2130,6 +2130,37 @@ dialog p {
 .match-outcome.unchanged {
   color: var(--muted);
 }
+/* What needs attention, above everything else on the Sessions view. A warning is something to fix; an item
+   marked info is something to look at. Nothing is drawn here when the list is empty. */
+.attention-panel {
+  margin: 18px 0 0;
+  padding: 16px 18px;
+  border: 1px solid rgba(252, 211, 77, 0.45);
+  border-radius: 16px;
+  background: rgba(252, 211, 77, 0.08);
+}
+.attention-panel h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+.attention-item {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 0.82rem;
+}
+.attention-item p {
+  margin: 0;
+  color: var(--muted);
+}
+.attention-item small {
+  color: var(--text);
+}
+.attention-item.info strong {
+  color: var(--amber);
+}
 .match-subheading {
   margin: 20px 0 0;
 }

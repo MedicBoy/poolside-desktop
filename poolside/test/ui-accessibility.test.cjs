@@ -360,3 +360,18 @@ test('the match card reports what the balances did, in the wording the evidence 
     assert.match(css, new RegExp('\\.match-outcome\\.' + verdict));
   }
 });
+
+test('the sessions view lists what needs attention, and hides itself when there is nothing', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  assert.match(html, /id="attention-panel" hidden aria-labelledby="attention-title"/);
+  assert.match(html, /<h2 id="attention-title">Needs your attention<\/h2>/);
+  assert.match(html, /id="attention-summary"/);
+  assert.match(html, /id="attention-list"/);
+  assert.match(renderer, /function renderAttention\(\)/);
+  assert.match(renderer, /\$\('#attention-panel'\)\.hidden = items\.length === 0;/);
+  assert.match(renderer, /renderAttention\(\);/);
+  assert.match(renderer, /class="attention-item \$\{escapeHtml\(entry\.level\)\}"/);
+  assert.match(css, /\.attention-panel\s*\{/);
+});

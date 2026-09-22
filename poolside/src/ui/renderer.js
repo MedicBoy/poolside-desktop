@@ -642,6 +642,22 @@ function restoreAccountDisclosureIds(ids) {
     document.querySelector(`${selector}[data-account-id="${id}"]`)?.setAttribute('open', '');
   }
 }
+// Everything that needs the operator's attention, gathered above the account list. Every rule behind it is in
+// attention.cjs; this is only how the list is drawn, and it is drawn only when there is something to say.
+function renderAttention() {
+  const attention = state.attention || { items: [], summary: 'Nothing needs your attention.' };
+  const items = attention.items || [];
+  $('#attention-panel').hidden = items.length === 0;
+  $('#attention-summary').textContent = attention.summary || '';
+  $('#attention-list').innerHTML = items
+    .map(
+      entry =>
+        `<article class="attention-item ${escapeHtml(entry.level)}"><strong>${escapeHtml(entry.title)}</strong><p>${escapeHtml(
+          entry.detail
+        )}</p><small>${escapeHtml(entry.action)}</small></article>`
+    )
+    .join('');
+}
 function renderWorkspaceState() {
   const openAccounts = state.accounts.filter(account => !isClosed(account));
   const label = $('#workspace-state-label');
@@ -1053,6 +1069,7 @@ function render(next) {
         ? `${recognized.length} current screen${recognized.length === 1 ? '' : 's'} recognized locally`
         : 'The last inspected screen could not be recognized';
   renderWorkspaceState();
+  renderAttention();
   $('#receiver-name').textContent = state.accounts.find(a => a.role === 'receiver')?.name || 'Not selected';
   $('#sender-count').textContent = state.accounts.filter(a => a.role === 'sender').length;
   $('#table-value').textContent = state.settings.table;

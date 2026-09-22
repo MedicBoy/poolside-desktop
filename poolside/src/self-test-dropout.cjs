@@ -21,8 +21,13 @@ async function runDropoutCheck(ctx, assert) {
     const armed = await poolside.armRelease({ matchId });
     // Live session state comes from the snapshot, not from the reply: the reply is the ledger, and whether a
     // window is open is process state that the dashboard view resolves.
-    const first = (await poolside.get()).value.matches.active.find(match => match.matchId === matchId);
+    const snapshot = await poolside.get();
+    const first = snapshot.value.matches.active.find(match => match.matchId === matchId);
     const open = first.participants.map(entry => entry.open);
+    // Read while the match is still stuck: the attention list is the panel a problem like this should reach
+    // without being looked for, and the dropout watcher clears the match a few seconds later.
+    const attention = snapshot.value.attention.items.map(entry => entry.code);
+    const attentionTitle = (snapshot.value.attention.items.find(entry => entry.code === 'match-without-session') || {}).title || '';
     const until = Date.now() + 45000;
     let settled = null;
     while (Date.now() < until) {
@@ -33,6 +38,8 @@ async function runDropoutCheck(ctx, assert) {
     const after = await poolside.get();
     return {
       open,
+      attention,
+      attentionTitle,
       armRefused: !armed.ok,
       armError: String(armed.error || ''),
       cancelled: Boolean(settled),
@@ -48,6 +55,12 @@ async function runDropoutCheck(ctx, assert) {
   assert.match(dropout.reason, /session has been closed for \d+ seconds, so m\d+ was cancelled as a dropout\./);
   assert.equal(dropout.active, 0, 'nothing is left in progress once the match with no session behind it is cleared');
   assert.equal(dropout.freed, true, 'and the same two accounts can be paired again straight away');
+  // While it was stuck, the attention list named it — that is the whole point of the list.
+  assert.ok(
+    dropout.attention.includes('match-without-session'),
+    `the attention list missed a match with nothing open: ${JSON.stringify(dropout.attention)}`
+  );
+  assert.match(dropout.attentionTitle, /^m\d+ is in progress with nothing open$/, 'the item names the match');
   // Leave the ledger as the suite found it: cancel the match this check started.
   await dashboard.webContents.executeJavaScript(`(async () => {
     const state = await poolside.get();

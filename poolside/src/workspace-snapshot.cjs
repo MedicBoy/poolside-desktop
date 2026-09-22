@@ -12,6 +12,7 @@ const { buildCapabilityReport } = require('./capability-registry.cjs');
 const { dashboardView } = require('./match-coordination.cjs');
 const { view: runsView } = require('./run-coordination.cjs');
 const { statusFor } = require('./run-status.cjs');
+const attention = require('./attention.cjs');
 const { participantReady } = require('./match-service.cjs');
 const { participantPreflight } = require('./match-preflight.cjs');
 
@@ -233,9 +234,16 @@ function buildSnapshot(activityHistory) {
     })
     .filter(Boolean);
   const compiled = timelineView({ sessions: timelines, events, limit: TIMELINE_VIEW_LIMIT });
+  // Everything that needs the operator's attention, in one list. Derived from the same snapshot the dashboard
+  // reads, so it cannot describe a state the panels below are not showing.
+  // Built once: the match view reconciles the ledger on the way in, so asking for it twice would do that work
+  // twice and publish twice for one snapshot.
+  const matches = matchesView();
+  const attentionItems = attention.items({ accounts, readOnly: workspace.readOnly, matches });
   return {
     accounts,
     archivedAccounts,
+    attention: { items: attentionItems, summary: attention.summary(attentionItems) },
     settings: publicSettings(workspace.data.settings),
     tables: TABLES,
     routePresets: (workspace.data.routePresets || []).map(publicRoutePreset),
@@ -248,7 +256,7 @@ function buildSnapshot(activityHistory) {
     capabilityReport: buildCapabilityReport(workspace.version),
     // Local match coordination: totals, the matches in progress with their live sessions, and the
     // most recent results.
-    matches: matchesView()
+    matches
   };
 }
 

@@ -123,7 +123,18 @@ function createIpc(deps) {
       if (!agreed) throw new Error('Saved activity history was not erased.');
       return clearActivityHistory();
     });
-    registerBackupIpc({ handle, backup: workspaceBackup, dataRoot, chooseDirectory, workspace, save, log });
+    registerBackupIpc({
+      handle,
+      backup: workspaceBackup,
+      dataRoot,
+      chooseDirectory,
+      workspace,
+      save,
+      log,
+      // Which accounts have a window open right now: a running browser profile is copied as it stands, and the
+      // operator is told so rather than discovering it later.
+      openAccountNames: () => workspace.data.accounts.filter(account => sessions.has(account.id)).map(account => account.name)
+    });
     // The way back: what recovery copies exist, and restoring one behind a native confirmation.
     if (workspace.storeFile)
       registerRecoveryIpc({

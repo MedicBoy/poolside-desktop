@@ -58,7 +58,7 @@ function stamp(at) {
 function create(input) {
   const { root, destination, accounts, appVersion, at } = input;
   if (!fs.existsSync(destination) || !fs.statSync(destination).isDirectory()) throw new Error('Choose an existing folder for the backup.');
-  const folder = path.join(destination, `Poolside-backup-${stamp(at)}`);
+  const folder = uniqueFolder(destination, stamp(at));
   if (!isInside(destination, folder)) throw new Error('Choose an existing folder for the backup.');
   fs.mkdirSync(folder, { recursive: true });
   /** @type {{path: string, bytes: number, sha256: string}[]} */
@@ -120,6 +120,88 @@ function create(input) {
   };
 }
 
+/** A backup folder name that is not already taken, so two exports never merge into one folder. */
+function uniqueFolder(destination, name) {
+  let folder = path.join(destination, `Poolside-backup-${name}`);
+  let suffix = 2;
+  while (fs.existsSync(folder)) folder = path.join(destination, `Poolside-backup-${name}-${suffix++}`);
+  return folder;
+}
+
+/** Free bytes on the volume holding `target`, or null when it cannot be asked. */
+function freeBytesAt(target, deps = {}) {
+  if (typeof deps.freeBytes === 'function') return deps.freeBytes(target);
+  try {
+    const stat = fs.statfsSync(target);
+    return stat.bavail * stat.bsize;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a backup would cost, and whether it can be written where the operator chose — asked *before* anything is
+ * copied, because a backup that half-succeeds into a folder that was never suitable is worse than none.
+ *
+ * It checks what can be known without writing: the destination exists and is writable, it is not inside
+ * Poolside's own data folder (a backup that lives inside the thing it backs up is not a backup), there is room
+ * for what the profiles and session files actually measure, and that no account with a window open is being
+ * copied silently — a live profile can change while it is read.
+ * @param {{root: string, destination: string, accounts: any[], openAccounts?: string[]}} input
+ * @param {{freeBytes?: (target: string) => number|null}} [deps]
+ */
+function preflight({ root, destination, accounts = [], openAccounts = [] }, deps = {}) {
+  const problems = [];
+  const notes = [];
+  let usable = false;
+  if (!destination || !fs.existsSync(destination) || !fs.statSync(destination).isDirectory()) {
+    problems.push('Choose an existing folder for the backup.');
+  } else {
+    try {
+      fs.accessSync(destination, fs.constants.W_OK);
+      usable = true;
+    } catch {
+      problems.push('That folder cannot be written to. Choose another one, or change its permissions.');
+    }
+  }
+  if (usable && root && isInside(root, path.resolve(destination)))
+    problems.push("Choose a folder outside Poolside's own data folder: a backup stored inside what it backs up is not a backup.");
+
+  let estimateBytes = 0;
+  for (const account of accounts) {
+    const carryOver = path.join(root, ACCOUNTS_DIR, `${account.id}.plist`);
+    if (fs.existsSync(carryOver)) estimateBytes += fs.statSync(carryOver).size;
+    const profile = path.join(root, PARTITIONS_DIR, partitionName(account.id));
+    if (fs.existsSync(profile)) estimateBytes += measureDirectory(profile).bytes;
+  }
+  const workspaceFile = path.join(root, WORKSPACE_FILE);
+  if (fs.existsSync(workspaceFile)) estimateBytes += fs.statSync(workspaceFile).size;
+  // A tenth of the total, so the answer is not "exactly enough" on a volume that needs room to breathe.
+  estimateBytes += Math.ceil(estimateBytes / 10);
+
+  const freeBytes = usable ? freeBytesAt(destination, deps) : null;
+  if (usable && freeBytes !== null && estimateBytes > freeBytes)
+    problems.push(
+      `There is not enough room: the backup needs about ${Math.ceil(estimateBytes / 1048576)} MB and ${Math.floor(freeBytes / 1048576)} MB is free on that drive.`
+    );
+  if (freeBytes === null && usable) notes.push('The free space on that drive could not be read, so the size was not checked against it.');
+  const open = accounts.filter(account => openAccounts.includes(account.name)).map(account => account.name);
+  if (open.length)
+    notes.push(
+      `${open.join(' and ')} ${open.length === 1 ? 'has a window open' : 'have windows open'}; a browser profile that is running is copied as it stands, which is a snapshot of a live profile rather than a quiet one.`
+    );
+  return {
+    ok: problems.length === 0,
+    problems,
+    notes,
+    estimateBytes,
+    freeBytes,
+    accountCount: accounts.length,
+    openAccounts: open,
+    folder: usable ? uniqueFolder(destination, stamp(Date.now())) : null
+  };
+}
+
 /**
  * Read a backup folder and copy in whatever it carries that this workspace does not already have.
  * @param {{root: string, source: string, existing: any[]}} input
@@ -166,4 +248,15 @@ function restore(input) {
   };
 }
 
-module.exports = { create, restore, measureDirectory, stamp, WORKSPACE_FILE, MANIFEST_FILE, SESSIONS_DIR, PROFILES_DIR };
+module.exports = {
+  create,
+  restore,
+  preflight,
+  measureDirectory,
+  stamp,
+  uniqueFolder,
+  WORKSPACE_FILE,
+  MANIFEST_FILE,
+  SESSIONS_DIR,
+  PROFILES_DIR
+};
