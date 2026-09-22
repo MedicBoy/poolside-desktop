@@ -138,10 +138,10 @@ async function resolveAndApplyFootprint(session, account, settings, deps) {
  * then believes something false about that session's footprint.
  * @param {{footprint: any}} group
  * @param {import('electron').Session} session
- * @param {{log: import('./types.cjs').LogFn, accountName: string, gameUrl: string, publish: () => void}} deps
+ * @param {{log: import('./types.cjs').LogFn, accountName: string, gameUrl: string, publish: () => void, onRouteVerified?: ((verified: any) => void)|null}} deps
  */
 async function reportFootprint(group, session, deps) {
-  const { log, accountName, gameUrl, publish } = deps;
+  const { log, accountName, gameUrl, publish, onRouteVerified = null } = deps;
   const { route, identity } = group.footprint;
   if (route.configured) {
     const verified = await verifyRoute(session, route, gameUrl);
@@ -149,6 +149,15 @@ async function reportFootprint(group, session, deps) {
     if (verified.ok && !verified.matches)
       log(`${accountName}: the session is NOT using the configured route (it reports ${verified.route.label}).`, 'warning');
     else if (verified.ok) log(`${accountName}: route confirmed — ${verified.route.label}.`);
+    // The measurement is handed on so it can be recorded against the saved location it was about, rather than
+    // being reported once and forgotten. A caller that does not care simply omits the callback.
+    if (typeof onRouteVerified === 'function') {
+      try {
+        onRouteVerified(verified);
+      } catch (error) {
+        log(`${accountName}: the route result could not be noted (${messageOf(error)}).`, 'warning');
+      }
+    }
   }
   group.footprint.storage = await measureStorage(session, identity);
   if (group.footprint.storage.overQuota)

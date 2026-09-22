@@ -19,6 +19,7 @@ const { resolveRecovery } = require('./recovery-settings.cjs');
 const { attachProxyAuthentication } = require('./proxy-auth.cjs');
 const { webRTCPolicyFor } = require('./webrtc-policy.cjs');
 const { createSessionActions } = require('./session-actions.cjs');
+const { noteVerification } = require('./route-health.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const store = require('./workspace.cjs');
 
@@ -149,7 +150,15 @@ function createSessionManager(deps) {
       log(`${account.name}: ${messageOf(error)}`, 'warning');
       return;
     }
-    await reportFootprint(group, isolated, { log, accountName: account.name, gameUrl: GAME_URL, publish });
+    await reportFootprint(group, isolated, {
+      log,
+      accountName: account.name,
+      gameUrl: GAME_URL,
+      publish,
+      // The exit address this session actually leaves from is recorded against the saved location it was told to
+      // use, so the location's row says what happened rather than only what was configured.
+      onRouteVerified: verified => noteVerification({ workspace, save: store.save, log, account, verified })
+    });
     if (onSessionOpened && sessions.get(id) === group && !window.isDestroyed()) onSessionOpened(id);
   }
 

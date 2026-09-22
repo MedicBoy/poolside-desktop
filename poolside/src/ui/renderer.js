@@ -792,7 +792,7 @@ function renderRoutePresets() {
     ? presets
         .map(
           preset =>
-            `<div class="route-preset"><strong>${escapeHtml(preset.name)}</strong><span>${escapeHtml(preset.enabled ? preset.spec : `${preset.spec} · disabled`)}${preset.bypass ? ` · bypass ${escapeHtml(preset.bypass)}` : ''}</span><button class="text-button" data-route-preset-edit="${escapeHtml(preset.id)}">Edit</button><button class="text-button" data-route-preset-delete="${escapeHtml(preset.id)}">Remove</button></div>${routePresetAccounts(preset)}`
+            `<div class="route-preset"><strong>${escapeHtml(preset.name)}</strong><span>${escapeHtml(preset.enabled ? preset.spec : `${preset.spec} · disabled`)}${preset.bypass ? ` · bypass ${escapeHtml(preset.bypass)}` : ''}${preset.health ? ` · ${escapeHtml(preset.health)}` : ''}</span><button class="text-button" data-route-preset-test="${escapeHtml(preset.id)}">Try it now</button><button class="text-button" data-route-preset-edit="${escapeHtml(preset.id)}">Edit</button><button class="text-button" data-route-preset-delete="${escapeHtml(preset.id)}">Remove</button></div>${routePresetAccounts(preset)}`
         )
         .join('')
     : '<p class="muted">No saved network locations yet.</p>';
@@ -1602,6 +1602,15 @@ $('#route-preset-form').addEventListener('submit', async event => {
   $('#route-preset-form').reset();
 });
 $('#route-preset-list').addEventListener('click', async event => {
+  const test = event.target.closest('[data-route-preset-test]');
+  if (test) {
+    // The saved address is tested by the main process, by id: the page never has to hold it to try it.
+    test.disabled = true;
+    const result = await call(() => poolside.testPresetLocation(test.dataset.routePresetTest));
+    test.disabled = false;
+    if (result.ok) toast(result.value.message);
+    return;
+  }
   const edit = event.target.closest('[data-route-preset-edit]');
   if (edit) {
     startEditingPreset(edit.dataset.routePresetEdit);

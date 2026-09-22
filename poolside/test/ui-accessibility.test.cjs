@@ -387,6 +387,11 @@ test('a saved network location can be edited, and the address field cannot be fi
   assert.match(renderer, /editing \? poolside\.updateRoutePreset\(\{ id: editing, \.\.\.fields \}\) : poolside\.addRoutePreset\(fields\)/);
   // Cancelling is a real way out that says nothing was saved.
   assert.match(renderer, /The edit was cancelled\. Nothing was saved\./);
+  // The health sentence comes from the main process, and trying a saved location goes by id rather than by
+  // handing the page the address it is not allowed to hold.
+  assert.match(renderer, /preset\.health \? ` · \$\{escapeHtml\(preset\.health\)\}` : ''/);
+  assert.match(renderer, /data-route-preset-test="\$\{escapeHtml\(preset\.id\)\}"/);
+  assert.match(renderer, /poolside\.testPresetLocation\(test\.dataset\.routePresetTest\)/);
 });
 
 test('the match card reports what the balances did, in the wording the evidence owns', () => {

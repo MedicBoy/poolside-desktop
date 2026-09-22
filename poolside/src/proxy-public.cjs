@@ -1,6 +1,7 @@
 // Renderer-safe proxy labels. Credentials stay in main-process configuration only.
 
 const { parseProxySpec } = require('./proxy-spec.cjs');
+const { describeHealth } = require('./route-presets.cjs');
 
 /** @param {unknown} spec */
 function publicProxySpec(spec) {
@@ -9,14 +10,21 @@ function publicProxySpec(spec) {
   return typeof spec === 'string' ? spec : '';
 }
 
-/** @param {any} preset */
+/**
+ * What the dashboard may know about a saved location: its name, its masked address, and what the application
+ * last learned about it — never the address itself.
+ * @param {any} preset
+ */
 function publicRoutePreset(preset) {
   return {
     id: String(preset?.id || ''),
     name: String(preset?.name || ''),
     enabled: preset?.enabled !== false,
     spec: publicProxySpec(preset?.spec),
-    bypass: typeof preset?.bypass === 'string' ? preset.bypass : ''
+    bypass: typeof preset?.bypass === 'string' ? preset.bypass : '',
+    // The sentence is built here rather than in the page, so the wording lives where the record does and the
+    // renderer has nothing to compute and nothing to get wrong.
+    health: describeHealth(preset)
   };
 }
 

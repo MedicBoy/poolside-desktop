@@ -1,8 +1,8 @@
 const routePresets = require('./route-presets.cjs');
 const { publicRoutePreset } = require('./proxy-public.cjs');
 
-/** @param {{handle: (name: string, fn: (input: any) => any) => void, workspace: any, save: (value: any) => void, log: (message: string) => void, sessions?: Map<string, any>}} deps */
-function registerRoutePresetIpc({ handle, workspace, save, log, sessions }) {
+/** @param {{handle: (name: string, fn: (input: any) => any) => void, workspace: any, save: (value: any) => void, log: (message: string) => void, sessions?: Map<string, any>, probe?: ((spec: string) => Promise<{ok: boolean, message: string, ip?: string}>)|null}} deps */
+function registerRoutePresetIpc({ handle, workspace, save, log, sessions, probe = null }) {
   handle('route-preset:add', input => {
     const preset = routePresets.create(input, workspace.data.routePresets || []);
     save({ ...workspace.data, routePresets: [...(workspace.data.routePresets || []), preset] });
@@ -55,6 +55,21 @@ function registerRoutePresetIpc({ handle, workspace, save, log, sessions }) {
     if (used.length) throw new Error(`Remove this preset from ${used.length} account(s) before deleting it.`);
     save({ ...workspace.data, routePresets: (workspace.data.routePresets || []).filter(item => item.id !== id) });
     log(`Route preset ${preset.name} removed.`);
+  });
+  // Trying a **saved** location again, by id: the address stays in the main process, so the page never has to be
+  // handed the one thing it is not allowed to hold in order to test it. What comes back is the answer and the
+  // updated sentence.
+  handle('route-preset:test', async input => {
+    const id = input && typeof input.id === 'string' ? input.id : '';
+    const presets = workspace.data.routePresets || [];
+    const preset = presets.find(item => item.id === id);
+    if (!preset) throw new Error('Route preset not found.');
+    if (typeof probe !== 'function') throw new Error('Trying a saved location is not available in this build.');
+    const result = await probe(preset.spec);
+    const updated = routePresets.recordCheck(preset, { at: Date.now(), ok: result.ok === true, message: result.message });
+    save({ ...workspace.data, routePresets: presets.map(item => (item.id === id ? updated : item)) });
+    log(`Saved location ${preset.name}: ${result.ok ? 'the address answered' : 'the address did not answer'} — ${result.message}`);
+    return { ok: result.ok === true, message: result.message, preset: publicRoutePreset(updated) };
   });
 }
 

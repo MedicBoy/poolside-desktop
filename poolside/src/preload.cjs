@@ -3,6 +3,7 @@ contextBridge.exposeInMainWorld('poolside', {
   get: () => ipcRenderer.invoke('workspace:get'),
   addRoutePreset: input => ipcRenderer.invoke('route-preset:add', input),
   updateRoutePreset: input => ipcRenderer.invoke('route-preset:update', input),
+  testPresetLocation: id => ipcRenderer.invoke('route-preset:test', { id }),
   deleteRoutePreset: id => ipcRenderer.invoke('route-preset:delete', id),
   assignRoutePreset: input => ipcRenderer.invoke('route-preset:assign', input),
   testRoute: spec => ipcRenderer.invoke('route:test', { spec }),

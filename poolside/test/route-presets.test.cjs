@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { create, decode, update } = require('../src/route-presets.cjs');
+const { create, decode, update, recordCheck, describeHealth, FAILURE_HISTORY } = require('../src/route-presets.cjs');
 const { resolveProxyRoute } = require('../src/proxy.cjs');
 test('route presets validate, persist, and supply a selected account route', () => {
   const preset = create({ name: 'Private route', spec: 'socks5://127.0.0.1:1080', bypass: '<local>', enabled: true }, []);
@@ -50,4 +50,50 @@ test('an edit cannot take another location name, or an identity that does not ex
   assert.throws(() => update({ id: 'f0e1d2c3-1111-4222-8333-444444444444', name: 'Elsewhere' }, [london]), /not found/);
   // Renaming a location to its own name is not a collision with itself.
   assert.equal(update({ id: london.id, name: 'London' }, [london]).name, 'London');
+});
+
+test('a location keeps what was learned about it, and the history is bounded', () => {
+  const preset = create({ name: 'London', spec: '198.105.121.200:6462' }, []);
+  assert.equal(describeHealth(preset, 0), 'Not checked from here yet.', 'a location that was never tried says so');
+  const at = Date.parse('2026-09-22T10:00:00Z');
+  let checked = recordCheck(preset, { at, ok: true, message: 'the address answered as 198.105.121.200' });
+  assert.equal(checked.checks, 1);
+  assert.equal(checked.lastResult, 'ok');
+  assert.deepEqual(checked.failures, []);
+  // Four failures against a history of three: the newest are kept, so a row cannot grow without limit.
+  for (let attempt = 1; attempt <= FAILURE_HISTORY + 1; attempt += 1)
+    checked = recordCheck(checked, { at: at + attempt * 60000, ok: false, message: `attempt ${attempt} timed out` });
+  assert.equal(checked.checks, FAILURE_HISTORY + 2);
+  assert.equal(checked.failures.length, FAILURE_HISTORY);
+  assert.equal(checked.failures.at(-1).reason, `attempt ${FAILURE_HISTORY + 1} timed out`);
+  assert.equal(describeHealth(checked, at + 360000), 'Did not work 2 minutes ago — attempt 4 timed out, 3 times in a row');
+  // A success afterwards does not erase the record of what failed: the count and the times stay, so "it worked
+  // once" cannot quietly become "it always worked".
+  const recovered = recordCheck(checked, { at: at + 420000, ok: true, message: 'the address answered as 198.105.121.200' });
+  assert.equal(recovered.lastResult, 'ok');
+  assert.equal(recovered.failures.length, FAILURE_HISTORY);
+  assert.equal(recovered.checks, FAILURE_HISTORY + 3);
+  assert.equal(describeHealth(recovered, at + 480000), 'Worked 1 minute ago — the address answered as 198.105.121.200');
+});
+
+test('stored health survives a reload, and junk health is dropped rather than kept', () => {
+  const at = Date.parse('2026-09-22T10:00:00Z');
+  const preset = recordCheck(create({ name: 'London', spec: '198.105.121.200:6462' }, []), {
+    at,
+    ok: false,
+    message: 'refused credentials'
+  });
+  const reloaded = decode([preset])[0];
+  assert.equal(reloaded.lastResult, 'failed');
+  assert.equal(reloaded.failures.length, 1);
+  assert.equal(reloaded.checks, 1);
+  // A hand-edited document is a document: an impossible timestamp, an unknown verdict and a novel-length reason
+  // are all refused or bounded, and the address itself is what decides whether the record is kept at all.
+  const junk = decode([{ ...preset, lastCheckedAt: 'yesterday-ish', lastResult: 'maybe', lastDetail: 'x'.repeat(5000) }]);
+  assert.equal(junk.length, 1);
+  assert.equal(junk[0].lastCheckedAt, undefined, 'an unreadable time is no time at all');
+  assert.equal(junk[0].lastResult, undefined);
+  assert.equal(junk[0].lastDetail, undefined);
+  const bounded = decode([{ ...preset, lastDetail: 'y'.repeat(5000) }]);
+  assert.equal(bounded[0].lastDetail.length, 160);
 });

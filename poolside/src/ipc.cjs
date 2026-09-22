@@ -81,7 +81,9 @@ function createIpc(deps) {
 
   function register() {
     handle('workspace:get', () => snapshot());
-    registerRoutePresetIpc({ handle, workspace, save, log, sessions });
+    // The same probe the pasted-address test uses: trying a saved location goes through the identical path, so a
+    // saved address cannot behave differently from one the operator just typed.
+    registerRoutePresetIpc({ handle, workspace, save, log, sessions, probe: probeRoute });
     handle('account:open', id => windows.openAccount(id));
     handle('account:close', id => {
       getAccount(id);

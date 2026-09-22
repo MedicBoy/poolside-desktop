@@ -1,5 +1,48 @@
 const { randomUUID } = require('node:crypto');
 const { parseProxySpec, normaliseBypass } = require('./proxy.cjs');
+
+/** How many failures a saved location keeps. Enough to see a pattern, small enough to read. */
+const FAILURE_HISTORY = 3;
+/** A stored reason is a sentence from the app, not a page: bounded so a document cannot grow a novel. */
+const DETAIL_LIMIT = 160;
+
+/**
+ * What has been learned about a saved location by using it, kept flat on the record so it survives the same
+ * round trip every other field does. `checks` counts attempts; `failures` keeps the last few reasons, because
+ * "it failed once" and "it fails every time I open the second account" are different situations.
+ */
+function healthOf(source) {
+  const preset = source && typeof source === 'object' ? source : {};
+  const at = typeof preset.lastCheckedAt === 'string' && Number.isFinite(Date.parse(preset.lastCheckedAt)) ? preset.lastCheckedAt : null;
+  const result = preset.lastResult === 'ok' || preset.lastResult === 'failed' ? preset.lastResult : null;
+  if (!at || !result) return {};
+  const failures = Array.isArray(preset.failures)
+    ? preset.failures
+        .filter(entry => entry && typeof entry.reason === 'string' && Number.isFinite(Date.parse(entry.at)))
+        .slice(-FAILURE_HISTORY)
+        .map(entry => ({ at: new Date(entry.at).toISOString(), reason: entry.reason.slice(0, DETAIL_LIMIT) }))
+    : [];
+  return {
+    lastCheckedAt: at,
+    lastResult: result,
+    lastDetail: typeof preset.lastDetail === 'string' ? preset.lastDetail.slice(0, DETAIL_LIMIT) : '',
+    checks: Number.isInteger(preset.checks) && preset.checks > 0 ? preset.checks : 1,
+    failures
+  };
+}
+
+/** Plain words for how long ago something happened. No clock maths the reader has to do. */
+function ago(ms) {
+  const value = Math.max(0, Math.round(ms));
+  if (value < 45000) return 'just now';
+  const minutes = Math.round(value / 60000);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 function valid(input) {
   if (!input || typeof input !== 'object') throw new Error('Route preset is invalid.');
   const name = String(input.name || '').trim();
@@ -24,7 +67,7 @@ function decode(input) {
       const preset = valid(item);
       if (!/^[0-9a-f-]{36}$/i.test(item.id) || names.has(preset.name.toLowerCase())) return [];
       names.add(preset.name.toLowerCase());
-      return [{ id: item.id, ...preset }];
+      return [{ id: item.id, ...preset, ...healthOf(item) }];
     } catch {
       return [];
     }
@@ -35,6 +78,46 @@ function create(input, existing) {
   if (existing.some(item => item.name.toLowerCase() === preset.name.toLowerCase()))
     throw new Error('A route preset already uses that name.');
   return { id: randomUUID(), ...preset };
+}
+
+/**
+ * What a check of this location found, recorded on the record.
+ *
+ * `ok` is the operator's own test answering, or a live session's exit address being read: both are the
+ * application measuring the route rather than believing it. The outcome is kept, and so is the reader's own
+ * wording — a reason that is not recorded is a reason nobody can act on later.
+ * @param {any} preset @param {{at?: number, ok?: boolean, message?: string}} finding
+ */
+function recordCheck(preset, finding = {}) {
+  const at = Number.isFinite(finding.at) ? new Date(Number(finding.at)).toISOString() : new Date().toISOString();
+  const detail = String(finding.message || '').slice(0, DETAIL_LIMIT);
+  const ok = finding.ok === true;
+  const previous = healthOf(preset);
+  const failures = ok
+    ? previous.failures || []
+    : [...(previous.failures || []), { at, reason: detail || 'no reason was reported' }].slice(-FAILURE_HISTORY);
+  return {
+    ...preset,
+    lastCheckedAt: at,
+    lastResult: ok ? 'ok' : 'failed',
+    lastDetail: detail,
+    checks: (Number.isInteger(previous.checks) ? previous.checks : 0) + 1,
+    failures
+  };
+}
+
+/**
+ * The same record, in a sentence the Settings list can show without doing any arithmetic of its own.
+ * @param {any} preset @param {number} [now]
+ */
+function describeHealth(preset, now = Date.now()) {
+  const health = healthOf(preset);
+  if (!health.lastCheckedAt) return 'Not checked from here yet.';
+  const when = ago(now - Date.parse(health.lastCheckedAt));
+  const detail = health.lastDetail ? ` — ${health.lastDetail}` : '';
+  if (health.lastResult === 'ok') return `Worked ${when}${detail}`;
+  const repeated = health.failures.length > 1 ? `, ${health.failures.length} times in a row` : '';
+  return `Did not work ${when}${detail}${repeated}`;
 }
 
 /**
@@ -63,4 +146,4 @@ function update(input, existing) {
   return { ...current, ...preset };
 }
 
-module.exports = { valid, decode, create, update };
+module.exports = { valid, decode, create, update, recordCheck, describeHealth, healthOf, FAILURE_HISTORY, DETAIL_LIMIT };

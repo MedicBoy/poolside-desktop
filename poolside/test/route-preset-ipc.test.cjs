@@ -6,7 +6,8 @@ const assert = require('node:assert/strict');
 const model = require('../src/model.cjs');
 const { registerRoutePresetIpc } = require('../src/route-preset-ipc.cjs');
 
-function fixture() {
+/** @param {{probe?: ((spec: string) => Promise<any>)|null}} [options] */
+function fixture({ probe = null } = {}) {
   const newfie = model.account({ name: 'Newfie', role: 'receiver' });
   const gmail = model.account({ name: 'Gmail', role: 'sender' }, [newfie]);
   // A document that decodes, so a test can reload it the way the application does on the next start.
@@ -24,7 +25,8 @@ function fixture() {
       workspace.data = next;
     },
     log: message => messages.push(message),
-    sessions
+    sessions,
+    probe
   });
   const call = (name, input) => handlers.get(name)(input);
   const account = name => workspace.data.accounts.find(candidate => candidate.name === name);
@@ -119,4 +121,38 @@ test('editing with a typed address replaces the stored one, and an unknown id is
   assert.equal(workspace.data.routePresets[0].bypass, '<local>');
   assert.equal(edited.spec, '31.59.20.176:6754');
   assert.throws(() => call('route-preset:update', { id: 'nope', name: 'Anything' }), /Route preset not found\./);
+});
+
+test('trying a saved location tests the stored address by id and records what happened', async () => {
+  const asked = [];
+  const { workspace, call } = fixture({
+    probe: async spec => {
+      asked.push(spec);
+      return { ok: false, message: 'Refused: check the username and password.' };
+    }
+  });
+  const london = call('route-preset:add', { name: 'London-1', spec: '198.105.121.200:6462:user:secret', enabled: true });
+  const result = await call('route-preset:test', { id: london.id });
+  // The stored address is the one that was tried, and the page never had to send or receive it.
+  assert.deepEqual(asked, ['198.105.121.200:6462:user:secret']);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /Refused/);
+  assert.match(result.preset.spec, /credentials set/, 'the answer carries the masked address, never the real one');
+  assert.match(result.preset.health, /^Did not work/);
+  const record = workspace.data.routePresets[0];
+  assert.equal(record.lastResult, 'failed');
+  assert.equal(record.checks, 1);
+  assert.equal(record.failures.length, 1);
+  assert.equal(record.spec, '198.105.121.200:6462:user:secret', 'recording a result never rewrites the address');
+});
+
+test('a saved location that answered records a success, and an unknown one is refused', async () => {
+  const { call } = fixture({
+    probe: async () => ({ ok: true, ip: '198.105.121.200', message: 'Worked — the address is 198.105.121.200.' })
+  });
+  const london = call('route-preset:add', { name: 'London-1', spec: '198.105.121.200:6462', enabled: true });
+  const result = await call('route-preset:test', { id: london.id });
+  assert.equal(result.ok, true);
+  assert.match(result.preset.health, /^Worked/);
+  await assert.rejects(() => call('route-preset:test', { id: 'nope' }), /Route preset not found\./);
 });
