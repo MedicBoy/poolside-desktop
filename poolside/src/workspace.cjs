@@ -1,12 +1,12 @@
 // The persisted workspace document, activity feed, and snapshot the dashboard renders.
 
 const fs = require('node:fs');
-const model = require('./model.cjs');
 const { messageOf } = require('./errors.cjs');
 const { events, workspace } = require('./state.cjs');
 const { createWorkspaceHistory } = require('./workspace-history.cjs');
 const { buildSnapshot, profileView, TIMELINE_VIEW_LIMIT } = require('./workspace-snapshot.cjs');
 const { writeWorkspace, recoveryAvailable } = require('./workspace-file.cjs');
+const workspaceVersion = require('./workspace-version.cjs');
 
 const MAX_EVENTS = 100;
 
@@ -130,12 +130,22 @@ function load(file) {
     return { state: 'missing' };
   }
   try {
-    workspace.data = model.decode(JSON.parse(fs.readFileSync(file, 'utf8')));
+    // The version is judged before the contents: a document from a newer build and a damaged document need
+    // opposite actions from the operator, and one sentence for both is a sentence that helps neither.
+    const read = workspaceVersion.readDocument(JSON.parse(fs.readFileSync(file, 'utf8')));
+    if (!read.ok) throw Object.assign(new Error(read.message), { userMessage: read.message });
+    workspace.data = read.document;
     workspace.readOnly = false;
     workspace.authoritative = true;
     return { state: 'loaded' };
-  } catch {
+  } catch (error) {
     workspace.readOnly = true;
+    // A version problem is reported as itself, because "could not be read" points the operator at the wrong
+    // remedy; anything else keeps the wording that names recovery material where it exists.
+    if (error && /** @type {any} */ (error).userMessage) {
+      log(String(/** @type {any} */ (error).userMessage), 'warning');
+      return { state: 'invalid' };
+    }
     log(
       recoveryAvailable(file)
         ? 'Workspace file could not be read. A previous or staged copy exists; existing data was preserved for recovery.'
