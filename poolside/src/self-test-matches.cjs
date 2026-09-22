@@ -188,6 +188,33 @@ async function runMatchChecks(ctx, assert) {
 
   await assertBothWindowsReadable();
 
+  // --- Do these two sessions look like one machine? ----------------------------------------------
+  // Through the same channel the dashboard calls, against the two real windows that are open right now. Neither
+  // of these accounts has an identity of its own, so the honest answer is that they are identical in every way
+  // this list can see — which is exactly the situation the operator is asked to fix before a pairing is expected
+  // to look like two machines.
+  const compared = await dashboard.webContents.executeJavaScript(`(async () => {
+    const result = await poolside.compareSessions();
+    return {
+      ok: result.ok,
+      error: String(result.error || ''),
+      names: result.ok ? result.value.sessions.map(session => session.name) : [],
+      rows: result.ok ? result.value.rows.length : -1,
+      wellFormed: result.ok
+        ? result.value.rows.every(row => row.label && Array.isArray(row.values) && row.values.length === result.value.sessions.length)
+        : false,
+      same: result.ok ? result.value.rows.filter(row => row.same).length : -1,
+      verdict: result.ok ? String(result.value.verdict || '') : ''
+    };
+  })()`);
+  assert.equal(compared.ok, true, `the comparison was refused: ${compared.error}`);
+  assert.equal(compared.names.length, matchAccountIds.length, 'every open session is in the comparison');
+  assert.equal(compared.rows, 10, 'one row per field the comparison declares');
+  assert.equal(compared.wellFormed, true, 'every row carries one value per session compared');
+  assert.ok(compared.same > 0, 'two sessions with no identity of their own report the same values');
+  assert.match(compared.verdict, /one machine/, 'and the sentence says so, in the operator terms');
+  console.log(`... comparison: ${compared.same}/${compared.rows} fields the same — ${compared.verdict}`);
+
   // Leave the session map as this check found it, then stop serving the fixture.
   await dashboard.webContents.executeJavaScript(
     `(async () => { for (const id of ${JSON.stringify(matchAccountIds)}) await poolside.close(id); })()`

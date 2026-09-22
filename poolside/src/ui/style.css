@@ -2163,6 +2163,42 @@ dialog p {
 }
 /* Getting started, shown only while the workspace is new: the same three facts every time, in the order they
    have to happen, and gone as soon as the workspace is in use. */
+/* Two sessions side by side. A field that differs is the point; a field that is the same on both is called out,
+   because "these two look like one machine" is the thing worth noticing. */
+.compare-table {
+  display: grid;
+  gap: 0;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 0.8rem;
+}
+.compare-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 10px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--line);
+  word-break: break-word;
+}
+.compare-row:first-child {
+  border-top: 0;
+}
+.compare-head {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+.compare-row > span:first-child {
+  color: var(--muted);
+}
+.compare-same {
+  color: var(--muted);
+}
+.compare-same.same {
+  color: var(--amber);
+}
 .guidance-panel {
   margin: 18px 0 0;
   padding: 16px 18px;

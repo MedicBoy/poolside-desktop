@@ -1,7 +1,8 @@
 const routePresets = require('./route-presets.cjs');
 const { publicRoutePreset } = require('./proxy-public.cjs');
+const { formatMs } = require('./route-probe-format.cjs');
 
-/** @param {{handle: (name: string, fn: (input: any) => any) => void, workspace: any, save: (value: any) => void, log: (message: string) => void, sessions?: Map<string, any>, probe?: ((spec: string) => Promise<{ok: boolean, message: string, ip?: string}>)|null}} deps */
+/** @param {{handle: (name: string, fn: (input: any) => any) => void, workspace: any, save: (value: any) => void, log: (message: string) => void, sessions?: Map<string, any>, probe?: ((spec: string) => Promise<{ok: boolean, message: string, ip?: string, ms?: number}>)|null}} deps */
 function registerRoutePresetIpc({ handle, workspace, save, log, sessions, probe = null }) {
   handle('route-preset:add', input => {
     const preset = routePresets.create(input, workspace.data.routePresets || []);
@@ -66,7 +67,13 @@ function registerRoutePresetIpc({ handle, workspace, save, log, sessions, probe 
     if (!preset) throw new Error('Route preset not found.');
     if (typeof probe !== 'function') throw new Error('Trying a saved location is not available in this build.');
     const result = await probe(preset.spec);
-    const updated = routePresets.recordCheck(preset, { at: Date.now(), ok: result.ok === true, message: result.message });
+    // What is stored is the short version, so the row reads "Worked 4 minutes ago — left through 198.105.121.200
+    // in 340 ms" rather than repeating the sentence the panel shows in full at the time.
+    const detail =
+      result.ok === true && result.ip
+        ? `left through ${result.ip}${Number.isFinite(result.ms) ? ` in ${formatMs(Number(result.ms))}` : ''}`
+        : result.message;
+    const updated = routePresets.recordCheck(preset, { at: Date.now(), ok: result.ok === true, message: detail });
     save({ ...workspace.data, routePresets: presets.map(item => (item.id === id ? updated : item)) });
     log(`Saved location ${preset.name}: ${result.ok ? 'the address answered' : 'the address did not answer'} — ${result.message}`);
     return { ok: result.ok === true, message: result.message, preset: publicRoutePreset(updated) };

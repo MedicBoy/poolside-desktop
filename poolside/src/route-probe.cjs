@@ -8,7 +8,7 @@
 const { BrowserWindow, session } = require('electron');
 const { parseProxySpec } = require('./proxy-spec.cjs');
 const { attachProxyAuthentication } = require('./proxy-auth.cjs');
-const { readIpFromBody, describeSuccess, describeFailure } = require('./route-probe-format.cjs');
+const { readIpFromBody, describeSuccess, describeFailure, describeNotAnAddress } = require('./route-probe-format.cjs');
 
 const PROBE_ENDPOINT = 'https://api.ipify.org?format=json';
 const PROBE_TIMEOUT_MS = 25000;
@@ -31,27 +31,35 @@ function withDeadline(promise, ms) {
 
 /**
  * @param {unknown} spec the address as the operator pasted it
- * @returns {Promise<{ok: true, ip: string, message: string}|{ok: false, message: string}>}
+ * @returns {Promise<{ok: true, ip: string, ms: number, message: string}|{ok: false, ms: number, message: string}>}
  */
 async function probeRoute(spec) {
   const parsed = parseProxySpec(spec);
-  if (!parsed.ok) return { ok: false, message: `That address is not usable: ${parsed.error}.` };
+  if (!parsed.ok) return { ok: false, ms: 0, message: `That address is not usable: ${parsed.error}.` };
   const isolated = session.fromPartition(`route-probe-${Date.now()}`);
   await isolated.setProxy({ mode: parsed.mode, proxyRules: parsed.proxyRules });
   const window = new BrowserWindow({ show: false, webPreferences: { session: isolated, sandbox: true } });
   // The parsed spec and the resolved route are the same shape at runtime; the parser's narrower type is
   // what the type checker follows, so the cast says which one is being passed and why.
   attachProxyAuthentication(window.webContents, /** @type {any} */ (parsed));
+  // Timed on the monotonic clock: this is how long a request through the address takes from here, which is the
+  // number the operator is choosing to live with for every request their session makes.
+  const startedAt = performance.now();
   try {
     const body = await withDeadline(
       window.loadURL(PROBE_ENDPOINT).then(() => window.webContents.executeJavaScript('document.body.innerText')),
       PROBE_TIMEOUT_MS
     );
     const ip = readIpFromBody(body);
-    if (!ip) return { ok: false, message: 'Something answered, but not with an address, so this is not a proxy.' };
-    return { ok: true, ip, message: describeSuccess({ ip }) };
+    const ms = Math.round(performance.now() - startedAt);
+    if (!ip) return { ok: false, ms, message: describeNotAnAddress() };
+    return { ok: true, ip, ms, message: describeSuccess({ ip, ms }) };
   } catch (error) {
-    return { ok: false, message: describeFailure(error instanceof Error ? error.message : String(error), parsed) };
+    return {
+      ok: false,
+      ms: Math.round(performance.now() - startedAt),
+      message: describeFailure(error instanceof Error ? error.message : String(error), parsed)
+    };
   } finally {
     if (!window.isDestroyed()) window.destroy();
   }

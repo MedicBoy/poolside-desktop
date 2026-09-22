@@ -92,6 +92,8 @@ Two behaviours are worth knowing when using it:
 - **A refusal lands on the field that caused it.** `settings:save` returns `{saved: false, errors: [{path, message}]}` inside a successful call, so the control is marked, focused, and named — rather than the panel reporting one sentence about itself. A value that a field's grammar refuses is an error when you typed it, even though the same value is only _ignored_ when it was already stored by something else.
 - **A blank field means "leave it alone", not "clear it".** Clearing is explicit, and a route carrying a username and password is shown masked with no value handed to the page at all — so saving a different field can never wipe it.
 
+Saved network locations follow the same rule when they are edited. **Try it now** tests the address that is _stored_ — by identity, in the main process — so the page never has to be handed an address it is not allowed to hold, and the answer says where the request left from and how long it took. **Edit** changes the name, the skip list and the switched-on state, and leaves the address field empty with a note: a blank address keeps the saved one, and the masked label (`host:port · credentials set`) is refused if it ever arrives as an address. Each row keeps what the location has actually done — when it was last checked, whether it worked, and the last three reasons it did not — recorded both from your own test and from a live session's exit address when it opens.
+
 ## Development
 
 Layout: `main.cjs` is a composition root only. Session windows are `windows.cjs`, saved-session

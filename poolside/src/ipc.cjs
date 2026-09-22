@@ -22,6 +22,7 @@ const { registerRoutePresetIpc } = require('./route-preset-ipc.cjs');
 const { registerRecoveryIpc } = require('./recovery-ipc.cjs');
 const outputInventory = require('./output-inventory.cjs');
 const { registerOutputsIpc } = require('./outputs-ipc.cjs');
+const { registerIdentityIpc } = require('./identity-ipc.cjs');
 const { createWorkspaceRecovery } = require('./workspace-recovery.cjs');
 const { registerMatchIpc } = require('./match-ipc.cjs');
 const { probeRoute } = require('./route-probe.cjs');
@@ -178,6 +179,8 @@ function createIpc(deps) {
       });
     // What the application wrote itself, and the only erasure control that touches it.
     registerOutputsIpc({ handle, inventory: outputInventory, root: diagnosticsRoot, confirmDestructive, log });
+    // What each open session reports about itself, side by side.
+    registerIdentityIpc({ handle, sessions, accounts: () => workspace.data.accounts.filter(account => !account.archived) });
     handle('account:return-game', id => windows.returnToGame(id));
     handle('account:reload', id => windows.reloadAccount(id));
     handle('account:inspect', id => inspector.inspectGame(id));

@@ -680,6 +680,33 @@ function renderAttention() {
     )
     .join('');
 }
+// --- Do these sessions look like one machine? ----------------------------------------------------
+// The comparison is asked for rather than continuous: it reads from two live pages, and a panel that ran that on
+// every render would be reading from the game's own pages several times a second for no reason.
+const comparePanel = () => $('#compare-panel');
+function renderCompare(result) {
+  const panel = comparePanel();
+  if (!result) {
+    // Offered when two sessions are open, because that is the only time the question can be answered.
+    panel.hidden = state.accounts.filter(account => !isClosed(account)).length < 2;
+    return;
+  }
+  panel.hidden = false;
+  const names = result.sessions.map(session => session.name);
+  $('#compare-status').textContent = result.verdict || '';
+  $('#compare-result').innerHTML = names.length
+    ? `<div class="compare-table" role="table" aria-label="What each session reports"><div class="compare-row compare-head" role="row"><span role="columnheader">Field</span>${names
+        .map(name => `<span role="columnheader">${escapeHtml(name)}</span>`)
+        .join('')}<span role="columnheader">Same?</span></div>${result.rows
+        .map(
+          row =>
+            `<div class="compare-row" role="row"><span role="cell">${escapeHtml(row.label)}</span>${row.values
+              .map(value => `<span role="cell">${escapeHtml(value.value)}</span>`)
+              .join('')}<span role="cell" class="compare-same ${row.same ? 'same' : ''}">${row.same ? 'same' : 'differs'}</span></div>`
+        )
+        .join('')}</div>`
+    : '';
+}
 function renderWorkspaceState() {
   const openAccounts = state.accounts.filter(account => !isClosed(account));
   const label = $('#workspace-state-label');
@@ -1124,6 +1151,7 @@ function render(next) {
   renderWorkspaceState();
   renderAttention();
   renderGuidance();
+  renderCompare();
   $('#receiver-name').textContent = state.accounts.find(a => a.role === 'receiver')?.name || 'Not selected';
   $('#sender-count').textContent = state.accounts.filter(a => a.role === 'sender').length;
   $('#table-value').textContent = state.settings.table;
@@ -1309,6 +1337,16 @@ document.addEventListener('click', async event => {
     if (!result.ok) return;
     toast(`Erased ${result.value.removed.length} file${result.value.removed.length === 1 ? '' : 's'} from Poolside's own folder.`);
     await loadOutputs();
+    return;
+  }
+  if (button.dataset.action === 'compare-sessions') {
+    // Asked for rather than refreshed on every render: this reads from two live pages, and doing that continuously
+    // would be reading from the game's own pages for no reason.
+    button.disabled = true;
+    const result = await call(() => poolside.compareSessions());
+    button.disabled = false;
+    if (!result.ok) return;
+    renderCompare(result.value);
     return;
   }
   if (['match-load', 'match-complete', 'match-cancel'].includes(button.dataset.action)) {

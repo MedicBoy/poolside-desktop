@@ -112,6 +112,20 @@
             </div>
             <ol id="guidance-steps"></ol>
           </section>
+          <section class="attention-panel" id="compare-panel" hidden aria-labelledby="compare-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="compare-title">Do these sessions look like one machine?</h2>
+                <p id="compare-note">
+                  Reads what each open session reports about itself, side by side. It changes nothing, and what the browser reports here is
+                  not a promise about how any website treats it.
+                </p>
+              </div>
+              <button class="secondary" type="button" data-action="compare-sessions">Compare open sessions</button>
+            </div>
+            <div id="compare-result"></div>
+            <p class="form-status" id="compare-status" role="status"></p>
+          </section>
           <div class="content-grid">
             <div class="accounts-panel">
               <div class="section-heading">
