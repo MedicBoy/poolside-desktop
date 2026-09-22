@@ -82,6 +82,14 @@ async function runFootprintChecks(ctx, assert, log) {
 
   const a = await readIdentity(IDENTITY_A, 'test-identity-a');
   assert.equal(a.targetResult.applied.length, 5, 'user agent, locale, timezone, viewport and colour scheme were all accepted');
+  // Each accepted override is named by the field it belongs to, not by its CDP method: a refusal has to be
+  // reportable as "the control you have to clear" rather than as "Emulation.setTimezoneOverride".
+  assert.deepEqual(
+    a.targetResult.applied,
+    ['User agent', 'Language (locale)', 'Time zone', 'Window size', 'Colour scheme'],
+    'the applied overrides are named by field'
+  );
+  assert.deepEqual(a.targetResult.refused, [], 'nothing was refused in the fixture identity');
   assert.equal(a.read.userAgent, IDENTITY_A.userAgent, 'the session user agent reaches navigator.userAgent');
   assert.equal(a.read.language, 'en-GB', 'accepted languages drive navigator.language');
   assert.equal(a.read.languages, 'en-GB,en', 'the ordered list is preserved');

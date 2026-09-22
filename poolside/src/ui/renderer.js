@@ -153,7 +153,14 @@ function footprintRow(a) {
     parts.push(`${Math.round(f.storage.cacheBytes / 1024)} KB cached${f.storage.overQuota ? ', over the configured ceiling' : ''}`);
   if (a.webRTC === 'disable_non_proxied_udp') parts.push('WebRTC held to the route');
   const text = parts.length ? parts.join(' · ') : 'default footprint — no identity or route configured';
-  return `<div class="network-row"><span>${escapeHtml(text)}</span><button class="text-button" data-action="check-route" data-id="${a.id}" title="Ask Chromium which route this session will actually use" ${isClosed(a) ? 'disabled' : ''}>Check route ↗</button></div>`;
+  // A value the browser refused is named by its field, with what to do about it, rather than leaving a session
+  // that is not what was configured and no indication of which control to clear.
+  const refused = (f.refused || [])
+    .map(entry => `${entry.field} "${entry.value}" was refused by the browser — clear or correct it in Settings, or in this account's preferences`)
+    .join('; ');
+  return `<div class="network-row"><span>${escapeHtml(text)}</span><button class="text-button" data-action="check-route" data-id="${a.id}" title="Ask Chromium which route this session will actually use" ${isClosed(a) ? 'disabled' : ''}>Check route ↗</button></div>${
+    refused ? `<div class="network-row"><span class="status failed">${escapeHtml(refused)}</span></div>` : ''
+  }`;
 }
 const formatBytes = value => {
   const n = Math.max(0, Number(value) || 0);

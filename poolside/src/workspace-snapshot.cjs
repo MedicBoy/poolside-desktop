@@ -31,9 +31,19 @@ function footprintView(footprint) {
   const route = footprint.route;
   const verified = footprint.verified;
   const storage = footprint.storage;
+  const target = footprint.target;
   return {
     summary: typeof footprint.summary === 'string' ? footprint.summary : null,
     route: route ? { configured: route.configured === true, label: String(route.label || '') } : null,
+    // Anything the browser refused, named by the field it belongs to, so the row can say which control to fix
+    // rather than leaving a session that is not what the operator configured with no explanation.
+    refused: Array.isArray(target?.refused)
+      ? target.refused.map(entry => ({
+          field: String(entry.field || 'A field'),
+          value: String(entry.value ?? ''),
+          error: String(entry.error || '')
+        }))
+      : [],
     verified:
       verified && verified.ok === true
         ? { ok: true, matches: verified.matches === true, route: { label: String(verified.route?.label || '') } }
