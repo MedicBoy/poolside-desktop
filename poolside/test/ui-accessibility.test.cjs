@@ -400,3 +400,15 @@ test('the run plan offers a report, and says what it does and does not contain',
   assert.match(renderer, /poolside\.saveRunReport\(\)/);
   assert.match(renderer, /Run report saved locally: \$\{result\.value\.fileName\}/);
 });
+
+test('the capture lab says where the time goes, and reports the p95 it is measured against', () => {
+  const renderer = ui('renderer.js');
+  assert.match(renderer, /const captureDuration = value =>/);
+  assert.match(renderer, /const CAPTURE_STAGE_LABELS = \{/);
+  assert.match(renderer, /function captureSlowestStage\(stages\)/);
+  assert.match(renderer, /function captureStageDetail\(timing\)/);
+  assert.match(renderer, /\['Capture p95', captureDuration\(evaluation\.timing\?\.surface\?\.p95Ms\)\]/);
+  assert.match(renderer, /\['OCR p95', captureDuration\(evaluation\.timing\?\.recognition\?\.p95Ms\)\]/);
+  assert.match(renderer, /\['Slowest stage', captureSlowestStage\(evaluation\.timing\?\.stages\)\]/);
+  assert.match(renderer, /\$\{captureStageDetail\(sample\.timing\)\}/);
+});

@@ -1567,6 +1567,37 @@ let captureLab = { samples: [], states: [], tables: [] };
 const captureLabel = value => String(value || 'unavailable').replaceAll('-', ' ');
 const capturePercent = value => (Number.isFinite(value) ? `${Math.round(value * 100)}%` : '—');
 const captureDuration = value => (Number.isFinite(value) ? `${Math.round(value)} ms` : '—');
+// The stage names the reader measures, in the operator's words. Kept here rather than invented per row: the
+// pipeline's own vocabulary (`firstOcrMs`, `contrastPrepMs`, …) means nothing on a card.
+const CAPTURE_STAGE_LABELS = {
+  firstOcrMs: 'OCR, first pass',
+  visualMatchMs: 'matching the table against local evidence',
+  contrastPrepMs: 'preparing the contrast pass',
+  contrastOcrMs: 'OCR, contrast pass',
+  bottomPrepMs: 'preparing the bottom band',
+  bottomOcrMs: 'OCR, bottom band',
+  readingsMs: 'reading the balances'
+};
+/** The stage the lab spends the most time in, by median, with its p95 — "where the time goes", in one line. */
+function captureSlowestStage(stages) {
+  if (!stages || typeof stages !== 'object') return '—';
+  const measured = Object.entries(CAPTURE_STAGE_LABELS)
+    .map(([key, label]) => ({ label, median: stages[key]?.medianMs, p95: stages[key]?.p95Ms, samples: stages[key]?.samples || 0 }))
+    .filter(entry => entry.samples > 0 && Number.isFinite(entry.median))
+    .sort((left, right) => right.median - left.median);
+  if (!measured.length) return 'not measured';
+  const [slowest] = measured;
+  return `${slowest.label} (median ${Math.round(slowest.median)} ms, p95 ${Math.round(slowest.p95 ?? slowest.median)} ms)`;
+}
+/** The per-sample breakdown, as the row's own words. */
+function captureStageDetail(timing) {
+  const stages = timing && timing.stages;
+  if (!stages || typeof stages !== 'object') return '';
+  const parts = Object.entries(CAPTURE_STAGE_LABELS)
+    .filter(([key]) => Number.isFinite(stages[key]))
+    .map(([key, label]) => `${label} ${Math.round(stages[key])} ms`);
+  return parts.length ? ` · ${parts.join(' · ')}` : '';
+}
 function captureMetrics(evaluation) {
   const reviewNeeded = Math.max(0, Number(evaluation.reviewNeeded) || 0);
   return [
@@ -1582,6 +1613,11 @@ function captureMetrics(evaluation) {
     ['Benchmark F1', capturePercent(evaluation.benchmark?.macroF1)],
     ['Capture median', captureDuration(evaluation.timing?.surface?.medianMs)],
     ['OCR median', captureDuration(evaluation.timing?.recognition?.medianMs)],
+    // The gate this whole pipeline is measured against is a p95, so the card says it rather than leaving the
+    // median to stand in for it.
+    ['Capture p95', captureDuration(evaluation.timing?.surface?.p95Ms)],
+    ['OCR p95', captureDuration(evaluation.timing?.recognition?.p95Ms)],
+    ['Slowest stage', captureSlowestStage(evaluation.timing?.stages)],
     ['Review needed', reviewNeeded, reviewNeeded > 0 ? 'review' : null]
   ]
     .map(([label, value, action, detail]) =>
@@ -1726,7 +1762,7 @@ function renderCaptureLab() {
     ? samples
         .map(
           sample =>
-            `<article class="managed-card"><div class="managed-card-heading"><div><div class="account-name">${escapeHtml(captureLabel(sample.expectedState))}${sample.expectedTable ? ` · ${escapeHtml(sample.expectedTable)}` : ''}</div><span class="account-role">Expected screen · ${escapeHtml(new Date(sample.capturedAt).toLocaleString())}</span></div><div class="capture-sample-actions"><button class="secondary" data-capture-action="preview" data-id="${sample.id}" ${sample.imageAvailable ? '' : 'disabled'}>View image</button>${!sample.matches && !sample.reviewedAt ? `<button class="secondary" data-capture-action="mark-reviewed" data-id="${sample.id}">Mark reviewed</button>` : ''}<button class="secondary" data-capture-action="set-cohort" data-id="${sample.id}" data-cohort="${sample.cohort === 'benchmark' ? 'evidence' : 'benchmark'}">${sample.cohort === 'benchmark' ? 'Use as evidence' : 'Set aside'}</button><button class="danger-button" data-capture-action="delete" data-id="${sample.id}">Delete…</button></div></div><dl class="managed-details"><div><dt>Detector result</dt><dd>${escapeHtml(captureLabel(sample.observedState))} · ${Math.round(Number(sample.score || 0) * 100)}%</dd></div>${sample.expectedTable ? `<div><dt>Expected table</dt><dd>${escapeHtml(sample.expectedTable)}</dd></div><div><dt>Detected table</dt><dd>${sample.observedTables?.length ? escapeHtml(sample.observedTables.join(', ')) : 'No supported table name detected'}</dd></div>` : ''}<div><dt>Review</dt><dd>${sample.matches ? 'OCR matched your label and table target' : sample.reviewedAt ? `Reviewed ${new Date(sample.reviewedAt).toLocaleDateString()}` : 'Needs your decision'}</dd></div><div><dt>Capture set</dt><dd>${sample.cohort === 'benchmark' ? 'Benchmark' : 'Evidence'}</dd></div><div><dt>Capture size</dt><dd>${sample.width && sample.height ? `${sample.width} × ${sample.height}` : 'Unavailable'}</dd></div><div><dt>Timing</dt><dd>${sample.timing ? `Capture ${captureDuration(sample.timing.surfaceMs)} · OCR ${captureDuration(sample.timing.recognitionMs)} · Total ${captureDuration(sample.timing.totalMs)}` : 'Not measured'}</dd></div><div><dt>OCR pass</dt><dd>${escapeHtml(sample.source || 'unavailable')}</dd></div></dl></article>`
+            `<article class="managed-card"><div class="managed-card-heading"><div><div class="account-name">${escapeHtml(captureLabel(sample.expectedState))}${sample.expectedTable ? ` · ${escapeHtml(sample.expectedTable)}` : ''}</div><span class="account-role">Expected screen · ${escapeHtml(new Date(sample.capturedAt).toLocaleString())}</span></div><div class="capture-sample-actions"><button class="secondary" data-capture-action="preview" data-id="${sample.id}" ${sample.imageAvailable ? '' : 'disabled'}>View image</button>${!sample.matches && !sample.reviewedAt ? `<button class="secondary" data-capture-action="mark-reviewed" data-id="${sample.id}">Mark reviewed</button>` : ''}<button class="secondary" data-capture-action="set-cohort" data-id="${sample.id}" data-cohort="${sample.cohort === 'benchmark' ? 'evidence' : 'benchmark'}">${sample.cohort === 'benchmark' ? 'Use as evidence' : 'Set aside'}</button><button class="danger-button" data-capture-action="delete" data-id="${sample.id}">Delete…</button></div></div><dl class="managed-details"><div><dt>Detector result</dt><dd>${escapeHtml(captureLabel(sample.observedState))} · ${Math.round(Number(sample.score || 0) * 100)}%</dd></div>${sample.expectedTable ? `<div><dt>Expected table</dt><dd>${escapeHtml(sample.expectedTable)}</dd></div><div><dt>Detected table</dt><dd>${sample.observedTables?.length ? escapeHtml(sample.observedTables.join(', ')) : 'No supported table name detected'}</dd></div>` : ''}<div><dt>Review</dt><dd>${sample.matches ? 'OCR matched your label and table target' : sample.reviewedAt ? `Reviewed ${new Date(sample.reviewedAt).toLocaleDateString()}` : 'Needs your decision'}</dd></div><div><dt>Capture set</dt><dd>${sample.cohort === 'benchmark' ? 'Benchmark' : 'Evidence'}</dd></div><div><dt>Capture size</dt><dd>${sample.width && sample.height ? `${sample.width} × ${sample.height}` : 'Unavailable'}</dd></div><div><dt>Timing</dt><dd>${sample.timing ? `Capture ${captureDuration(sample.timing.surfaceMs)} · OCR ${captureDuration(sample.timing.recognitionMs)} · Total ${captureDuration(sample.timing.totalMs)}${captureStageDetail(sample.timing)}` : 'Not measured'}</dd></div><div><dt>OCR pass</dt><dd>${escapeHtml(sample.source || 'unavailable')}</dd></div></dl></article>`
         )
         .join('')
     : `<div class="manager-empty">${captureLab.samples.length ? 'No samples match the current filters.' : 'No local samples yet. Open a game window and capture a screen you have labeled.'}</div>`;

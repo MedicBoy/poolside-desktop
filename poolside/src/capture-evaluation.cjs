@@ -105,6 +105,24 @@ function durationSummary(samples) {
   return { surface: describe('surfaceMs'), recognition: describe('recognitionMs'), total: describe('totalMs') };
 }
 
+/** The stage keys the reader measures, so the lab can report where a recognition pass spends its time. */
+const STAGE_KEYS = ['firstOcrMs', 'visualMatchMs', 'contrastPrepMs', 'contrastOcrMs', 'bottomPrepMs', 'bottomOcrMs', 'readingsMs'];
+
+function stageSummary(samples) {
+  const summarise = key => {
+    const values = samples
+      .map(sample => sample?.timing?.stages?.[key])
+      .filter(value => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+    return {
+      samples: values.length,
+      meanMs: values.length ? values.reduce((total, value) => total + value, 0) / values.length : null,
+      medianMs: percentile(values, 0.5),
+      p95Ms: percentile(values, 0.95)
+    };
+  };
+  return Object.fromEntries(STAGE_KEYS.map(key => [key, summarise(key)]));
+}
+
 /** @param {unknown} value */
 function records(value) {
   return Array.isArray(value) ? value.filter(sample => sample && typeof sample === 'object') : [];
@@ -152,7 +170,7 @@ function evaluate(samples, states, tables = []) {
     evidenceSamples: evidence.length,
     benchmark: { ...cohortMetrics(benchmark, supported), tables: tableTargetMetrics(benchmark, tables) },
     evidenceMetrics: { ...cohortMetrics(evidence, supported), tables: tableTargetMetrics(evidence, tables) },
-    timing: durationSummary(list),
+    timing: { ...durationSummary(list), stages: stageSummary(list) },
     labelsWithEvidence: labels.filter(label => label.count > 0).length,
     labelsAvailable: labels.length,
     labelsReady: labels.filter(label => label.evidenceStatus === 'ready').length,

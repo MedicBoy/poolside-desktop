@@ -34,6 +34,23 @@ function milliseconds(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 300000 ? Math.round(value) : null;
 }
 
+/**
+ * The per-stage breakdown the reader measures inside one recognition pass. Allowlisted rather than copied: the
+ * lab reports what the pipeline actually spends its time on, and nothing else rides along with it.
+ */
+const STAGE_KEYS = ['firstOcrMs', 'visualMatchMs', 'contrastPrepMs', 'contrastOcrMs', 'bottomPrepMs', 'bottomOcrMs', 'readingsMs'];
+
+function stages(value) {
+  if (!value || typeof value !== 'object') return null;
+  /** @type {Record<string, number>} */
+  const kept = {};
+  for (const key of STAGE_KEYS) {
+    const measured = milliseconds(value[key]);
+    if (measured !== null) kept[key] = measured;
+  }
+  return Object.keys(kept).length ? kept : null;
+}
+
 function timing(value) {
   if (!value || typeof value !== 'object') return null;
   const result = {
@@ -41,6 +58,8 @@ function timing(value) {
     recognitionMs: milliseconds(value.recognitionMs),
     totalMs: milliseconds(value.totalMs)
   };
+  const breakdown = stages(value.stages);
+  if (breakdown) result.stages = breakdown;
   return Object.values(result).some(measurement => measurement !== null) ? result : null;
 }
 

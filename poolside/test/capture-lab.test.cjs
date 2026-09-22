@@ -209,3 +209,48 @@ test('capture review is an explicit local decision that survives a manifest roun
   const stored = lab.list().find(entry => entry.id === sample.id);
   assert.match(stored.reviewedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
+
+test('the per-stage timings the reader measures are kept, and nothing else is', () => {
+  const { timing } = require('../src/capture-manifest.cjs');
+  const kept = /** @type {any} */ (
+    timing({
+      surfaceMs: 120,
+      recognitionMs: 640,
+      totalMs: 800,
+      stages: {
+        firstOcrMs: 400,
+        visualMatchMs: 40,
+        contrastPrepMs: 15,
+        contrastOcrMs: 120,
+        bottomPrepMs: 10,
+        bottomOcrMs: 55,
+        readingsMs: 6,
+        somethingElse: 9999,
+        negative: -5
+      }
+    })
+  );
+  assert.deepEqual(kept.stages, {
+    firstOcrMs: 400,
+    visualMatchMs: 40,
+    contrastPrepMs: 15,
+    contrastOcrMs: 120,
+    bottomPrepMs: 10,
+    bottomOcrMs: 55,
+    readingsMs: 6
+  });
+  // A stage list on its own is still timing worth keeping, and a junk-only list is still nothing.
+  assert.deepEqual(/** @type {any} */ (timing({ stages: { firstOcrMs: 5 } })).stages, { firstOcrMs: 5 });
+  assert.equal(timing({ stages: { somethingElse: 5 } }), null);
+  // And a recorded sample carries the breakdown through the lab, not just through the validator.
+  const { lab, root } = fixture();
+  const sample = lab.record({
+    png: Buffer.from('x'),
+    expectedState: 'lobby',
+    observed: { state: 'lobby', score: 1, source: 'full-frame' },
+    frame: { width: 100, height: 50 },
+    timing: { surfaceMs: 10, recognitionMs: 20, totalMs: 30, stages: { firstOcrMs: 12, contrastOcrMs: 6 } }
+  });
+  assert.deepEqual(lab.list().find(entry => entry.id === sample.id).timing.stages, { firstOcrMs: 12, contrastOcrMs: 6 });
+  fs.rmSync(root, { recursive: true, force: true });
+});

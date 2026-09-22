@@ -197,3 +197,25 @@ test('table targets are reported separately instead of being collapsed into one 
   assert.equal(result.evidenceMetrics.tables[1].count, 0);
   assert.equal(result.benchmark.tables[1].matches, 1);
 });
+
+test('the lab reports where a recognition pass spends its time, stage by stage', () => {
+  const sample = (offset, firstOcrMs, contrastOcrMs) => ({
+    id: `s${offset}`,
+    expectedState: 'lobby',
+    observedState: 'lobby',
+    score: 1,
+    cohort: 'evidence',
+    capturedAt: new Date(Date.parse('2026-09-22T00:00:00.000Z') + offset).toISOString(),
+    timing: {
+      surfaceMs: 10,
+      recognitionMs: firstOcrMs + contrastOcrMs,
+      totalMs: 10 + firstOcrMs + contrastOcrMs,
+      stages: { firstOcrMs, contrastOcrMs }
+    }
+  });
+  const evaluated = evaluate([sample(0, 100, 50), sample(1, 200, 60), sample(2, 300, 70)], ['lobby']);
+  assert.deepEqual(evaluated.timing.stages.firstOcrMs, { samples: 3, meanMs: 200, medianMs: 200, p95Ms: 300 });
+  assert.deepEqual(evaluated.timing.stages.contrastOcrMs, { samples: 3, meanMs: 60, medianMs: 60, p95Ms: 70 });
+  // A stage no sample reported is present with no samples rather than missing, so a card cannot read it as zero.
+  assert.deepEqual(evaluated.timing.stages.bottomPrepMs, { samples: 0, meanMs: null, medianMs: null, p95Ms: null });
+});
