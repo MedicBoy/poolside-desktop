@@ -115,8 +115,21 @@ async function runFixtureScenarios(ctx, assert, receiver) {
   })()`);
   const inspected = await dashboard.webContents.executeJavaScript(`poolside.inspect(${JSON.stringify(navigationId)})`);
   assert.equal(inspected.ok, true, inspected.error);
+  // The canvas is drawn synchronously but composited asynchronously, and a window that is not on screen hands
+  // back the last frame it painted — so a single inspection can catch the frame from before the drawing and
+  // read "unrecognized". Measured: one run in about fifteen. Retry until the screen the fixture drew is the
+  // screen that was read, and report what was seen if it never is.
+  const readableUntil = Date.now() + 10000;
+  while (sessions.get(navigationId).gameScreen.state !== 'connecting' && Date.now() < readableUntil) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await dashboard.webContents.executeJavaScript(`poolside.inspect(${JSON.stringify(navigationId)})`);
+  }
   const observed = sessions.get(navigationId).gameScreen;
-  assert.equal(observed.state, 'connecting');
+  assert.equal(
+    observed.state,
+    'connecting',
+    `the drawing was never read: ${JSON.stringify({ state: observed.state, evidence: observed.evidence })}`
+  );
   assert.ok(observed.score > 0, 'a recognised screen reports a confidence');
   assert.ok(observed.evidence.includes('connecting'), 'evidence names the matched phrase');
   // Regression D4: the locator used to require exactly one visible canvas, so a second surface on
