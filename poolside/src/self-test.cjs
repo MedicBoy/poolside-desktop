@@ -260,12 +260,15 @@ async function runSelfTest(ctx) {
   // --- Local match coordination: pairing, profile loading, readiness, result ----------------------
   await runMatchChecks(ctx, assert);
 
+  // --- What Poolside wrote itself: listed through the bridge, and erased only when confirmed ------
+  await require('./self-test-outputs.cjs').runOutputChecks(ctx, assert);
+
   if (process.argv.includes('--live-ip-check')) {
     await checkPublicIP(receiver);
     console.log('PASS: live IP service returned a valid address through the isolated Chromium session. Address omitted from logs.');
   }
   console.log(
-    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, capability About view, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a saved network location assigned to one account by ticking its box in the settings list and cleared again by unticking it, a run plan whose match limit the program enforced by ending the run itself, a pairing verdict that refuses to call two loaded profiles a pairing because neither screen has been read, a match with no session behind it cleared as a dropout so the accounts were free to pair again, a diagnostics payload that is anonymised, scanned and refused if it still carries a name, a path or a route credential, a run report screened by the same scan before it reaches the disk, and the Activity timeline rendering the merged history rather than only computing it.'
+    'PASS: independent private cookie jars, cookies retained when a window reopens, IPC validation, persisted account metadata, sandboxed dashboard, truthful local screen-inspection status, capability About view, a settings form generated from the configuration schema that refuses an unusable value by naming the control it belongs to and never stores an undeclared key, a saved network location assigned to one account by ticking its box in the settings list and cleared again by unticking it, a run plan whose match limit the program enforced by ending the run itself, a pairing verdict that refuses to call two loaded profiles a pairing because neither screen has been read, a match with no session behind it cleared as a dropout so the accounts were free to pair again, a diagnostics payload that is anonymised, scanned and refused if it still carries a name, a path or a route credential, a run report screened by the same scan before it reaches the disk, the files Poolside wrote itself listed by name and left alone when the erase was declined, and the Activity timeline rendering the merged history rather than only computing it.'
   );
   app.exit(0);
 }

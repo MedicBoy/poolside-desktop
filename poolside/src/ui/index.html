@@ -507,6 +507,17 @@
                 <div id="recovery-list"></div>
                 <p class="form-status" id="recovery-status" role="status"></p>
               </section>
+              <section class="route-presets" id="outputs-panel" hidden>
+                <h2>Files Poolside has written</h2>
+                <p class="muted">
+                  Diagnostics exports and run reports are written to Poolside's own folder on this PC so you can send them on. They are the
+                  only files Poolside writes there, and they are the only files this control erases. Browser profiles, saved sessions, the
+                  workspace and your accounts are not touched by it.
+                </p>
+                <div id="outputs-list"></div>
+                <button class="secondary" type="button" data-action="outputs-clear" id="outputs-clear">Erase these files</button>
+                <p class="form-status" id="outputs-status" role="status"></p>
+              </section>
             </div>
             <div class="panel settings-panel">
               <h2>Browser sessions</h2>

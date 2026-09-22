@@ -20,6 +20,8 @@ const { registerCaptureLab } = require('./capture-lab-ipc.cjs');
 const { registerBackupIpc } = require('./backup-ipc.cjs');
 const { registerRoutePresetIpc } = require('./route-preset-ipc.cjs');
 const { registerRecoveryIpc } = require('./recovery-ipc.cjs');
+const outputInventory = require('./output-inventory.cjs');
+const { registerOutputsIpc } = require('./outputs-ipc.cjs');
 const { createWorkspaceRecovery } = require('./workspace-recovery.cjs');
 const { registerMatchIpc } = require('./match-ipc.cjs');
 const { probeRoute } = require('./route-probe.cjs');
@@ -172,6 +174,8 @@ function createIpc(deps) {
         log,
         confirmDestructive
       });
+    // What the application wrote itself, and the only erasure control that touches it.
+    registerOutputsIpc({ handle, inventory: outputInventory, root: diagnosticsRoot, confirmDestructive, log });
     handle('account:return-game', id => windows.returnToGame(id));
     handle('account:reload', id => windows.reloadAccount(id));
     handle('account:inspect', id => inspector.inspectGame(id));

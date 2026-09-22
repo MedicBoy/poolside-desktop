@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('poolside', {
   backupImport: () => ipcRenderer.invoke('backup:import'),
   recoveryPreview: () => ipcRenderer.invoke('recovery:preview'),
   recoveryRestore: input => ipcRenderer.invoke('recovery:restore', input),
+  outputsList: () => ipcRenderer.invoke('outputs:list'),
+  outputsClear: input => ipcRenderer.invoke('outputs:clear', input),
   clearActivityHistory: () => ipcRenderer.invoke('activity:history-clear'),
   returnGame: id => ipcRenderer.invoke('account:return-game', id),
   reload: id => ipcRenderer.invoke('account:reload', id),

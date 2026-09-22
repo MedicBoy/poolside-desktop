@@ -346,7 +346,27 @@ test('settings offers the recovery copies, and says a restore can itself be undo
   assert.match(renderer, /poolside\.recoveryRestore\(\{ name: button\.dataset\.recoveryName \}\)/);
   assert.match(renderer, /data-recovery-name="\$\{escapeHtml\(candidate\.name\)\}"/);
   // The panel is filled when the settings view is opened, not on every dashboard render.
-  assert.match(renderer, /if \(name === 'settings'\) loadRecovery\(\);/);
+  assert.match(renderer, /if \(name === 'settings'\) \{\s*loadRecovery\(\);\s*loadOutputs\(\);\s*\}/);
+});
+
+test('settings shows the files Poolside wrote itself, and erases only those', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const outputsIpc = fs.readFileSync(path.join(__dirname, '..', 'src', 'outputs-ipc.cjs'), 'utf8');
+  assert.match(html, /id="outputs-panel" hidden/);
+  assert.match(html, /id="outputs-list"/);
+  assert.match(html, /id="outputs-status"/);
+  assert.match(html, /data-action="outputs-clear"/);
+  // What it erases and what it leaves are both stated where the button is, not only in the tracker.
+  assert.match(html, /Browser profiles, saved sessions, the\s+workspace and your accounts are not touched/);
+  assert.match(renderer, /function loadOutputs\(\)/);
+  assert.match(renderer, /poolside\.outputsList\(\)/);
+  assert.match(renderer, /poolside\.outputsClear\(\{ names \}\)/);
+  // The names come from a fresh read, not from a value held in the page: what is erased is what is on screen.
+  assert.match(renderer, /const names = \(listed\.value\?\.entries \|\| \[\]\)\.map\(entry => entry\.name\)/);
+  // A file that could not be erased is reported rather than swallowed, and the confirmation names what goes.
+  assert.match(outputsIpc, /Left \$\{entry\.name\} alone: \$\{entry\.reason\}/);
+  assert.match(outputsIpc, /Browser profiles, saved sessions, the workspace and your accounts are untouched/);
 });
 
 test('the match card reports what the balances did, in the wording the evidence owns', () => {

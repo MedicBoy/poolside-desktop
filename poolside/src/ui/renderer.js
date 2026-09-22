@@ -283,7 +283,10 @@ function view(name) {
     requestAnimationFrame(() => window.scrollTo(0, 0));
     loadCaptureLab();
   }
-  if (name === 'settings') loadRecovery();
+  if (name === 'settings') {
+    loadRecovery();
+    loadOutputs();
+  }
 }
 function updateReceiverRoleHint(selectId, hintId, excludedId = null) {
   const selected = $(`#${selectId}`).value;
@@ -750,6 +753,37 @@ async function loadRecovery() {
   $('#recovery-list').innerHTML = candidates.map(recoveryRow).join('');
   $('#recovery-status').textContent = candidates.length
     ? 'Restoring goes through the same validation and the same write as any other change.'
+    : '';
+}
+// --- Files Poolside has written -----------------------------------------------------------------
+// The one folder the application owns, shown with what is in it. The panel appears only when there is
+// something to erase, and the count it erases is the count it is showing: a button that deleted more than
+// the list on screen would be a button nobody could press safely.
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes)) return 'an unknown size';
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1048576) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+async function loadOutputs() {
+  const result = await call(() => poolside.outputsList());
+  const panel = $('#outputs-panel');
+  if (!result.ok) {
+    panel.hidden = true;
+    return;
+  }
+  const view = result.value || {};
+  const entries = view.entries || [];
+  panel.hidden = entries.length === 0;
+  $('#outputs-clear').disabled = entries.length === 0;
+  $('#outputs-list').innerHTML = entries
+    .map(
+      entry =>
+        `<div class="route-preset"><strong>${escapeHtml(entry.label)}</strong><span>${escapeHtml(`${entry.name} · ${formatFileSize(entry.bytes)} · ${new Date(entry.writtenAt).toLocaleString()}`)}</span></div>`
+    )
+    .join('');
+  $('#outputs-status').textContent = entries.length
+    ? `${entries.length} file${entries.length === 1 ? '' : 's'}, ${formatFileSize(view.bytes)} in total${view.ignored ? `, and ${view.ignored} file${view.ignored === 1 ? '' : 's'} here that Poolside did not write, left alone` : ''}.`
     : '';
 }
 function renderRoutePresets() {
@@ -1263,6 +1297,18 @@ document.addEventListener('click', async event => {
     if (!result.ok) return;
     toast(`Workspace restored from ${result.value.name}. The copy that was in place is kept as the previous copy.`);
     await loadRecovery();
+    return;
+  }
+  if (button.dataset.action === 'outputs-clear') {
+    // Read the list again rather than trusting a name held in the page: what is erased is what is on screen when
+    // the button is pressed, and the main process re-checks every name anyway.
+    const listed = await call(() => poolside.outputsList());
+    if (!listed.ok) return;
+    const names = (listed.value?.entries || []).map(entry => entry.name);
+    const result = await call(() => poolside.outputsClear({ names }));
+    if (!result.ok) return;
+    toast(`Erased ${result.value.removed.length} file${result.value.removed.length === 1 ? '' : 's'} from Poolside's own folder.`);
+    await loadOutputs();
     return;
   }
   if (['match-load', 'match-complete', 'match-cancel'].includes(button.dataset.action)) {
