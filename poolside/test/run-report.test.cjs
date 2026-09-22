@@ -119,3 +119,16 @@ test('an empty ledger still produces a well-formed report rather than an error',
   assert.deepEqual(built.standaloneMatches, []);
   assert.match(report.fileName(AT), /^poolside-run-report-2026-09-22_00-00-00-\d{3}\.json$/);
 });
+
+test('a report that would carry a credential is refused before it is written', () => {
+  // The report is built from the dashboard's own view, so this should never happen — which is exactly why it is
+  // checked rather than assumed. A reason is free text, and free text is where a route can end up by accident.
+  const built = report.build(view({ runs: { active: null, recent: [run()] }, recent: [match()] }), { now: AT });
+  assert.equal(report.screen(built), built, 'a clean report passes through unchanged');
+  built.runs[0].matches[0].reason = 'Loaded through socks5://user:password@proxy.example.com:1080.';
+  assert.throws(
+    () => report.screen(built),
+    /run report was refused: it still carries 1 item\(s\).*credential/,
+    'the refusal names the shape and where it was found'
+  );
+});

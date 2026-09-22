@@ -65,7 +65,8 @@ const CAPABILITIES = Object.freeze([
     mode: 'limited',
     validation: 'integration-proven',
     flag: 'on',
-    detail: 'Local redacted activity/telemetry export with a refusing secret-shape scan; not a privacy proof.'
+    detail:
+      'Local redacted activity/telemetry export with a refusing secret-shape scan, and the same scan in front of the saved run report. It catches the shapes it knows — account names, addresses, filesystem paths, token-shaped strings and route credentials in either form a provider hands out — and refuses the file rather than writing it. A floor, not a privacy proof.'
   },
   {
     id: 'workspace-recovery',
@@ -73,7 +74,8 @@ const CAPABILITIES = Object.freeze([
     mode: 'limited',
     validation: 'fixture-proven',
     flag: 'on',
-    detail: 'Preserves damaged primary data and detects recovery candidates; in-app restore choice is unfinished.'
+    detail:
+      'Preserves damaged primary data, lists the recovery copies it can read — when each was written, how many accounts it holds, whether it is usable — and restores one only when the operator chooses it, re-reading and re-validating the restored document. Copies are described through the same redaction as the rest of the dashboard; it shows what it found, it does not choose.'
   },
   {
     id: 'authentication-verification',

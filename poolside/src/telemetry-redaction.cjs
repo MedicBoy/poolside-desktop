@@ -37,7 +37,18 @@ const SHAPES = [
   { kind: 'ipv4', source: '\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b' },
   { kind: 'ipv6', source: '\\b(?:[0-9a-f]{0,4}:){3,}[0-9a-f]{0,4}\\b' },
   { kind: 'path', source: '(?:[A-Za-z]:\\\\[^\\s]*|/(?:Users|home|tmp|var)/[^\\s]*)' },
-  { kind: 'opaque', source: `\\b[A-Za-z0-9_-]{${OPAQUE_MIN_LENGTH},}\\b` }
+  { kind: 'opaque', source: `\\b[A-Za-z0-9_-]{${OPAQUE_MIN_LENGTH},}\\b` },
+  {
+    kind: 'credential',
+    // The two shapes a route provider hands out, and the only two that carry a username and a password: the
+    // `user:password@host` form, and the provider line `host:port:user:password` that Webshare puts in its
+    // download. The second requires a dotted host, so a clock reading (`12:30:45:00`) cannot be mistaken for a
+    // credential. A bare `host:port` is a route *target*, not a secret, and is deliberately not caught — a
+    // scanner that flags every address is a scanner the operator learns to ignore, and then it catches nothing.
+    source:
+      '\\b[A-Za-z0-9._%+-]{1,64}:[^\\s:@/]{1,64}@[A-Za-z0-9][A-Za-z0-9.-]{0,252}' +
+      '|\\b[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+:\\d{1,5}:[^\\s:@]{1,64}:[^\\s:@]{1,64}'
+  }
 ];
 
 /** Does this string contain a shape that must not leave the machine? @param {string} value */

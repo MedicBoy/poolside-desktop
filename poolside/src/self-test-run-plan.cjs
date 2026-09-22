@@ -130,6 +130,9 @@ async function runRunPlanChecks(ctx, assert) {
   assert.equal(serialised.includes('test receiver'), true, 'the record names who played, or it is not a record');
   for (const forbidden of ['password', 'proxy', 'spec'])
     assert.equal(serialised.includes(forbidden), false, `${forbidden} must not be in a report that can be sent on`);
+  // The same scanner that screens the diagnostics payload now screens the report, and this is the file the real
+  // bridge actually wrote — not a fixture. Account names are allowed here and are not passed as forbidden.
+  assert.deepEqual(require('./telemetry-redaction.cjs').findSecrets(written), [], 'the report on disk carries no name-free secret shape');
 }
 
 module.exports = { runRunPlanChecks };

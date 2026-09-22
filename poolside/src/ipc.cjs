@@ -200,7 +200,9 @@ function createIpc(deps) {
       // The report lands beside the diagnostics export, so one folder holds everything the operator may want to
       // send on, and the renderer is handed a file name rather than a path.
       saveReport: view => {
-        const report = runReport.build(view);
+        // Screened before it is written, not after: a report that fails the scan must not exist on disk, because
+        // a file the operator has already been told about is a file they will send on.
+        const report = runReport.screen(runReport.build(view));
         const directory = diagnosticsBundle.directory(diagnosticsRoot);
         const name = runReport.fileName(Date.now());
         const target = path.join(directory, name);

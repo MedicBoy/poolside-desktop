@@ -8,6 +8,8 @@
 // document: route credentials, browser profiles, page text and images. It does include account names, which is
 // stated in the file itself, because a record of "who played whom" without names is not a record.
 
+const { findSecrets } = require('./telemetry-redaction.cjs');
+
 /** The shape of the file, so a reader (or a later version) can tell what it is. */
 const FORMAT = 'poolside-run-report/v1';
 
@@ -89,4 +91,25 @@ function fileName(now) {
   return `poolside-run-report-${stamp(now).replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')}.json`;
 }
 
-module.exports = { build, fileName, matchRecord, runRecord, FORMAT };
+/**
+ * Refuse a report that still carries something no shareable document may hold: a credential, an address, a
+ * path or a token-shaped string.
+ *
+ * This is the same scanner the diagnostics payload goes through (ADR-0010), applied to the second document that
+ * can leave this machine. Account names are deliberately **not** forbidden here — the report is a record of who
+ * played whom and says so in its own first paragraph — so only the shapes are screened. The check is a floor,
+ * not a proof, and the file says that too.
+ * @param {ReturnType<typeof build>} report
+ */
+function screen(report) {
+  const findings = findSecrets(report);
+  if (findings.length)
+    throw new Error(
+      `The run report was refused: it still carries ${findings.length} item(s) that must not leave this machine (${findings
+        .map(item => `${item.path} [${item.kind}]`)
+        .join(', ')}).`
+    );
+  return report;
+}
+
+module.exports = { build, screen, fileName, matchRecord, runRecord, FORMAT };
