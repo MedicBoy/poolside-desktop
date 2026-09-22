@@ -5,6 +5,7 @@
 // returns the same { ok, value | error } envelope. Extracted from main.cjs so the composition root
 // stays wiring.
 
+const fs = require('node:fs');
 const model = require('./model.cjs');
 const settingsController = require('./settings-ui-controller.cjs');
 const diagnosticsBundle = require('./diagnostics-bundle.cjs');
@@ -108,8 +109,33 @@ function createIpc(deps) {
     });
     // Both preview and file export use the same prepare() step. A diagnostics file cannot be written unless the
     // exact payload preview first constructs and passes the secret scanner.
-    handle('diagnostics:preview', () => diagnosticsBundle.prepare(snapshot()));
-    handle('diagnostics:save', () => diagnosticsBundle.write(diagnosticsRoot, diagnosticsBundle.prepare(snapshot())));
+    // The bundle carries the state as well as the timeline. What the snapshot cannot know is gathered here: how
+    // big the workspace file is and when it was last written (so two bundles can be told apart without a
+    // fingerprint the secret scanner would refuse), and how many recovery copies exist.
+    const diagnosticsFacts = () => {
+      /** @type {number|null} */
+      let workspaceBytes = null;
+      /** @type {string|null} */
+      let workspaceWrittenAt = null;
+      try {
+        if (workspace.storeFile && fs.existsSync(workspace.storeFile)) {
+          const stat = fs.statSync(workspace.storeFile);
+          workspaceBytes = stat.size;
+          workspaceWrittenAt = stat.mtime.toISOString();
+        }
+      } catch {
+        workspaceBytes = null;
+      }
+      let recoveryCandidates = 0;
+      try {
+        if (workspace.storeFile) recoveryCandidates = createWorkspaceRecovery({ file: workspace.storeFile }).candidates().length;
+      } catch {
+        recoveryCandidates = 0;
+      }
+      return { workspaceBytes, workspaceWrittenAt, recoveryCandidates };
+    };
+    handle('diagnostics:preview', () => diagnosticsBundle.prepare(snapshot(), diagnosticsFacts()));
+    handle('diagnostics:save', () => diagnosticsBundle.write(diagnosticsRoot, diagnosticsBundle.prepare(snapshot(), diagnosticsFacts())));
     handle('diagnostics:open-folder', async () => {
       const error = await openPath(diagnosticsBundle.directory(diagnosticsRoot));
       if (error) throw new Error(`Diagnostics folder could not be opened: ${error}`);

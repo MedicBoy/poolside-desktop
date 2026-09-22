@@ -10,13 +10,20 @@ const path = require('node:path');
 const telemetryRedaction = require('./telemetry-redaction.cjs');
 const timelineTransfer = require('./timeline-transfer.cjs');
 const { buildCapabilityReport } = require('./capability-registry.cjs');
+const { stateSummary } = require('./diagnostics-state.cjs');
 
-/** @param {any} snapshot */
-function prepare(snapshot) {
+/**
+ * @param {any} snapshot
+ * @param {{workspaceBytes?: number|null, workspaceWrittenAt?: string|null, recoveryCandidates?: number}} [extra] facts the snapshot cannot carry
+ */
+function prepare(snapshot, extra = {}) {
   const current = snapshot && typeof snapshot === 'object' ? snapshot : {};
   const payload = telemetryRedaction.exportLayer(current.telemetry);
   // Build from the fixed registry, never from an arbitrary snapshot field.
   payload.capabilityReport = buildCapabilityReport(current.version);
+  // The state the machine was in, in counts and flags: enough to diagnose a read-only workspace, a refused
+  // identity value or a stuck match without a single name or path leaving this machine.
+  payload.state = stateSummary(current, extra);
   const accounts = Array.isArray(current.accounts) ? current.accounts : [];
   const timeline = current.timeline && Array.isArray(current.timeline.entries) ? current.timeline.entries : [];
   payload.timeline = timelineTransfer.redact(timeline, accounts).entries.map(entry => ({
