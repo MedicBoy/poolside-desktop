@@ -21,7 +21,7 @@
     "validate:corpus": "node scripts/validate-capture-corpus.cjs",
     "analyze:tables": "node scripts/analyze-table-evidence.cjs",
     "replay:evidence": "node scripts/replay-recognition-evidence.cjs",
-    "package": "electron-packager . Poolside --platform=win32 --arch=x64 --out=release --asar.unpackDir=node_modules --overwrite --ignore=/release/ --ignore=/test --ignore=/designs --ignore=\\.log$ --ignore=/\\.edit_release",
+    "package": "electron-packager . Poolside --platform=win32 --arch=x64 --out=release --asar.unpackDir=node_modules --overwrite --ignore=/release/ --ignore=/test --ignore=/tools --ignore=/designs --ignore=\\.log$ --ignore=/\\.edit_release",
     "sbom": "node scripts/generate-sbom.cjs",
     "sbom:check": "node scripts/generate-sbom.cjs --check",
     "release:inspect": "node scripts/inspect-release.cjs"
