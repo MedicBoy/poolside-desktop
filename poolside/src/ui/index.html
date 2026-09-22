@@ -472,6 +472,16 @@
               </section>
               <button class="primary" type="submit" form="settings-form">Save preferences</button>
               <p class="form-status" id="settings-status" role="status"></p>
+              <section class="route-presets" id="recovery-panel" hidden>
+                <h2>Recover earlier data</h2>
+                <p class="muted">
+                  A copy of the workspace from before its last change is kept beside it, and an interrupted write can leave a staged copy
+                  behind. Restoring replaces the accounts you have now with the copy you choose — and the copy in place now is kept first,
+                  so the restore itself can be undone by restoring that one.
+                </p>
+                <div id="recovery-list"></div>
+                <p class="form-status" id="recovery-status" role="status"></p>
+              </section>
             </div>
             <div class="panel settings-panel">
               <h2>Browser sessions</h2>

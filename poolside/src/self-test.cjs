@@ -79,6 +79,23 @@ async function runSelfTest(ctx) {
   assert.deepEqual(results, { a: true, b: true, duplicate: false, count: 2, bridge: 'undefined', inspection: 'Waiting' });
   assert.equal(model.decode(JSON.parse(fs.readFileSync(workspace.storeFile, 'utf8'))).accounts.length, 2);
   assert.equal(model.decode(JSON.parse(fs.readFileSync(`${workspace.storeFile}.previous`, 'utf8'))).accounts.length, 1);
+  // The way back, through the real bridge: the previous copy is described for the dashboard — what it holds,
+  // when it was written, and that it can be read — and nothing in the description carries a credential.
+  const recoveryPreview = await dashboard.webContents.executeJavaScript(`(async () => {
+    const preview = await poolside.recoveryPreview();
+    return {
+      ok: preview.ok,
+      candidates: preview.ok
+        ? preview.value.candidates.map(candidate => ({ source: candidate.source, usable: candidate.usable, accounts: candidate.accounts.length, writtenAt: candidate.writtenAt }))
+        : []
+    };
+  })()`);
+  assert.equal(recoveryPreview.ok, true);
+  assert.equal(recoveryPreview.candidates.length, 1, 'the previous copy is offered');
+  assert.equal(recoveryPreview.candidates[0].source, 'previous');
+  assert.equal(recoveryPreview.candidates[0].usable, true);
+  assert.equal(recoveryPreview.candidates[0].accounts, 1, 'it holds the one account the first write did');
+  assert.ok(Number.isFinite(Date.parse(recoveryPreview.candidates[0].writtenAt)));
   const about = await dashboard.webContents.executeJavaScript(`(async () => {
     const response = await poolside.get();
     document.querySelector('button[data-view="about"]').click();

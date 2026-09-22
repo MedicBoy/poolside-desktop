@@ -156,7 +156,10 @@ function footprintRow(a) {
   // A value the browser refused is named by its field, with what to do about it, rather than leaving a session
   // that is not what was configured and no indication of which control to clear.
   const refused = (f.refused || [])
-    .map(entry => `${entry.field} "${entry.value}" was refused by the browser — clear or correct it in Settings, or in this account's preferences`)
+    .map(
+      entry =>
+        `${entry.field} "${entry.value}" was refused by the browser — clear or correct it in Settings, or in this account's preferences`
+    )
     .join('; ');
   return `<div class="network-row"><span>${escapeHtml(text)}</span><button class="text-button" data-action="check-route" data-id="${a.id}" title="Ask Chromium which route this session will actually use" ${isClosed(a) ? 'disabled' : ''}>Check route ↗</button></div>${
     refused ? `<div class="network-row"><span class="status failed">${escapeHtml(refused)}</span></div>` : ''
@@ -280,6 +283,7 @@ function view(name) {
     requestAnimationFrame(() => window.scrollTo(0, 0));
     loadCaptureLab();
   }
+  if (name === 'settings') loadRecovery();
 }
 function updateReceiverRoleHint(selectId, hintId, excludedId = null) {
   const selected = $(`#${selectId}`).value;
@@ -681,6 +685,37 @@ function routePresetAccounts(preset) {
       return `<label><input type="checkbox" data-route-preset-assign="${escapeHtml(preset.id)}" data-route-account="${escapeHtml(account.id)}"${checked ? ' checked' : ''} aria-label="${escapeHtml(`Connect ${account.name} from ${preset.name}`)}" /> ${escapeHtml(account.name)}</label>`;
     })
     .join('')}</div>`;
+}
+// --- Recovering earlier data ------------------------------------------------------------------
+// The copies the application keeps beside the workspace file, described rather than assumed: what each one
+// holds, when it was written, and whether it can be read at all. Restoring one is confirmed natively and the
+// copy in place is kept first, so a restore is itself undoable.
+function recoveryRow(candidate) {
+  const written = candidate.writtenAt ? new Date(candidate.writtenAt).toLocaleString() : 'an unknown time';
+  const accounts = candidate.accounts.length
+    ? `${candidate.accounts.length} account slot${candidate.accounts.length === 1 ? '' : 's'}: ${candidate.accounts.map(account => `${account.name}${account.archived ? ' (archived)' : ''}`).join(', ')}`
+    : 'no accounts';
+  const locations = candidate.locations.length
+    ? ` · ${candidate.locations.length} saved location${candidate.locations.length === 1 ? '' : 's'}`
+    : '';
+  const action = candidate.usable
+    ? `<button class="secondary" data-recovery-name="${escapeHtml(candidate.name)}">Restore this copy</button>`
+    : `<span class="status failed">${escapeHtml(candidate.problem || 'This copy cannot be used.')}</span>`;
+  return `<div class="route-preset"><strong>${escapeHtml(written)}</strong><span>${escapeHtml(`${accounts}${locations} · ${candidate.label}`)}</span>${action}</div>`;
+}
+async function loadRecovery() {
+  const result = await call(() => poolside.recoveryPreview());
+  const panel = $('#recovery-panel');
+  if (!result.ok) {
+    panel.hidden = true;
+    return;
+  }
+  const candidates = result.value?.candidates || [];
+  panel.hidden = candidates.length === 0;
+  $('#recovery-list').innerHTML = candidates.map(recoveryRow).join('');
+  $('#recovery-status').textContent = candidates.length
+    ? 'Restoring goes through the same validation and the same write as any other change.'
+    : '';
 }
 function renderRoutePresets() {
   const presets = state.routePresets || [];
@@ -1155,6 +1190,14 @@ document.addEventListener('click', async event => {
         ? 'Count-in started — watch the card, it will call GO and then measure your two clicks.'
         : 'Count-in stopped. Nothing was queued by it.'
     );
+    return;
+  }
+  if (button.dataset.recoveryName) {
+    // A restore replaces the account list, so the confirmation is native and the copy in place is kept first.
+    const result = await call(() => poolside.recoveryRestore({ name: button.dataset.recoveryName }));
+    if (!result.ok) return;
+    toast(`Workspace restored from ${result.value.name}. The copy that was in place is kept as the previous copy.`);
+    await loadRecovery();
     return;
   }
   if (['match-load', 'match-complete', 'match-cancel'].includes(button.dataset.action)) {

@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('poolside', {
   diagnosticsOpenFolder: () => ipcRenderer.invoke('diagnostics:open-folder'),
   backupExport: () => ipcRenderer.invoke('backup:export'),
   backupImport: () => ipcRenderer.invoke('backup:import'),
+  recoveryPreview: () => ipcRenderer.invoke('recovery:preview'),
+  recoveryRestore: input => ipcRenderer.invoke('recovery:restore', input),
   clearActivityHistory: () => ipcRenderer.invoke('activity:history-clear'),
   returnGame: id => ipcRenderer.invoke('account:return-game', id),
   reload: id => ipcRenderer.invoke('account:reload', id),

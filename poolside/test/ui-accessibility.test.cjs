@@ -333,3 +333,18 @@ test('a paused run still offers Resume and Stop, because paused is not finished'
   // And the run card itself is drawn in the paused state, so the buttons it now offers are reachable.
   assert.match(renderer, /class="match-card run-card \$\{escapeHtml\(run\.state\)\}"/);
 });
+
+test('settings offers the recovery copies, and says a restore can itself be undone', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  assert.match(html, /id="recovery-panel" hidden/);
+  assert.match(html, /id="recovery-list"/);
+  assert.match(html, /the copy in place now is kept first/);
+  assert.match(renderer, /function loadRecovery\(\)/);
+  assert.match(renderer, /function recoveryRow\(candidate\)/);
+  assert.match(renderer, /poolside\.recoveryPreview\(\)/);
+  assert.match(renderer, /poolside\.recoveryRestore\(\{ name: button\.dataset\.recoveryName \}\)/);
+  assert.match(renderer, /data-recovery-name="\$\{escapeHtml\(candidate\.name\)\}"/);
+  // The panel is filled when the settings view is opened, not on every dashboard render.
+  assert.match(renderer, /if \(name === 'settings'\) loadRecovery\(\);/);
+});
