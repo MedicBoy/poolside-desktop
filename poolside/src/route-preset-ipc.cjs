@@ -9,6 +9,24 @@ function registerRoutePresetIpc({ handle, workspace, save, log, sessions }) {
     log(`Route preset ${preset.name} saved.`);
     return publicRoutePreset(preset);
   });
+  // Editing a saved location follows the same rule as assigning one: a window that is already open keeps the route
+  // it was launched with, so an edit is refused while an account that uses it is running. The row would otherwise
+  // describe a location the live session is not using.
+  handle('route-preset:update', input => {
+    const id = input && typeof input.id === 'string' ? input.id : '';
+    const presets = workspace.data.routePresets || [];
+    const current = presets.find(item => item.id === id);
+    if (!current) throw new Error('Route preset not found.');
+    const inUse = (workspace.data.accounts || []).filter(account => account.routePresetId === id && sessions && sessions.has(account.id));
+    if (inUse.length) throw new Error(`Close ${inUse.map(account => account.name).join(' and ')} before changing this saved location.`);
+    const updated = routePresets.update(input, presets);
+    save({
+      ...workspace.data,
+      routePresets: presets.map(item => (item.id === id ? updated : item))
+    });
+    log(`Route preset ${updated.name} updated.`);
+    return publicRoutePreset(updated);
+  });
   // Ticking an account in the settings list: the whole point is that assigning a location is one click
   // rather than a trip through that account's preferences dialog. A window that is already open keeps
   // the route it was launched with, so the change is refused while it runs — otherwise the row would

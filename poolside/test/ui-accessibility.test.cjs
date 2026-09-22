@@ -369,6 +369,26 @@ test('settings shows the files Poolside wrote itself, and erases only those', ()
   assert.match(outputsIpc, /Browser profiles, saved sessions, the workspace and your accounts are untouched/);
 });
 
+test('a saved network location can be edited, and the address field cannot be filled from the screen', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  assert.match(html, /id="route-preset-cancel" hidden/);
+  assert.match(html, /id="route-preset-edit-note" hidden/);
+  // The one rule that matters here: the page is never handed a saved address, so the edit form leaves the field
+  // empty and says what a blank field means. A form filled from the screen would replace the address with the
+  // sentence that hides it, and the operator could not tell that it had happened.
+  assert.match(html, /Leave the address blank to keep the address it already has/);
+  assert.match(renderer, /data-route-preset-edit="\$\{escapeHtml\(preset\.id\)\}"/);
+  assert.match(renderer, /function startEditingPreset\(id\)/);
+  assert.match(renderer, /function stopEditingPreset\(\)/);
+  assert.match(renderer, /Leave blank to keep the address it already has/);
+  assert.match(renderer, /\$\('#route-preset-spec'\)\.value = '';/);
+  // The edit goes through the edit handler, and adding still goes through the add handler.
+  assert.match(renderer, /editing \? poolside\.updateRoutePreset\(\{ id: editing, \.\.\.fields \}\) : poolside\.addRoutePreset\(fields\)/);
+  // Cancelling is a real way out that says nothing was saved.
+  assert.match(renderer, /The edit was cancelled\. Nothing was saved\./);
+});
+
 test('the match card reports what the balances did, in the wording the evidence owns', () => {
   const renderer = ui('renderer.js');
   const css = ui('style.css');

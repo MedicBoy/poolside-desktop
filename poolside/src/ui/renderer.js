@@ -792,7 +792,7 @@ function renderRoutePresets() {
     ? presets
         .map(
           preset =>
-            `<div class="route-preset"><strong>${escapeHtml(preset.name)}</strong><span>${escapeHtml(preset.enabled ? preset.spec : `${preset.spec} · disabled`)}${preset.bypass ? ` · bypass ${escapeHtml(preset.bypass)}` : ''}</span><button class="text-button" data-route-preset-delete="${escapeHtml(preset.id)}">Remove</button></div>${routePresetAccounts(preset)}`
+            `<div class="route-preset"><strong>${escapeHtml(preset.name)}</strong><span>${escapeHtml(preset.enabled ? preset.spec : `${preset.spec} · disabled`)}${preset.bypass ? ` · bypass ${escapeHtml(preset.bypass)}` : ''}</span><button class="text-button" data-route-preset-edit="${escapeHtml(preset.id)}">Edit</button><button class="text-button" data-route-preset-delete="${escapeHtml(preset.id)}">Remove</button></div>${routePresetAccounts(preset)}`
         )
         .join('')
     : '<p class="muted">No saved network locations yet.</p>';
@@ -1541,6 +1541,41 @@ $('#settings-form').addEventListener('submit', async event => {
     : 'Preferences saved on this device.';
 });
 // Trying an address before it is saved: the answer appears under the field, in words.
+// --- Editing a saved location -------------------------------------------------------------------
+// The address is the one field that cannot be filled in: the page is never handed a saved address that
+// carries credentials — it holds `host:port · credentials set` — so the field starts empty and blank means
+// "keep what is saved". Anything else would let a form that was filled from the screen replace the address
+// with the description of it.
+function startEditingPreset(id) {
+  const preset = (state.routePresets || []).find(item => item.id === id);
+  if (!preset) return;
+  const form = $('#route-preset-form');
+  form.dataset.editingId = id;
+  $('#route-preset-name').value = preset.name;
+  $('#route-preset-spec').value = '';
+  $('#route-preset-spec').placeholder = 'Leave blank to keep the address it already has';
+  $('#route-preset-bypass').value = preset.bypass || '';
+  $('#route-preset-enabled').checked = preset.enabled !== false;
+  $('#route-preset-submit').textContent = 'Save changes';
+  $('#route-preset-cancel').hidden = false;
+  $('#route-preset-edit-note').hidden = false;
+  $('#route-preset-test-result').textContent = '';
+  $('#route-preset-name').focus();
+}
+function stopEditingPreset() {
+  const form = $('#route-preset-form');
+  delete form.dataset.editingId;
+  form.reset();
+  $('#route-preset-spec').placeholder =
+    'Paste the address here — it can be host:port, user:pass@host:port, or the line your provider gave you';
+  $('#route-preset-submit').textContent = 'Save location';
+  $('#route-preset-cancel').hidden = true;
+  $('#route-preset-edit-note').hidden = true;
+}
+$('#route-preset-cancel').addEventListener('click', () => {
+  stopEditingPreset();
+  $('#route-preset-test-result').textContent = 'The edit was cancelled. Nothing was saved.';
+});
 $('#route-preset-test').addEventListener('click', async () => {
   const spec = $('#route-preset-spec').value.trim();
   const output = $('#route-preset-test-result');
@@ -1554,21 +1589,29 @@ $('#route-preset-test').addEventListener('click', async () => {
 });
 $('#route-preset-form').addEventListener('submit', async event => {
   event.preventDefault();
-  const result = await call(() =>
-    poolside.addRoutePreset({
-      name: $('#route-preset-name').value,
-      spec: $('#route-preset-spec').value,
-      bypass: $('#route-preset-bypass').value,
-      enabled: $('#route-preset-enabled').checked
-    })
-  );
-  if (result.ok) $('#route-preset-form').reset();
+  const editing = $('#route-preset-form').dataset.editingId || '';
+  const fields = {
+    name: $('#route-preset-name').value,
+    spec: $('#route-preset-spec').value,
+    bypass: $('#route-preset-bypass').value,
+    enabled: $('#route-preset-enabled').checked
+  };
+  const result = await call(() => (editing ? poolside.updateRoutePreset({ id: editing, ...fields }) : poolside.addRoutePreset(fields)));
+  if (!result.ok) return;
+  if (editing) stopEditingPreset();
+  $('#route-preset-form').reset();
 });
 $('#route-preset-list').addEventListener('click', async event => {
+  const edit = event.target.closest('[data-route-preset-edit]');
+  if (edit) {
+    startEditingPreset(edit.dataset.routePresetEdit);
+    return;
+  }
   const button = event.target.closest('[data-route-preset-delete]');
   if (!button) return;
   const result = await call(() => poolside.deleteRoutePreset(button.dataset.routePresetDelete));
   if (result.ok) toast('Saved route preset removed.');
+  if (result.ok && $('#route-preset-form').dataset.editingId === button.dataset.routePresetDelete) stopEditingPreset();
 });
 // A tick box is an assignment, not a preference: it takes effect on that account's next load, and the
 // refreshed snapshot redraws every box so the list can never disagree with what is stored.

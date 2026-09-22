@@ -86,3 +86,37 @@ test('a ticked location survives a reload and is dropped when the location itsel
     false
   );
 });
+
+test('editing a saved location is refused while an account that uses it is open, and saves when it is closed', () => {
+  const { workspace, call, account, messages, sessions } = fixture();
+  const london = call('route-preset:add', { name: 'London-1', spec: '198.105.121.200:6462:user:secret', enabled: true });
+  call('route-preset:assign', { id: account('Newfie').id, presetId: london.id });
+  // A live window keeps the route it was launched with, so the row must not be allowed to describe a change the
+  // running session is not using — the same rule as ticking the box in the first place.
+  sessions.set(account('Newfie').id, {});
+  assert.throws(
+    () => call('route-preset:update', { id: london.id, name: 'London-2' }),
+    /Close Newfie before changing this saved location\./
+  );
+  sessions.delete(account('Newfie').id);
+
+  const edited = call('route-preset:update', { id: london.id, name: 'London-2', spec: '', enabled: false });
+  assert.equal(edited.name, 'London-2');
+  assert.equal(edited.enabled, false);
+  // The answer that goes to the page carries no credentials, and the stored address is untouched behind it.
+  assert.match(edited.spec, /credentials set/);
+  assert.equal(workspace.data.routePresets[0].spec, '198.105.121.200:6462:user:secret');
+  assert.equal(workspace.data.routePresets[0].id, london.id);
+  assert.equal(account('Newfie').routePresetId, london.id, 'an edit cannot drop the accounts that use it');
+  assert.match(messages.at(-1), /Route preset London-2 updated\./);
+});
+
+test('editing with a typed address replaces the stored one, and an unknown id is refused', () => {
+  const { workspace, call } = fixture();
+  const london = call('route-preset:add', { name: 'London-1', spec: '198.105.121.200:6462', enabled: true });
+  const edited = call('route-preset:update', { id: london.id, spec: '31.59.20.176:6754', bypass: '<local>' });
+  assert.equal(workspace.data.routePresets[0].spec, '31.59.20.176:6754');
+  assert.equal(workspace.data.routePresets[0].bypass, '<local>');
+  assert.equal(edited.spec, '31.59.20.176:6754');
+  assert.throws(() => call('route-preset:update', { id: 'nope', name: 'Anything' }), /Route preset not found\./);
+});

@@ -477,9 +477,14 @@
                     id="route-preset-spec"
                     placeholder="Paste the address here — it can be host:port, user:pass@host:port, or the line your provider gave you"
                     required
-                  /><button class="secondary" type="submit">Save location</button
-                  ><button class="text-button" type="button" id="route-preset-test">Test this address</button>
+                  /><button class="secondary" type="submit" id="route-preset-submit">Save location</button
+                  ><button class="text-button" type="button" id="route-preset-test">Test this address</button
+                  ><button class="text-button" type="button" id="route-preset-cancel" hidden>Cancel the edit</button>
                 </form>
+                <p class="muted" id="route-preset-edit-note" hidden>
+                  Editing a saved location. Leave the address blank to keep the address it already has — Poolside never shows a saved
+                  address with credentials, so it cannot put it back in this field.
+                </p>
                 <p class="form-status" id="route-preset-test-result" role="status"></p>
                 <details class="route-presets-advanced">
                   <summary>Advanced (most people never need this)</summary>
