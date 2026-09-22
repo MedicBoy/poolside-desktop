@@ -87,12 +87,18 @@ function matchParticipantView(participant) {
   const open = Boolean(group && group.window && typeof group.window.isDestroyed === 'function' && !group.window.isDestroyed());
   const session = open && group && group.fsm ? group.fsm.state : 'closed';
   const preflight = participantPreflight({ open, status: session, footprint: group ? group.footprint : null });
+  // Which saved location this account is pointed at, **by name** — never its address, which stays in the main
+  // process. A name is what a record needs: "which of my two exits was this?" is answered by "London-2", and an
+  // address in a document that can be sent on is what the export rules exist to prevent.
+  const account = (workspace.data.accounts || []).find(candidate => candidate.id === participant.id);
+  const preset = account ? (workspace.data.routePresets || []).find(item => item.id === account.routePresetId) : null;
   return {
     ...participant,
     open,
     session,
     ready: participantReady({ open, status: session }),
     route: preflight.route,
+    location: preset && typeof preset.name === 'string' ? preset.name : null,
     detail: preflight.detail,
     releasable: preflight.ok
   };

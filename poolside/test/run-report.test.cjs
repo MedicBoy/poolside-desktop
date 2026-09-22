@@ -67,7 +67,7 @@ test('the report carries each run with the matches it owns, and the standalone m
   assert.equal(built.format, 'poolside-run-report/v1');
   assert.equal(built.generatedAt, new Date(AT).toISOString());
   assert.match(built.note, /contains your account names/);
-  assert.match(built.note, /no passwords, no browser profiles, no screenshots and no page text/);
+  assert.match(built.note, /no passwords, no browser profiles, no screenshots, no page text and no network addresses/);
   assert.match(built.note, /never reconciled against a fee table/);
   assert.equal(built.runs.length, 1);
   const [one] = built.runs;
@@ -88,6 +88,55 @@ test('the report carries each run with the matches it owns, and the standalone m
   assert.equal(one.matches[0].outcome.readings.length, 1);
   assert.equal(built.standaloneMatches.length, 1, 'a match with no run is listed apart, not dropped');
   assert.equal(built.standaloneMatches[0].handle, 'm9');
+});
+
+test('the record says which saved location each participant used, by name and never by address', () => {
+  // A record of "who played whom" that cannot answer "which of my two exits was this?" is missing the one thing
+  // the operator needs to reproduce the attempt. The address itself stays in the main process, where the export
+  // rules already keep it: a name is what a document that can be sent on may carry.
+  const built = report.build(
+    view({
+      runs: {
+        active: null,
+        recent: [
+          run({
+            participants: [
+              { name: 'Newfie', role: 'receiver', location: 'London-1' },
+              { name: 'Gmail', role: 'sender', location: null }
+            ]
+          })
+        ]
+      },
+      recent: [
+        match({
+          participants: [
+            { ...participant('Newfie'), location: 'London-1' },
+            { ...participant('Gmail'), location: null }
+          ]
+        })
+      ]
+    }),
+    { now: AT }
+  );
+  assert.deepEqual(built.runs[0].participants, [
+    { name: 'Newfie', role: 'receiver', location: 'London-1' },
+    { name: 'Gmail', role: 'sender', location: null }
+  ]);
+  assert.deepEqual(built.runs[0].matches[0].participants, [
+    { name: 'Newfie', location: 'London-1' },
+    { name: 'Gmail', location: null }
+  ]);
+  assert.doesNotThrow(() => report.screen(built), 'a location name is not a secret shape, so the record still saves');
+  // And the context the card showed is in the record: what the two accounts were configured to look like.
+  const withContext = report.build(
+    view({
+      runs: { active: null, recent: [run()] },
+      recent: [match({ contrast: [{ code: 'no-identity', text: 'Neither has an identity of its own.' }] })]
+    }),
+    { now: AT }
+  );
+  assert.deepEqual(withContext.runs[0].matches[0].configuredAlike, ['Neither has an identity of its own.']);
+  assert.deepEqual(report.build(view(), { now: AT }).runs, [], 'and a match with no notes carries an empty list rather than nothing');
 });
 
 test('an active run is included, so a report can be taken while a run is still going', () => {

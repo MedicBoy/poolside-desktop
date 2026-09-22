@@ -22,7 +22,12 @@ function matchRecord(match) {
   return {
     handle: match.handle,
     state: match.state,
-    participants: (match.participants || []).map(participant => participant.name),
+    // Each participant's name and, when it has one, the saved location it was pointed at — by name, never by
+    // address. "Which of my two exits was this?" is a question a record has to be able to answer.
+    participants: (match.participants || []).map(participant => ({
+      name: participant.name,
+      location: participant.location || null
+    })),
     startedAt: match.startedAt,
     endedAt: match.endedAt,
     winner: match.winnerName || null,
@@ -33,6 +38,9 @@ function matchRecord(match) {
     pairing: match.pairing
       ? { verdict: match.pairing.verdict, label: match.pairing.label, reason: match.pairing.reason, table: match.pairing.table }
       : null,
+    // What the two accounts were configured to look like when the record was taken: context, not a verdict, and
+    // plainly about configuration rather than about what the sessions reported (ADR-0020).
+    configuredAlike: (match.contrast || []).map(entry => entry.text),
     outcome: match.outcome
       ? {
           verdict: match.outcome.verdict,
@@ -49,7 +57,11 @@ function runRecord(run, matches) {
     handle: run.handle,
     state: run.state,
     paused: run.state === 'paused',
-    participants: (run.participants || []).map(participant => ({ name: participant.name, role: participant.role })),
+    participants: (run.participants || []).map(participant => ({
+      name: participant.name,
+      role: participant.role,
+      location: participant.location || null
+    })),
     plan: { ...run.plan },
     planInWords: run.describe,
     startedAt: run.startedAt,
@@ -79,8 +91,8 @@ function build(matchesView, { now = Date.now() } = {}) {
     generatedAt: stamp(now),
     note:
       'A local record of your own coordination. It contains your account names. It contains no passwords, no ' +
-      'browser profiles, no screenshots and no page text. Balances are recorded as the sessions reported them, ' +
-      'never reconciled against a fee table.',
+      'browser profiles, no screenshots, no page text and no network addresses — a saved location appears by name. ' +
+      'Balances are recorded as the sessions reported them, never reconciled against a fee table.',
     runs: allRuns.map(run => runRecord(run, everyMatch)),
     standaloneMatches: everyMatch.filter(match => !match.runId).map(matchRecord)
   };
