@@ -34,11 +34,42 @@ jobs:
           cache-dependency-path: poolside/package-lock.json
       - run: npm ci
       - run: npm run format:check
-      - run: npm run verify
-      - run: npm run test:persistence
+      # Every report this job produces is kept and uploaded, including on a failing run: a release is argued from
+      # evidence, and a run that failed is the run whose output is worth keeping. `Tee-Object` writes the log
+      # while the output still reaches the job summary, and the exit code is judged afterwards so piping cannot
+      # turn a failure into a pass.
+      - name: Verify (format, lint, types, product truth, tests)
+        shell: pwsh
+        run: |
+          npm run verify 2>&1 | Tee-Object -FilePath verify.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Persistence across a restart
+        shell: pwsh
+        run: |
+          npm run test:persistence 2>&1 | Tee-Object -FilePath persistence.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Corpus validation contract (synthetic fixtures; not the held-out gate)
-        run: node --test test/capture-validation.test.cjs test/capture-validation-cli.test.cjs
-      - run: npm run sbom:check
+        shell: pwsh
+        run: |
+          node --test test/capture-validation.test.cjs test/capture-validation-cli.test.cjs 2>&1 | Tee-Object -FilePath corpus-validation.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Dependency inventory matches the lockfile
+        shell: pwsh
+        run: |
+          npm run sbom:check 2>&1 | Tee-Object -FilePath sbom-check.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: poolside-verify-evidence
+          retention-days: 30
+          path: |
+            poolside/verify.log
+            poolside/persistence.log
+            poolside/corpus-validation.log
+            poolside/sbom-check.log
+            poolside/docs/SBOM.cdx.json
+          if-no-files-found: warn
 
   package:
     needs: verify
@@ -55,7 +86,18 @@ jobs:
           cache: npm
           cache-dependency-path: poolside/package-lock.json
       - run: npm ci
-      - run: npm run package
+      # The verify job's own reports are pulled into this one so a single artifact is the whole evidence set for
+      # the run: what was checked, what it said, what the package contains, and what the packaged build did when
+      # it was asked to test itself.
+      - uses: actions/download-artifact@v4
+        with:
+          name: poolside-verify-evidence
+          path: verify-evidence
+      - name: Package the portable build
+        shell: pwsh
+        run: |
+          npm run package 2>&1 | Tee-Object -FilePath package.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Record executable and app archive hashes
         shell: pwsh
         run: node scripts/inspect-release.cjs | Out-File -LiteralPath release-inspection.json -Encoding utf8
@@ -74,7 +116,12 @@ jobs:
         if: always()
         with:
           name: poolside-preview-release-evidence
+          retention-days: 30
           path: |
             poolside/release-inspection.json
             poolside/docs/SBOM.cdx.json
+            poolside/package.log
+            verify-evidence
+            ${{ runner.temp }}/poolside-self-test.out.log
+            ${{ runner.temp }}/poolside-self-test.err.log
           if-no-files-found: warn
