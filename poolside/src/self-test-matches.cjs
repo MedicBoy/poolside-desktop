@@ -18,6 +18,7 @@ async function runMatchChecks(ctx, assert) {
   const dashboard = workspace.dashboard;
   const { partition } = require('./saved-session.cjs');
   const { runDropoutCheck } = require('./self-test-dropout.cjs');
+  const { runRunPlanChecks } = require('./self-test-run-plan.cjs');
 
   /** Read the live barrier for the only active match until it leaves `preparing`, or time out. */
   async function waitForRelease(timeoutMs = 15000) {
@@ -100,6 +101,42 @@ async function runMatchChecks(ctx, assert) {
   assert.equal(pairingFlow.stillUnproven, 'incomplete', 'asking again does not turn missing evidence into a pairing');
   assert.ok(pairingFlow.history.includes('pairing-evidence'), 'the verdict is part of the match history');
 
+  // --- The count-in: one moment to aim at, and a measurement of what two hands achieved ----------------
+  // It sends no input to the game — the two queue clicks are the operator's — so what is proved here is the
+  // clock and the record: it refuses before release, counts, calls GO in the match's own history, and stops
+  // when asked. The gap between two real clicks is measured from the screens, which needs a live pair.
+  const countIn = await dashboard.webContents.executeJavaScript(`(async () => {
+    const state = await poolside.get();
+    const matchId = state.value.matches.active[0].matchId;
+    const armed = await poolside.armRelease({ matchId, leadInMs: 1500 });
+    const during = armed.ok ? armed.value.release : null;
+    const until = Date.now() + 15000;
+    let events = [];
+    while (Date.now() < until) {
+      const live = (await poolside.get()).value.matches.active.find(match => match.matchId === matchId);
+      events = live ? live.history.map(entry => entry.event) : [];
+      if (events.includes('count-in-go')) break;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    const stopped = await poolside.cancelRelease({ matchId });
+    const after = (await poolside.get()).value.matches.active.find(match => match.matchId === matchId);
+    return {
+      armedOk: armed.ok,
+      armedError: String(armed.error || ''),
+      phase: during ? during.phase : null,
+      line: during ? during.line : null,
+      events,
+      stoppedOk: stopped.ok,
+      cancelled: after && after.release ? after.release.phase : null
+    };
+  })()`);
+  assert.equal(countIn.armedOk, true, `the count-in could not start: ${countIn.armedError}`);
+  assert.equal(countIn.phase, 'counting');
+  assert.match(countIn.line, /click Test receiver's Play button, then Test sender's\./);
+  assert.ok(countIn.events.includes('count-in-go'), 'the moment to click is recorded in the match history');
+  assert.equal(countIn.stoppedOk, true);
+  assert.equal(countIn.cancelled, 'cancelled', 'the card says the count-in was stopped');
+
   const matchFlow = await dashboard.webContents.executeJavaScript(`(async () => {
     const state = await poolside.get();
     const matchId = state.value.matches.active[0].matchId;
@@ -132,106 +169,7 @@ async function runMatchChecks(ctx, assert) {
   assert.equal(matchFlow.navigable, 1, 'the coordinator has its own dashboard view');
   assert.ok(matchFlow.logged >= 2, 'the pairing and the result both reached the activity history');
 
-  // --- A run plan: the plan stops the run, not the operator watching a counter -------------------------
-  // The whole point of a plan is that its limit is enforced. This drives it through the real bridge: two
-  // matches are recorded under the plan, the plan is met, and the program — not the test — ends the run.
-  const runFlow = await dashboard.webContents.executeJavaScript(`(async () => {
-    const snapshot = await poolside.get();
-    const ids = snapshot.value.accounts.map(account => account.id);
-    const started = await poolside.startRun({
-      first: ids[0],
-      second: ids[1],
-      plan: { table: 'Rome', matchLimit: 2, stopAfterFailures: 3, stopAfterMinutes: 60 },
-      load: false
-    });
-    if (!started.ok) return { error: started.error };
-    const runId = started.value.runs.active.runId;
-    const joined = started.value.active[0].runId === runId;
-    // The run dashboard: where the run is, what its release state is, how old the readings are, what will
-    // stop it next and what to do now. Live session state comes from the snapshot, not from the reply, and the
-    // barrier releases on its own check loop — so this waits for the release the way the dashboard does,
-    // rather than assuming the first look already shows one.
-    const until = Date.now() + 15000;
-    let opening = null;
-    while (Date.now() < until) {
-      opening = (await poolside.get()).value.matches.runs.active.status;
-      if (opening && opening.stage !== 'preparing') break;
-      await new Promise(resolve => setTimeout(resolve, 250));
-    }
-    const record = async winner => {
-      const live = (await poolside.get()).value.matches.active[0];
-      return poolside.completeMatch({ matchId: live.matchId, winner });
-    };
-    const one = await record(ids[1]);
-    const afterOne = (await poolside.get()).value.matches.runs.active;
-    const next = await poolside.startMatch({ first: ids[0], second: ids[1], load: false });
-    const two = await record(ids[0]);
-    const after = await poolside.get();
-    const ended = after.value.matches.runs.recent[0];
-    const third = await poolside.startMatch({ first: ids[0], second: ids[1], load: false });
-    const tidy = third.ok ? await poolside.cancelMatch({ matchId: third.value.active[0].matchId }) : null;
-    return {
-      joined,
-      openingStage: opening ? opening.stage : null,
-      openingStages: ['preparing', 'released', 'blocked'],
-      openingAction: opening ? opening.nextAction : null,
-      openingSkew: opening ? opening.skewMs : 'missing',
-      openingObserved: opening ? opening.observations.length : -1,
-      openingNextStop: opening ? opening.nextStop : null,
-      oneOk: one.ok,
-      afterOneActive: Boolean(afterOne),
-      afterOneCompleted: afterOne ? afterOne.progress.completed : -1,
-      nextJoined: next.ok ? next.value.active[0].runId === runId : null,
-      twoOk: two.ok,
-      activeAfterLimit: after.value.matches.runs.active,
-      outcome: ended ? ended.outcome : null,
-      outcomeLabel: ended ? ended.outcomeLabel : null,
-      reason: ended ? ended.reason : null,
-      describe: ended ? ended.describe : null,
-      endedStage: ended && ended.status ? ended.status.stage : null,
-      endedStop: ended && ended.status ? ended.status.stop : null,
-      endedNext: ended && ended.status ? ended.status.nextAction : null,
-      participants: ended ? ended.participants.map(entry => [entry.name, entry.role]) : [],
-      thirdOk: third.ok,
-      thirdRunId: third.ok ? third.value.active[0].runId : 'none',
-      tidyOk: tidy ? tidy.ok : null
-    };
-  })()`);
-  assert.equal(runFlow.error, undefined, `the run could not be started: ${runFlow.error}`);
-  assert.equal(runFlow.joined, true, 'the first match of a run belongs to the run');
-  // The run dashboard as the operator sees it: a stage, a release line, one reading per participant, what
-  // will stop the run next, and the one thing to do now.
-  assert.ok(runFlow.openingStages.includes(runFlow.openingStage), `unexpected run stage: ${runFlow.openingStage}`);
-  assert.equal(runFlow.openingObserved, 2, 'the status reports one screen reading per participant');
-  assert.ok(runFlow.openingAction && runFlow.openingAction.length > 20, 'the status says what to do next');
-  assert.match(runFlow.openingNextStop, /^Stops when: /);
-  // Both sessions are already open and ready from the match check above, so this releases without any help;
-  // the wait above is what makes the reading of the card deterministic rather than a race with the barrier.
-  assert.equal(runFlow.openingStage, 'released');
-  assert.ok(Number.isFinite(runFlow.openingSkew) && runFlow.openingSkew >= 0, `unexpected skew: ${runFlow.openingSkew}`);
-  assert.match(runFlow.openingAction, /Play this match/);
-  assert.equal(runFlow.oneOk, true);
-  assert.equal(runFlow.afterOneActive, true, 'one match is not the whole plan');
-  assert.equal(runFlow.afterOneCompleted, 1);
-  assert.equal(runFlow.nextJoined, true, 'the next match is added to the run in progress');
-  assert.equal(runFlow.twoOk, true);
-  assert.equal(runFlow.activeAfterLimit, null, 'reaching the limit ended the run');
-  assert.equal(runFlow.outcome, 'limit');
-  assert.equal(runFlow.outcomeLabel, 'Match limit reached');
-  assert.match(runFlow.reason, /2 matches with a recorded result/);
-  assert.match(runFlow.describe, /on Rome/);
-  assert.deepEqual(runFlow.participants, [
-    ['Test receiver', 'receiver'],
-    ['Test sender', 'sender']
-  ]);
-  assert.equal(runFlow.endedStage, 'ended');
-  assert.equal(runFlow.endedStop.label, 'Match limit reached');
-  assert.match(runFlow.endedStop.reason, /2 matches with a recorded result/);
-  assert.match(runFlow.endedNext, /this run is over/);
-  // The plan stops the run; it does not lock the pair out. A match started afterwards is a match on its own.
-  assert.equal(runFlow.thirdOk, true);
-  assert.equal(runFlow.thirdRunId, null);
-  assert.equal(runFlow.tidyOk, true);
+  await runRunPlanChecks(ctx, assert);
 
   // The windows themselves, not just the ledger: a real window per participant, on the game URL, with an
   // FSM that has left `closed`. This is the part a recorded pairing alone could not prove.

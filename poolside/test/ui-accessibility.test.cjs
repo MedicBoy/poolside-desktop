@@ -303,3 +303,33 @@ test('the run card reports the stage, the release, the reading ages and the next
   assert.match(css, /\.run-status\.act dd:last-of-type\s*\{/);
   assert.match(css, /\.run-status\.watch dd:last-of-type\s*\{/);
 });
+
+test('the match card offers the count-in and says what it measured', () => {
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  // The count-in is a moment to aim at plus a measurement, never a click: the card says so, and the
+  // measured line is drawn like the other evidence on the card.
+  assert.match(renderer, /function matchRelease\(match, actionable\)/);
+  assert.match(renderer, /Count me in — 5 s/);
+  assert.match(renderer, /Stop the count-in/);
+  assert.match(renderer, /one moment to aim at, then measures the gap your two clicks produced/);
+  assert.match(renderer, /poolside\.armRelease\(\{ matchId: button\.dataset\.match \}\)/);
+  assert.match(renderer, /poolside\.cancelRelease\(\{ matchId: button\.dataset\.match \}\)/);
+  assert.match(renderer, /\$\{matchRelease\(match, actionable\)\}/);
+  for (const phase of ['counting', 'go', 'done', 'cancelled']) {
+    assert.match(css, new RegExp('\\.match-release\\.' + phase));
+  }
+});
+
+test('a paused run still offers Resume and Stop, because paused is not finished', () => {
+  const renderer = ui('renderer.js');
+  // The defect: the controls were gated on the run being `active`, so a paused run rendered with no buttons
+  // at all — no way back and no way out. The operator reported it as "there was no resume match button".
+  assert.match(renderer, /const running = run\.state !== 'ended';/);
+  assert.match(renderer, /actionable && running/);
+  assert.match(renderer, /data-action="run-resume"/);
+  assert.match(renderer, /data-action="run-pause"/);
+  assert.match(renderer, /data-action="run-stop"/);
+  // And the run card itself is drawn in the paused state, so the buttons it now offers are reachable.
+  assert.match(renderer, /class="match-card run-card \$\{escapeHtml\(run\.state\)\}"/);
+});

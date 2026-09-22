@@ -28,9 +28,7 @@ const {
   emptyState,
   cleanState
 } = require('./match-record.cjs');
-
-/** How many finished matches the dashboard shows. */
-const VIEW_LIMIT = 8;
+const { dashboardView } = require('./match-view.cjs');
 
 function step(from, to, event, detail, at) {
   return { at: stamp(at), from, to, event, detail: text(detail, TEXT_LIMIT) };
@@ -99,6 +97,12 @@ function settleReadiness(state, { matchId, verdict, reason, releasedAt, skewMs =
   return replaced(state, moved({ ...match, readiness }, match.state, verdict === 'ready' ? 'released' : 'blocked', detail, now));
 }
 
+/** Append one step to a match's history, with an optional payload. @param {any} state */
+function addStep(state, matchId, event, detail, now, patch = {}) {
+  const match = activeMatch(state, matchId);
+  return replaced(state, moved({ ...match, ...patch }, match.state, event, detail, now));
+}
+
 /**
  * Record what the two screens amount to. The checker writes this only when the verdict changes, so the
  * ledger holds evidence rather than a heartbeat.
@@ -106,9 +110,17 @@ function settleReadiness(state, { matchId, verdict, reason, releasedAt, skewMs =
  * @param {{matchId: string, pairing: any, now?: number}} input
  */
 function recordPairing(state, { matchId, pairing, now = Date.now() }) {
-  const match = activeMatch(state, matchId);
-  const detail = `${pairing.label}: ${pairing.reason}`;
-  return replaced(state, moved({ ...match, pairing: { ...pairing } }, match.state, 'pairing-evidence', detail, now));
+  return addStep(state, matchId, 'pairing-evidence', `${pairing.label}: ${pairing.reason}`, now, { pairing: { ...pairing } });
+}
+
+/**
+ * Record one step of a hand-queued count-in against the match. The count-in itself lasts seconds and is not
+ * state worth recovering; what it measured is, so it goes through the same history every other step uses.
+ * @param {any} state
+ * @param {{matchId: string, event: string, detail: string, now?: number}} input
+ */
+function recordReleaseStep(state, { matchId, event, detail, now = Date.now() }) {
+  return addStep(state, matchId, event, detail, now);
 }
 
 function locate(state, handleOrId) {
@@ -232,45 +244,6 @@ function interrupt(state, { now = Date.now() } = {}) {
   return { ...state, matches };
 }
 
-function matchView(match) {
-  return {
-    handle: match.handle,
-    matchId: match.matchId,
-    participants: match.participants.map(participant => ({ ...participant })),
-    state: match.state,
-    runId: match.runId || null,
-    winnerId: match.winnerId,
-    winnerName: match.winnerName,
-    reason: match.reason,
-    startedAt: match.startedAt,
-    endedAt: match.endedAt,
-    readiness: match.readiness ? { ...match.readiness } : null,
-    pairing: match.pairing ? { ...match.pairing } : null,
-    history: match.history.slice(-4).map(item => ({ ...item }))
-  };
-}
-
-/**
- * The dashboard-safe projection: counts, the matches in progress, and the most recent finished ones.
- * @param any state
- */
-function dashboardView(state) {
-  const ledger = state.matches;
-  return {
-    totals: {
-      recorded: ledger.length,
-      active: ledger.filter(match => match.state === 'active').length,
-      completed: ledger.filter(match => match.state === 'completed').length,
-      cancelled: ledger.filter(match => match.state === 'cancelled').length
-    },
-    active: ledger.filter(match => match.state === 'active').map(matchView),
-    recent: ledger
-      .filter(match => match.state !== 'active')
-      .slice(0, VIEW_LIMIT)
-      .map(matchView)
-  };
-}
-
 module.exports = {
   start,
   complete,
@@ -280,6 +253,7 @@ module.exports = {
   requestReadiness,
   settleReadiness,
   recordPairing,
+  recordReleaseStep,
   dashboardView,
   cleanState,
   emptyState,

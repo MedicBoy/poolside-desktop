@@ -9,11 +9,12 @@ const crypto = require('node:crypto');
 const runs = require('./run-coordination.cjs');
 
 /**
- * @param {{store: {current: any}, persist: (state: any) => any, log: (message: string, kind?: 'info'|'warning') => void, publish: () => void, accounts: () => any[]|any[], now?: () => number, makeId?: () => string, runCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void}} deps
+ * @param {{store: {current: any}, persist: (state: any) => any, commit: (state: any, message: string|null) => any, log: (message: string, kind?: 'info'|'warning') => void, publish: () => void, accounts: () => any[]|any[], now?: () => number, makeId?: () => string, runCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void}} deps
  */
 function createRunKeeper({
   store,
   persist,
+  commit,
   log,
   publish,
   accounts,
@@ -113,6 +114,28 @@ function createRunKeeper({
     return { state, run: runs.find(state, runId) };
   }
 
+  /** The three commands the operator has: each commits in one write and says what happened in one voice. */
+  function stopRun({ runId, reason }) {
+    const stopped = stop({ runId, reason });
+    const view = commit(stopped.state, `${stopped.run.handle} stopped: ${stopped.run.reason}`);
+    syncPoll();
+    return view;
+  }
+
+  function pauseRun({ runId, reason }) {
+    const held = pause({ runId, reason });
+    const view = commit(held.state, `${held.run.handle} paused: ${held.run.reason}`);
+    syncPoll();
+    return view;
+  }
+
+  function resumeRun({ runId }) {
+    const going = resume({ runId });
+    const view = commit(going.state, `${going.run.handle} resumed.`);
+    syncPoll();
+    return view;
+  }
+
   /** Stop the check. Used when the app is shutting down and by tests. */
   function dispose() {
     if (poll) clearTimer(poll);
@@ -124,6 +147,9 @@ function createRunKeeper({
     stop,
     pause,
     resume,
+    stopRun,
+    pauseRun,
+    resumeRun,
     judge,
     enforce,
     announce,

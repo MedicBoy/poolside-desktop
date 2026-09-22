@@ -17,6 +17,8 @@ async function runDropoutCheck(ctx, assert) {
     const started = await poolside.startMatch({ first: ids[0], second: ids[1], load: false });
     if (!started.ok) return { error: started.error };
     const matchId = started.value.active[0].matchId;
+    // Nothing is open, so nothing can be queued: the count-in refuses until the barrier has released a match.
+    const armed = await poolside.armRelease({ matchId });
     // Live session state comes from the snapshot, not from the reply: the reply is the ledger, and whether a
     // window is open is process state that the dashboard view resolves.
     const first = (await poolside.get()).value.matches.active.find(match => match.matchId === matchId);
@@ -31,6 +33,8 @@ async function runDropoutCheck(ctx, assert) {
     const after = await poolside.get();
     return {
       open,
+      armRefused: !armed.ok,
+      armError: String(armed.error || ''),
       cancelled: Boolean(settled),
       reason: settled ? settled.reason : '',
       active: after.value.matches.totals.active,
@@ -38,6 +42,8 @@ async function runDropoutCheck(ctx, assert) {
     };
   })()`);
   assert.deepEqual(dropout.open, [false, false], 'neither participant has a window behind it, as the operator reported');
+  assert.equal(dropout.armRefused, true, 'a count-in over a match with no window is refused');
+  assert.match(dropout.armError, /waits until both profiles are released\./);
   assert.equal(dropout.cancelled, true, `the match with no session was not cleared: ${dropout.reason}`);
   assert.match(dropout.reason, /session has been closed for \d+ seconds, so m\d+ was cancelled as a dropout\./);
   assert.equal(dropout.active, 0, 'nothing is left in progress once the match with no session behind it is cleared');

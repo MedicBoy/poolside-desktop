@@ -9,7 +9,7 @@ const coordination = require('./match-coordination.cjs');
 const evidence = require('./pairing-evidence.cjs');
 
 /**
- * @param {{store: {current: any}, persist: (state: any) => any, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, observe?: ((id: string) => any)|null, now?: () => number, windowMs?: number, checkMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void}} deps
+ * @param {{store: {current: any}, persist: (state: any) => any, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, observe?: ((id: string) => any)|null, view?: (() => any)|null, now?: () => number, windowMs?: number, checkMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void}} deps
  */
 function createPairingChecker({
   store,
@@ -17,6 +17,7 @@ function createPairingChecker({
   publish,
   log,
   observe = null,
+  view = null,
   now = () => Date.now(),
   windowMs = evidence.WINDOW_MS,
   checkMs = 5000,
@@ -144,7 +145,13 @@ function createPairingChecker({
     poll = null;
   }
 
-  return { check, checkReleased, syncPoll, dispose, sightings };
+  /** The dashboard's command: judge now, and hand back the card's view with the verdict in it. */
+  function command({ matchId }) {
+    const verdict = check(matchId, { force: true });
+    return view ? { ...view(), pairing: verdict } : { pairing: verdict };
+  }
+
+  return { check, checkReleased, syncPoll, dispose, command, sightings };
 }
 
 module.exports = { createPairingChecker };

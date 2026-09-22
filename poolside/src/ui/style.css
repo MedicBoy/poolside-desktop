@@ -2107,6 +2107,17 @@ dialog p {
 .match-empty {
   color: var(--amber);
 }
+/* The count-in: amber while it counts, green at the moment to click, plain once it has measured something. */
+.match-release.counting {
+  color: var(--amber);
+}
+.match-release.go {
+  color: var(--mint);
+}
+.match-release.done,
+.match-release.cancelled {
+  color: var(--text);
+}
 .match-subheading {
   margin: 20px 0 0;
 }

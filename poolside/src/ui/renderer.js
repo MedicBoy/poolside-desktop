@@ -767,6 +767,23 @@ function matchPairing(match, actionable) {
     : '';
   return `<small class="match-meta match-pairing ${escapeHtml(verdict)}">Pairing evidence: ${escapeHtml(detail)}</small><div class="match-actions">${action}</div>`;
 }
+// The count-in: one exact moment to aim at, the order to click in, and then the measurement of what two hands
+// actually achieved. It is the operator's click that queues an account — this only says how close together
+// the two clicks landed, read from the two sessions' own screens.
+function matchRelease(match, actionable) {
+  if (match.readiness?.verdict !== 'ready') return '';
+  const button = (label, action) =>
+    `<button class="secondary" data-action="${action}" data-match="${escapeHtml(match.matchId)}">${label}</button>`;
+  const release = match.release;
+  if (!release)
+    return `<small class="match-meta">Queue both windows by hand: the count-in gives you one moment to aim at, then measures the gap your two clicks produced.</small>${
+      actionable ? `<div class="match-actions">${button('Count me in — 5 s', 'match-arm')}</div>` : ''
+    }`;
+  const stop = actionable && ['counting', 'go'].includes(release.phase) ? button('Stop the count-in', 'match-arm-cancel') : '';
+  return `<small class="match-meta match-release ${escapeHtml(release.phase)}">${escapeHtml(release.line)}</small>${
+    stop ? `<div class="match-actions">${stop}</div>` : ''
+  }`;
+}
 function matchCard(match, actionable) {
   const [first, second] = match.participants || [];
   const needsLoad =
@@ -810,6 +827,7 @@ function matchCard(match, actionable) {
       ${note}
       ${matchReadiness(match)}
       ${matchPairing(match, actionable)}
+      ${matchRelease(match, actionable)}
       ${matchSessions(match)}
       ${match.reason ? `<small class="match-meta">${escapeHtml(match.reason)}</small>` : ''}
       ${actions}
@@ -870,6 +888,10 @@ function runStatus(status) {
     .join('')}</dl>`;
 }
 function runCard(run, actionable) {
+  // `running` decides which controls to draw: a paused run is not finished, so it must still offer Resume and
+  // Stop. (Gating on `state === 'active'` left a paused run with no buttons at all — no way back and no way
+  // out — and the operator's own report was "there was no resume match button visible".)
+  const running = run.state !== 'ended';
   const active = run.state === 'active';
   const participants = (run.participants || []).length
     ? `<ul class="match-sessions">${run.participants
@@ -885,7 +907,7 @@ function runCard(run, actionable) {
     ? `<small class="match-meta run-outcome">${escapeHtml(`${run.outcomeLabel} — ${run.reason}`)}</small>`
     : '';
   const actions =
-    actionable && active
+    actionable && running
       ? `<div class="match-actions">
             ${
               run.paused
@@ -1112,6 +1134,20 @@ document.addEventListener('click', async event => {
     if (!result.ok) return;
     const pairing = result.value?.pairing;
     toast(pairing ? `${pairing.label}: ${pairing.reason}` : 'Pairing evidence is not available yet.');
+    return;
+  }
+  if (['match-arm', 'match-arm-cancel'].includes(button.dataset.action)) {
+    // Starting a count-in, or stopping one before GO. Neither queues anything by itself; the click does.
+    const starting = button.dataset.action === 'match-arm';
+    const result = await call(() =>
+      starting ? poolside.armRelease({ matchId: button.dataset.match }) : poolside.cancelRelease({ matchId: button.dataset.match })
+    );
+    if (!result.ok) return;
+    toast(
+      starting
+        ? 'Count-in started — watch the card, it will call GO and then measure your two clicks.'
+        : 'Count-in stopped. Nothing was queued by it.'
+    );
     return;
   }
   if (['match-load', 'match-complete', 'match-cancel'].includes(button.dataset.action)) {

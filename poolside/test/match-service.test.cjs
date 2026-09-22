@@ -199,6 +199,8 @@ test('the dashboard surface exposes the match and run channels and passes input 
   const handlers = new Map();
   registerMatchIpc({ handle: (name, fn) => handlers.set(name, fn), matches: service });
   assert.deepEqual([...handlers.keys()].sort(), [
+    'match:arm',
+    'match:arm-cancel',
     'match:cancel',
     'match:complete',
     'match:load',

@@ -112,7 +112,12 @@ function matchesView() {
   // only when something changed, so this cannot loop.
   const service = matchState.service;
   const view = service && typeof service.refresh === 'function' ? service.refresh() : dashboardView(matchState.current);
-  const decorate = match => ({ ...match, participants: match.participants.map(matchParticipantView) });
+  const decorate = match => ({
+    ...match,
+    participants: match.participants.map(matchParticipantView),
+    // The count-in lives in memory for the few seconds it lasts; what it measured goes into the match history.
+    release: service && typeof service.releaseStatus === 'function' ? service.releaseStatus(match.matchId) : null
+  });
   const runs = view.runs || runsView(matchState.current);
   const decorateRun = run => {
     const decorated = {

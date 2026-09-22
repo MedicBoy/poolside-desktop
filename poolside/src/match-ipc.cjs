@@ -1,7 +1,7 @@
 // Dashboard surface for local match coordination. Validation lives in the engine so the message the
 // operator sees is the reason the operation was refused, not a generic rejection.
 
-/** @param {{handle: (name: string, fn: (input: any) => any) => void, matches: {start: Function, startRun: Function, stopRun: Function, pauseRun: Function, resumeRun: Function, checkPairing: Function, complete: Function, cancel: Function, load: Function, view: Function}}} deps */
+/** @param {{handle: (name: string, fn: (input: any) => any) => void, matches: {start: Function, startRun: Function, stopRun: Function, pauseRun: Function, resumeRun: Function, checkPairing: Function, armRelease: Function, cancelRelease: Function, complete: Function, cancel: Function, load: Function, view: Function}}} deps */
 function registerMatchIpc({ handle, matches }) {
   const id = value => (typeof value === 'string' ? value.trim() : '');
 
@@ -33,6 +33,10 @@ function registerMatchIpc({ handle, matches }) {
     matches.pauseRun({ runId: id(input?.runId), reason: typeof input?.reason === 'string' ? input.reason : '' })
   );
   handle('run:resume', input => matches.resumeRun({ runId: id(input?.runId) }));
+  // The count-in: one exact moment to aim at and a measurement of the gap two hands produced. It sends no
+  // input to the game — the two queue clicks are the operator's.
+  handle('match:arm', input => matches.armRelease({ matchId: id(input?.matchId), leadInMs: Number(input?.leadInMs) || undefined }));
+  handle('match:arm-cancel', input => matches.cancelRelease({ matchId: id(input?.matchId) }));
 }
 
 module.exports = { registerMatchIpc };

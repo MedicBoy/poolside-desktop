@@ -14,6 +14,7 @@ const { createPairingChecker } = require('./match-pairing.cjs');
 const { createDropoutWatcher } = require('./match-dropout.cjs');
 const { createMatchLedger } = require('./match-ledger.cjs');
 const { createMatchLifecycle } = require('./match-lifecycle.cjs');
+const { createReleaseService } = require('./match-release.cjs');
 const { createParticipantLoader } = require('./match-participants.cjs');
 const { text, ID_LIMIT } = require('./match-record.cjs');
 
@@ -28,7 +29,7 @@ function participantReady({ open, status }) {
 }
 
 /**
- * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, observe?: ((id: string) => any)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, runCheckMs?: number, pairingWindowMs?: number, pairingCheckMs?: number, dropoutGraceMs?: number, dropoutCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
+ * @param {{accounts: () => any[]|any[], store: {current: any}, publish: () => void, log: (message: string, kind?: 'info'|'warning') => void, openSession?: ((id: string) => Promise<any>)|null, participant?: ((id: string) => {open: boolean, status: string, footprint?: any})|null, probeExit?: ((id: string) => Promise<any>)|null, observe?: ((id: string) => any)|null, ready?: ((id: string) => boolean)|null, monotonic?: () => number, readyDeadlineMs?: number, readyCheckMs?: number, runCheckMs?: number, pairingWindowMs?: number, pairingCheckMs?: number, releaseTickMs?: number, dropoutGraceMs?: number, dropoutCheckMs?: number, setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void, journal?: {read: Function, write: Function}|null, now?: () => number, makeId?: () => string}} deps
  */
 function createMatchService({
   accounts,
@@ -49,6 +50,7 @@ function createMatchService({
   runCheckMs = 30000,
   pairingWindowMs,
   pairingCheckMs = 5000,
+  releaseTickMs = 250,
   dropoutGraceMs = 15000,
   dropoutCheckMs = 5000,
   setTimer = (callback, delay) => setInterval(callback, delay),
@@ -85,6 +87,7 @@ function createMatchService({
   const runs = createRunKeeper({
     store,
     persist,
+    commit,
     log,
     publish,
     accounts,
@@ -107,6 +110,7 @@ function createMatchService({
     publish,
     log,
     observe,
+    view: () => ledger.view(),
     now,
     windowMs: pairingWindowMs,
     checkMs: pairingCheckMs,
@@ -130,6 +134,21 @@ function createMatchService({
 
   // Settling a match: record the result, then let the run's plan judge it, in one write.
   const lifecycle = createMatchLifecycle({ store, commit, runs, now });
+
+  // Counting the operator in to queue both windows by hand, and measuring the gap their clicks produced.
+  // It sends no input to the game: the clicks are the operator's, and this only says how close together they
+  // landed, from the two sessions' own screens.
+  const release = createReleaseService({
+    store,
+    commit,
+    log,
+    observe,
+    view: () => ledger.view(),
+    now,
+    tickMs: releaseTickMs,
+    setTimer,
+    clearTimer
+  });
 
   /**
    * Cancel anything whose participant has left the workspace. Called before every read, so the ledger
@@ -209,16 +228,6 @@ function createMatchService({
   }
 
   /**
-   * Judge this match's pairing evidence now, and say what it amounted to. This is the operator asking
-   * again after looking at both windows, so the answer is returned even when it has not changed.
-   * @param {{matchId: string}} input
-   */
-  function checkPairing({ matchId }) {
-    const verdict = pairing.check(text(matchId, ID_LIMIT), { force: true });
-    return { ...ledger.view(), pairing: verdict };
-  }
-
-  /**
    * Start a match. When a run is in progress the match joins it — the run's counters are counted from the
    * matches that carry its id — and a pair that is not the run's pair is refused rather than played beside
    * it. With no run in progress this is the standalone pairing it has always been.
@@ -241,26 +250,17 @@ function createMatchService({
 
   /** Stop a run by hand. A match of its still in progress is cancelled with the reason. */
   function stopRun({ runId, reason }) {
-    const stopped = runs.stop({ runId: text(runId, ID_LIMIT), reason });
-    const view = commit(stopped.state, `${stopped.run.handle} stopped: ${stopped.run.reason}`);
-    runs.syncPoll();
-    return view;
+    return runs.stopRun({ runId: text(runId, ID_LIMIT), reason });
   }
 
   /** Hold a run where it is: the match being played is left alone and no further match is started. */
   function pauseRun({ runId, reason }) {
-    const held = runs.pause({ runId: text(runId, ID_LIMIT), reason });
-    const view = commit(held.state, `${held.run.handle} paused: ${held.run.reason}`);
-    runs.syncPoll();
-    return view;
+    return runs.pauseRun({ runId: text(runId, ID_LIMIT), reason });
   }
 
   /** Let a paused run continue, with the time it spent paused taken out of the plan's clock. */
   function resumeRun({ runId }) {
-    const going = runs.resume({ runId: text(runId, ID_LIMIT) });
-    const view = commit(going.state, `${going.run.handle} resumed.`);
-    runs.syncPoll();
-    return view;
+    return runs.resumeRun({ runId: text(runId, ID_LIMIT) });
   }
 
   /** Stop the barrier check. Used when the app is shutting down and by tests. */
@@ -269,6 +269,7 @@ function createMatchService({
     runs.dispose();
     pairing.dispose();
     dropouts.dispose();
+    release.dispose();
   }
 
   return {
@@ -277,7 +278,10 @@ function createMatchService({
     stopRun,
     pauseRun,
     resumeRun,
-    checkPairing,
+    checkPairing: pairing.command,
+    releaseStatus: release.status,
+    armRelease: release.armCommand,
+    cancelRelease: release.cancelCommand,
     complete: lifecycle.complete,
     cancel: lifecycle.cancel,
     load,
