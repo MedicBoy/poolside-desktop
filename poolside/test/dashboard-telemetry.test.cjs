@@ -175,6 +175,41 @@ test('the scanner does not cry wolf on the shapes this payload legitimately cont
   assert.equal(redaction.findSecrets({ version: '0.1.0' }).length, 0);
 });
 
+test('a route credential is a secret shape, in both forms a provider hands out', () => {
+  // The scanner could already catch an address, a path and a token. It could not catch a *credential*, which is
+  // what a route with authentication carries and what the run report is screened for — and a domain-hosted route
+  // (`user:pass@proxy.example.com:8080`) carried no shape the scanner knew, so it would have crossed unseen.
+  const credential = 'user:password@proxy.example.com:8080';
+  const providerLine = 'proxy.example.com:8080:user:password';
+  for (const spec of [credential, providerLine]) {
+    const found = redaction.findSecrets({ route: spec });
+    assert.deepEqual(
+      found.map(item => item.kind),
+      ['credential'],
+      `${spec} must be caught by the credential shape`
+    );
+    // Caught *and* removable: the cleaner is built from the same declaration, so the two cannot drift.
+    assert.match(redaction.stripSecretShapes(`route ${spec} failed`), /\[redacted:credential\]/);
+  }
+});
+
+test('a route target without credentials is not a secret, and neither is an ordinary clock reading', () => {
+  // The other half of the same decision. A bare `host:port` is a target the operator typed; flagging it would
+  // make the scan noisy, and a scan that fires on an ordinary payload is a scan that gets switched off.
+  for (const innocent of ['proxy.example.com:8080', 'http://proxy.example.com', '12:30:45', '0.1.0']) {
+    assert.deepEqual(redaction.findSecrets({ route: innocent }), [], `${innocent} must not be reported`);
+  }
+  // Recorded rather than hidden: a clock reading with seconds *and* hundredths is four colon-separated groups,
+  // which the older IPv6 heuristic reads as an address. It predates the credential shape, it errs towards
+  // refusing rather than towards leaking, and it was left alone deliberately — tightening the IPv6 shape enough
+  // to stop it would weaken the shape that catches a real address.
+  assert.deepEqual(
+    redaction.findSecrets({ at: '12:30:45:00' }).map(item => item.kind),
+    ['ipv6'],
+    'a known, recorded floor: the scan refuses rather than passing something it cannot read'
+  );
+});
+
 test('every declared layer says what it may contain', () => {
   for (const layer of telemetry.LAYERS) {
     assert.notEqual(telemetry.describeLayer(layer), 'not a declared layer', `${layer} is declared but undescribed`);

@@ -1,6 +1,6 @@
 {
   "name": "poolside",
-  "version": "0.2.0",
+  "version": "0.3.11",
   "private": true,
   "description": "Local desktop workspace for isolated 8 Ball Pool account sessions",
   "main": "src/main.cjs",
@@ -11,12 +11,19 @@
     "format": "prettier --write \"src/**/*.{cjs,js,css,html}\" \"test/**/*.cjs\" \"*.md\" \"docs/**/*.md\"",
     "format:check": "prettier --check \"src/**/*.{cjs,js,css,html}\" \"test/**/*.cjs\" \"*.md\" \"docs/**/*.md\"",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run lint && npm run typecheck && npm test",
+    "verify": "npm run lint && npm run typecheck && npm run product:check && npm run docs:check && npm test",
+    "product:check": "node scripts/product-truth.cjs && node scripts/check-work-items.cjs",
+    "docs:check": "node scripts/architecture-modules.cjs --check",
+    "docs:modules": "node scripts/architecture-modules.cjs --write",
     "test": "node --test test/*.test.cjs",
     "test:desktop": "electron . --self-test",
+    "test:desktop:repeat": "node scripts/repeat-self-test.cjs",
     "test:persistence": "node test/run-session-restart.cjs",
     "test:game": "electron . --game-check",
-    "package": "electron-packager . Poolside --platform=win32 --arch=x64 --out=release --asar.unpackDir=node_modules --overwrite --ignore=^/release --ignore=^/test",
+    "validate:corpus": "node scripts/validate-capture-corpus.cjs",
+    "analyze:tables": "node scripts/analyze-table-evidence.cjs",
+    "replay:evidence": "node scripts/replay-recognition-evidence.cjs",
+    "package": "electron-packager . Poolside --platform=win32 --arch=x64 --out=release --asar.unpackDir=node_modules --overwrite --ignore=/release/ --ignore=/test --ignore=/tools --ignore=/designs --ignore=\\.log$ --ignore=/\\.edit_release",
     "sbom": "node scripts/generate-sbom.cjs",
     "sbom:check": "node scripts/generate-sbom.cjs --check",
     "release:inspect": "node scripts/inspect-release.cjs"
@@ -25,6 +32,7 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@electron/asar": "4.3.0",
     "@electron/packager": "20.3.0",
     "@types/node": "^26.6.1",
     "electron": "44.4.1",

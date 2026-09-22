@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const backup = require('../src/workspace-backup.cjs');
+const model = require('../src/model.cjs');
 const manifest = require('../src/backup-manifest.cjs');
 const { ACCOUNTS_DIR, PARTITIONS_DIR, partitionName } = require('../src/profile-paths.cjs');
 
@@ -44,6 +45,26 @@ test('a backup carries the workspace file, the encrypted session, and the browse
   const doc = manifest.parse(JSON.parse(fs.readFileSync(path.join(result.folder, 'manifest.json'), 'utf8')));
   assert.deepEqual(doc.files.map(entry => entry.path).sort(), ['sessions/11111111-1111-4111-8111-111111111111.plist', 'workspace.json']);
   assert.ok(fs.existsSync(path.join(result.folder, backup.PROFILES_DIR, partitionName(ID), 'Cookies', 'data')));
+});
+
+test('a backup keeps proxy targets but never exports their credentials', () => {
+  const root = sourceRoot();
+  fs.writeFileSync(
+    path.join(root, 'workspace.json'),
+    JSON.stringify({
+      version: 1,
+      accounts: [{ id: ID, name: 'Master', proxy: { spec: 'http://nicho:hunter2@proxy.example:3128' } }],
+      settings: { proxy: { spec: 'global:secret@127.0.0.1:8080' } },
+      routePresets: [{ spec: 'preset:secret@10.0.0.1:9000' }]
+    })
+  );
+  const destination = tempRoot();
+  const result = backup.create({ root, destination, accounts, appVersion: '0.2.0', at: Date.now() });
+  const exported = fs.readFileSync(path.join(result.folder, 'workspace.json'), 'utf8');
+  assert.equal(exported.includes('hunter2'), false);
+  assert.equal(exported.includes('secret'), false);
+  assert.match(exported, /http:\/\/proxy\.example:3128/);
+  assert.match(exported, /127\.0\.0\.1:8080/);
 });
 
 test('a restore into an empty data directory brings the account and its profile back', () => {
@@ -110,4 +131,64 @@ test('a backup of an account whose files are absent still writes a usable manife
   assert.equal(result.profileCount, 0);
   const doc = manifest.parse(JSON.parse(fs.readFileSync(path.join(result.folder, 'manifest.json'), 'utf8')));
   assert.equal(doc.accounts[0].archived, true);
+});
+
+test('a backup is checked before anything is copied, and says what is wrong with the folder', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'poolside-preflight-root-'));
+  const destination = fs.mkdtempSync(path.join(os.tmpdir(), 'poolside-preflight-out-'));
+  try {
+    const account = model.account({ name: 'Newfie', role: 'receiver' });
+    // Nothing written yet: a workspace file and one small session file are all there is to measure.
+    fs.mkdirSync(path.join(root, 'accounts'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'accounts', account.id + '.plist'), 'x'.repeat(2048));
+    fs.writeFileSync(path.join(root, 'workspace.json'), '{}');
+
+    const good = backup.preflight({ root, destination, accounts: [account] }, { freeBytes: () => 1e9 });
+    assert.equal(good.ok, true);
+    assert.equal(good.problems.length, 0);
+    assert.equal(good.accountCount, 1);
+    assert.ok(good.estimateBytes > 2048, 'the estimate covers what the profile and session files measure');
+    assert.match(/** @type {string} */ (good.folder), /Poolside-backup-/);
+    assert.equal(good.freeBytes, 1e9);
+
+    // Not enough room: the estimate carries a tenth of margin, so the answer is not 'exactly enough'.
+    const tight = backup.preflight({ root, destination, accounts: [account] }, { freeBytes: () => 1024 });
+    assert.equal(tight.ok, false);
+    assert.match(tight.problems.join(' '), /There is not enough room: the backup needs about \d+ MB and 0 MB is free on that drive\./);
+
+    // A folder that does not exist, and one inside the data root: both refused with the reason.
+    const missing = backup.preflight({ root, destination: path.join(destination, 'nope'), accounts: [account] }, { freeBytes: () => 1e9 });
+    assert.match(missing.problems.join(' '), /Choose an existing folder for the backup\./);
+    // A folder *inside* the data root: a backup stored inside the thing it backs up is not a backup.
+    const insideRoot = path.join(root, 'backup-here');
+    fs.mkdirSync(insideRoot, { recursive: true });
+    const inside = backup.preflight({ root, destination: insideRoot, accounts: [account] }, { freeBytes: () => 1e9 });
+    assert.match(inside.problems.join(' '), /a backup stored inside what it backs up is not a backup/);
+
+    // An account with a window open is noted rather than silently copied mid-flight.
+    const open = backup.preflight({ root, destination, accounts: [account], openAccounts: ['Newfie'] }, { freeBytes: () => 1e9 });
+    assert.equal(open.ok, true);
+    assert.match(open.notes.join(' '), /Newfie has a window open; a browser profile that is running is copied as it stands/);
+
+    // Free space that cannot be read is a note, not a refusal.
+    const unknown = backup.preflight({ root, destination, accounts: [account] }, { freeBytes: () => null });
+    assert.equal(unknown.ok, true);
+    assert.match(unknown.notes.join(' '), /free space on that drive could not be read/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(destination, { recursive: true, force: true });
+  }
+});
+
+test('two backups made in the same second get their own folders rather than merging', () => {
+  const destination = fs.mkdtempSync(path.join(os.tmpdir(), 'poolside-unique-'));
+  try {
+    const first = backup.uniqueFolder(destination, '2026-09-22-000000');
+    fs.mkdirSync(first, { recursive: true });
+    const second = backup.uniqueFolder(destination, '2026-09-22-000000');
+    assert.notEqual(second, first);
+    assert.match(second, /-2$/);
+  } finally {
+    fs.rmSync(destination, { recursive: true, force: true });
+  }
 });

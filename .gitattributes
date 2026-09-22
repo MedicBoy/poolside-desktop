@@ -1,0 +1,25 @@
+# Line endings, declared once for every checkout.
+#
+# This repository stores LF. Without an attribute saying so, a Windows checkout rewrites LF to CRLF
+# (core.autocrlf is true on this machine and on the GitHub Windows runners), while Prettier is
+# configured with "endOfLine": "lf". The first hosted CI run failed on all 216 files it checks for
+# exactly that reason: the code was fine and the checkout differed from every machine that had ever
+# tested it. Declaring the rule here means the repository, this machine and the runner agree.
+* text=auto eol=lf
+
+# Assets are never line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.asar binary
+*.pak binary
+*.bin binary

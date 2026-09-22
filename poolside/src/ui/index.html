@@ -28,6 +28,14 @@
             </svg>
             <span>Sessions</span><span class="nav-count" id="nav-count">0</span>
           </button>
+          <button class="nav-item" data-view="matches">
+            <svg class="nav-symbol" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="7" cy="7" r="3" />
+              <circle cx="17" cy="17" r="3" />
+              <path d="M9.5 9.5l5 5" />
+            </svg>
+            <span>Matches</span>
+          </button>
           <button class="nav-item" data-view="activity">
             <svg class="nav-symbol" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M3 12h4l2.5-6 3 12L15 12h6" />
@@ -54,12 +62,13 @@
             </svg>
             <span>Settings</span>
           </button>
+          <button class="nav-item" data-view="about"><span>About</span></button>
         </nav>
         <div class="topnav-right">
           <span class="private-badge"><span class="tiny-dot"></span> Dedicated browser sessions</span>
           <div class="user">
             <span class="avatar">P</span>
-            <span class="user-text"><b>Local workspace</b><small>Poolside v0.2.0</small></span>
+            <span class="user-text"><b>Local workspace</b><small class="app-version">Poolside</small></span>
           </div>
         </div>
       </header>
@@ -85,6 +94,38 @@
               ><small id="inspection-hint">Open a game window to inspect its screen</small>
             </div>
           </div>
+          <section class="attention-panel" id="attention-panel" hidden aria-labelledby="attention-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="attention-title">Needs your attention</h2>
+                <p id="attention-summary"></p>
+              </div>
+            </div>
+            <div id="attention-list"></div>
+          </section>
+          <section class="guidance-panel" id="guidance-panel" hidden aria-labelledby="guidance-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="guidance-title">Set up your first session</h2>
+                <p id="guidance-note"></p>
+              </div>
+            </div>
+            <ol id="guidance-steps"></ol>
+          </section>
+          <section class="attention-panel" id="compare-panel" hidden aria-labelledby="compare-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="compare-title">Do these sessions look like one machine?</h2>
+                <p id="compare-note">
+                  Reads what each open session reports about itself, side by side. It changes nothing, and what the browser reports here is
+                  not a promise about how any website treats it.
+                </p>
+              </div>
+              <button class="secondary" type="button" data-action="compare-sessions">Compare open sessions</button>
+            </div>
+            <div id="compare-result"></div>
+            <p class="form-status" id="compare-status" role="status"></p>
+          </section>
           <div class="content-grid">
             <div class="accounts-panel">
               <div class="section-heading">
@@ -125,8 +166,8 @@
               <div class="run-row"><span>Match limit</span><strong id="limit-value">10</strong></div>
               <button class="text-button preferences-link" data-view="settings">Edit preferences <span>↗</span></button>
               <div class="integration-note" id="workspace-note">
-                <strong><span class="amber-dot"></span> Browser session ready</strong>
-                <p>Opening a window confirms the browser session is running. Account sign-in is private and is not inferred by this app.</p>
+                <strong><span class="amber-dot"></span> <span id="workspace-state-label">No browser sessions open</span></strong>
+                <p id="workspace-state-detail">Open a game window to begin local screen observation.</p>
               </div>
               <button class="secondary full" id="close-all">Close all game windows</button>
             </aside>
@@ -138,6 +179,102 @@
             </div>
             <div id="recent-events"></div>
           </section>
+        </section>
+        <section class="view hidden" id="view-matches">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">COORDINATE YOUR OWN ACCOUNTS</div>
+              <h1>Match coordination</h1>
+              <p>
+                Pair two accounts into a match, record the result, and keep a bounded local ledger. Poolside records what you decide — it
+                does not play or pair anything on the game service. Pairing evidence is judged from the two sessions' own screen readings: a
+                connecting screen says nothing about which match it is connecting to, so two of them are never counted as proof.
+              </p>
+            </div>
+            <span class="outline-badge">Local records only</span>
+          </div>
+          <div class="panel match-panel">
+            <div class="section-heading">
+              <div>
+                <h2>Matches in progress <span id="match-total" class="count-pill">0</span></h2>
+                <p>An account can only be in one match at a time; archiving or removing one cancels its match.</p>
+              </div>
+            </div>
+            <form id="match-form" class="match-form">
+              <label class="match-field"
+                ><span>First account</span
+                ><select id="match-first" aria-label="First account in the match"></select
+              ></label>
+              <label class="match-field"
+                ><span>Second account</span
+                ><select id="match-second" aria-label="Second account in the match"></select
+              ></label>
+              <button class="primary" type="submit" id="match-start" disabled>Start match</button>
+            </form>
+            <p id="match-hint" class="muted" role="status">Add two accounts to coordinate a match.</p>
+            <section class="run-panel">
+              <h3 class="match-subheading">Run plan</h3>
+              <p class="muted">
+                Decide in advance how long this run is and what makes it stop, then start it with the two accounts above. A run keeps the
+                same two accounts: while it is in progress, <em>Start match</em> adds the next match to it, and the program stops the run
+                itself when a condition is met. Balance-based stops are not offered, because Poolside has no balance readings.
+                <em>Pause</em> holds the run where it is — the match being played is left alone and nothing new is started, and the time a
+                run spends paused does not count against its plan. <em>Stop run</em> ends the plan and cancels a match it is still holding.
+                When a run ends, both sessions stay open and independent.
+              </p>
+              <form id="run-form" class="match-form run-form">
+                <label class="match-field"
+                  ><span>Table this run is for</span
+                  ><select id="run-table" aria-label="Table the run is for"></select
+                ></label>
+                <label class="match-field"
+                  ><span>Stop after this many matches with a result</span
+                  ><input
+                    id="run-limit"
+                    aria-label="Matches with a result before the run stops"
+                    type="number"
+                    min="1"
+                    max="50"
+                    step="1"
+                    value="5" /></label
+                ><label class="match-field"
+                  ><span>Stop after this many matches in a row with no result</span
+                  ><input
+                    id="run-failures"
+                    aria-label="Matches in a row with no result before the run stops"
+                    type="number"
+                    min="0"
+                    max="25"
+                    step="1"
+                    value="3" /></label
+                ><label class="match-field"
+                  ><span>Stop after this many minutes</span
+                  ><input
+                    id="run-minutes"
+                    aria-label="Minutes before the run stops"
+                    type="number"
+                    min="0"
+                    max="600"
+                    step="1"
+                    value="90" /></label
+                ><button class="primary" type="submit" id="run-start" disabled>Start run</button>
+              </form>
+              <p id="run-hint" class="muted" role="status"></p>
+              <div id="run-active" class="match-list"></div>
+              <div class="match-actions">
+                <button class="secondary" data-action="run-report">Save a report of these runs</button>
+              </div>
+              <p class="muted" id="run-report-note">
+                Writes a local JSON record of every run and match this ledger holds — plans, who played, readiness, pairing verdicts and the
+                balances as the sessions reported them. It contains your account names and no passwords, profiles or page text.
+              </p>
+              <h3 class="match-subheading">Previous runs</h3>
+              <div id="run-recent" class="match-list"></div>
+            </section>
+            <div id="match-active" class="match-list"></div>
+            <h3 class="match-subheading">Recent results</h3>
+            <div id="match-recent" class="match-list"></div>
+          </div>
         </section>
         <section class="view hidden" id="view-activity">
           <div class="page-heading">
@@ -243,6 +380,7 @@
               <p class="muted">Open a game window, bring the expected screen into view, and label what you see before recording.</p>
               <label>Open account<select id="capture-account" required></select></label
               ><label>Expected screen<select id="capture-state" required></select></label
+              ><label id="capture-table-field" hidden>Table shown in this sample<select id="capture-table" disabled></select></label
               ><label class="capture-confirm"
                 ><input id="capture-benchmark" type="checkbox" /> Keep this as a benchmark sample for future local OCR checks.</label
               ><label class="capture-confirm"
@@ -256,6 +394,19 @@
               <p class="muted">Use the cards to jump to the samples that need attention. These results stay on this PC.</p>
               <div id="capture-metrics" class="capture-metrics"></div>
               <div id="capture-coverage" class="capture-coverage" aria-label="Screen-label evidence coverage"></div>
+              <section class="capture-benchmark-section" aria-labelledby="capture-table-coverage-heading">
+                <h3 id="capture-table-coverage-heading">Table-label coverage</h3>
+                <p class="muted">
+                  Your Evidence captures and held-out Benchmark captures are separate. Enough Evidence means the table is labelled for
+                  development; the production gate still needs independent Benchmark images. Detection counts below record the original
+                  result when each image was captured and do not change after a recognizer update.
+                </p>
+                <div id="capture-table-coverage" class="capture-coverage" aria-label="Table-label evidence and benchmark coverage"></div>
+              </section>
+              <section class="capture-validation-section" aria-labelledby="capture-validation-heading">
+                <h3 id="capture-validation-heading">Production corpus gate</h3>
+                <div id="capture-validation-report"></div>
+              </section>
               <section class="capture-benchmark-section" aria-labelledby="capture-benchmark-heading">
                 <h3 id="capture-benchmark-heading">Benchmark report</h3>
                 <div id="capture-benchmark-report"></div>
@@ -309,6 +460,7 @@
                 <span
                   class="info-dot"
                   tabindex="0"
+                  aria-label="Help about settings"
                   data-tip="Each setting has a short explanation beside it. Your choices apply only when a session opens; they do not control the game."
                   >i</span
                 >
@@ -327,21 +479,64 @@
                 <div id="settings-fields"></div>
               </form>
               <section class="route-presets">
-                <h2>Saved route presets</h2>
-                <p class="muted">Reusable network configurations. Assign one to an account from its Session preferences.</p>
+                <h2>Network location for each account</h2>
+                <p class="muted">
+                  Give accounts their own way out to the internet, so each one looks like it is somewhere else. Paste the address your
+                  provider gave you — the whole line, exactly as it arrived — name it, save it, then tick the accounts that should use it.
+                  An account with no location of its own uses whatever is set above. Ticking a box applies from that account's next load, so
+                  close a session before changing where it connects from.
+                </p>
                 <form id="route-preset-form" class="route-preset-form">
-                  <input id="route-preset-name" placeholder="Preset name" required maxlength="40" /><input
+                  <input id="route-preset-name" placeholder="Name it — for example London-1" required maxlength="40" /><input
                     id="route-preset-spec"
-                    placeholder="host:port or socks5://host:port"
+                    placeholder="Paste the address here — it can be host:port, user:pass@host:port, or the line your provider gave you"
                     required
-                  /><input id="route-preset-bypass" placeholder="Optional bypass list" /><label
-                    ><input id="route-preset-enabled" type="checkbox" checked /> Enabled</label
-                  ><button class="secondary" type="submit">Save route preset</button>
+                  /><button class="secondary" type="submit" id="route-preset-submit">Save location</button
+                  ><button class="text-button" type="button" id="route-preset-test">Test this address</button
+                  ><button class="text-button" type="button" id="route-preset-cancel" hidden>Cancel the edit</button>
                 </form>
+                <p class="muted" id="route-preset-edit-note" hidden>
+                  Editing a saved location. Leave the address blank to keep the address it already has — Poolside never shows a saved
+                  address with credentials, so it cannot put it back in this field.
+                </p>
+                <p class="form-status" id="route-preset-test-result" role="status"></p>
+                <details class="route-presets-advanced">
+                  <summary>Advanced (most people never need this)</summary>
+                  <p class="muted">
+                    Leave these alone unless you know why you need them. "Skip it for" keeps listed addresses off the location — useful for
+                    a local printer or a work server, not for the game.
+                  </p>
+                  <div class="route-preset-form">
+                    <input id="route-preset-bypass" placeholder="Skip it for these addresses (optional)" /><label
+                      ><input id="route-preset-enabled" type="checkbox" checked /> Save it switched on</label
+                    >
+                  </div>
+                </details>
                 <div id="route-preset-list"></div>
               </section>
               <button class="primary" type="submit" form="settings-form">Save preferences</button>
               <p class="form-status" id="settings-status" role="status"></p>
+              <section class="route-presets" id="recovery-panel" hidden>
+                <h2>Recover earlier data</h2>
+                <p class="muted">
+                  A copy of the workspace from before its last change is kept beside it, and an interrupted write can leave a staged copy
+                  behind. Restoring replaces the accounts you have now with the copy you choose — and the copy in place now is kept first,
+                  so the restore itself can be undone by restoring that one.
+                </p>
+                <div id="recovery-list"></div>
+                <p class="form-status" id="recovery-status" role="status"></p>
+              </section>
+              <section class="route-presets" id="outputs-panel" hidden>
+                <h2>Files Poolside has written</h2>
+                <p class="muted">
+                  Diagnostics exports and run reports are written to Poolside's own folder on this PC so you can send them on. They are the
+                  only files Poolside writes there, and they are the only files this control erases. Browser profiles, saved sessions, the
+                  workspace and your accounts are not touched by it.
+                </p>
+                <div id="outputs-list"></div>
+                <button class="secondary" type="button" data-action="outputs-clear" id="outputs-clear">Erase these files</button>
+                <p class="form-status" id="outputs-status" role="status"></p>
+              </section>
             </div>
             <div class="panel settings-panel">
               <h2>Browser sessions</h2>
@@ -361,9 +556,29 @@
             </div>
           </div>
         </section>
+        <section class="view hidden" id="view-about" aria-labelledby="about-title">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">PRODUCT STATUS</div>
+              <h1 id="about-title">About Poolside</h1>
+              <p id="about-build"></p>
+            </div>
+          </div>
+          <div class="panel about-panel">
+            <h2>Current capability and evidence</h2>
+            <p class="muted">
+              Available means code exists. It does not mean the real game, every Windows setup, or a release package has been validated.
+            </p>
+            <div id="about-capabilities" class="capability-list"></div>
+          </div>
+          <div class="panel about-panel">
+            <h2>Preview support boundary</h2>
+            <dl id="about-support"></dl>
+          </div>
+        </section>
         <footer class="main-footer">
           <span>POOLSIDE <span class="separator">·</span> Built for a clearer session</span
-          ><span>Poolside v0.2.0 <span class="separator">·</span> Local workspace</span>
+          ><span><span class="app-version">Poolside</span> <span class="separator">·</span> Local workspace</span>
         </footer>
       </main>
     </div>
@@ -389,6 +604,7 @@
             <option value="sender">Sending account</option>
           </select></label
         >
+        <p class="form-status" id="account-role-hint"></p>
         <p class="form-status error" id="account-error" role="alert"></p>
         <button class="primary full" type="submit">Create account slot <span>→</span></button>
       </form>
@@ -409,6 +625,7 @@
             <option value="sender">Sending account</option>
           </select></label
         >
+        <p class="form-status" id="edit-account-role-hint"></p>
         <label
           >Local note<textarea
             id="edit-account-note"
@@ -452,6 +669,7 @@
       <img id="capture-preview-image" class="capture-preview-image" alt="Captured game screen sample" />
       <p id="capture-preview-detail" class="muted"></p>
     </dialog>
+    <div id="info-tooltip" class="info-tooltip" role="tooltip" popover="manual"></div>
     <div id="toast" role="status" class="toast hidden"></div>
     <script src="renderer.js"></script>
   </body>

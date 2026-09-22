@@ -122,21 +122,32 @@ test('target overrides are exactly the CDP commands the identity implies', () =>
     // the renderer or the wire in Electron 44.4.1 (measured; see the module header).
     {
       method: 'Emulation.setUserAgentOverride',
-      params: { userAgent: FULL.userAgent, acceptLanguage: 'en-GB,en' }
+      params: { userAgent: FULL.userAgent, acceptLanguage: 'en-GB,en' },
+      field: 'User agent',
+      value: FULL.userAgent
     },
-    { method: 'Emulation.setLocaleOverride', params: { locale: 'en-GB' } },
-    { method: 'Emulation.setTimezoneOverride', params: { timezoneId: 'Europe/London' } },
+    { method: 'Emulation.setLocaleOverride', params: { locale: 'en-GB' }, field: 'Language (locale)', value: 'en-GB' },
+    { method: 'Emulation.setTimezoneOverride', params: { timezoneId: 'Europe/London' }, field: 'Time zone', value: 'Europe/London' },
     {
       method: 'Emulation.setDeviceMetricsOverride',
-      params: { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false }
+      params: { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false },
+      field: 'Window size',
+      value: '1280×720'
     },
-    { method: 'Emulation.setEmulatedMedia', params: { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'dark' }] } }
+    {
+      method: 'Emulation.setEmulatedMedia',
+      params: { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'dark' }] },
+      field: 'Colour scheme',
+      value: 'dark'
+    }
   ]);
 });
 
 test('a user agent without languages overrides only the user agent', () => {
   const { identity } = resolveIdentity({ identity: { userAgent: 'P/1.0' } }, {});
-  assert.deepEqual(cdpOverrides(identity), [{ method: 'Emulation.setUserAgentOverride', params: { userAgent: 'P/1.0' } }]);
+  assert.deepEqual(cdpOverrides(identity), [
+    { method: 'Emulation.setUserAgentOverride', params: { userAgent: 'P/1.0' }, field: 'User agent', value: 'P/1.0' }
+  ]);
 });
 
 test('a quota ceiling alone needs no debugger attach', () => {

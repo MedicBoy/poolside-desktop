@@ -4,6 +4,7 @@
 
 const settingsController = require('./settings-ui-controller.cjs');
 const bulkPlan = require('./bulk-plan.cjs');
+const { publicRoutePreset } = require('./proxy-public.cjs');
 
 function registerAccountManagement({
   handle,
@@ -15,6 +16,7 @@ function registerAccountManagement({
   log,
   getAccount,
   profiles,
+  confirmRoleChange,
   confirmDestructive,
   activeAccounts
 }) {
@@ -25,17 +27,63 @@ function registerAccountManagement({
   };
   const isOpen = account => sessions.has(account.id);
 
-  handle('account:update', input => {
+  handle('account:add', async input => {
+    const active = activeAccounts();
+    const requestedReceiver = input && input.role === 'receiver';
+    const currentReceiver = requestedReceiver ? active.find(account => account.role === 'receiver') : null;
+    // Validate the label and role before opening a confirmation. Creating the candidate as a sender avoids
+    // bypassing model.account's one-receiver invariant; the atomic reassignment below is the only exception.
+    let account = model.account(requestedReceiver && currentReceiver ? { ...input, role: 'sender' } : input, active);
+    if (currentReceiver) {
+      const agreed = await confirmRoleChange(
+        `Make ${account.name} the receiving account?`,
+        `${currentReceiver.name} is currently the receiving account. Continuing will change ${currentReceiver.name} to a sending account and make ${account.name} the only receiving account.`,
+        'Change receiving account'
+      );
+      if (!agreed) throw new Error('Account creation was cancelled.');
+      account = { ...account, role: 'receiver' };
+    }
+    const accounts = workspace.data.accounts.map(candidate =>
+      currentReceiver && candidate.id === currentReceiver.id ? { ...candidate, role: 'sender' } : candidate
+    );
+    save({ ...workspace.data, accounts: [...accounts, account] });
+    if (currentReceiver) log(`${currentReceiver.name}: changed to a sending account; ${account.name} is now the receiving account.`);
+    else log(`${account.name}: account slot created.`);
+  });
+
+  handle('account:update', async input => {
     const account = getAccount(input && input.id);
     if (sessions.has(account.id)) throw new Error('Close this session before changing its account details.');
-    const updated = model.updateAccount(input, account, activeAccounts());
-    save({ ...workspace.data, accounts: workspace.data.accounts.map(candidate => (candidate.id === account.id ? updated : candidate)) });
-    log(`${account.name}: account details updated.`);
+    const currentReceiver =
+      input && input.role === 'receiver'
+        ? activeAccounts().find(candidate => candidate.id !== account.id && candidate.role === 'receiver')
+        : null;
+    const reassigned = workspace.data.accounts.map(candidate =>
+      currentReceiver && candidate.id === currentReceiver.id ? { ...candidate, role: 'sender' } : candidate
+    );
+    // Validate the full reassignment before asking for approval. A bad name or role should produce its
+    // normal validation error, not a confirmation for a change that could never be saved.
+    const updated = model.updateAccount(
+      input,
+      account,
+      reassigned.filter(candidate => !candidate.archived)
+    );
+    if (currentReceiver) {
+      const agreed = await confirmRoleChange(
+        `Make ${updated.name} the receiving account?`,
+        `${currentReceiver.name} is currently the receiving account. Continuing will change ${currentReceiver.name} to a sending account.`,
+        'Change receiving account'
+      );
+      if (!agreed) throw new Error('Account update was cancelled.');
+    }
+    save({ ...workspace.data, accounts: reassigned.map(candidate => (candidate.id === account.id ? updated : candidate)) });
+    if (currentReceiver) log(`${currentReceiver.name}: changed to a sending account; ${updated.name} is now the receiving account.`);
+    else log(`${account.name}: account details updated.`);
   });
   handle('account:preferences-form', id => ({
     ...settingsController.form('account', getAccount(id)),
     routePresetId: getAccount(id).routePresetId || '',
-    routePresets: workspace.data.routePresets || []
+    routePresets: (workspace.data.routePresets || []).map(publicRoutePreset)
   }));
   handle('account:preferences-save', input => {
     const account = getAccount(input && input.id);

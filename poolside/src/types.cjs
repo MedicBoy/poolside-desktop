@@ -31,13 +31,14 @@
  * @property {Footprint} footprint
  * @property {{used: boolean, reset: () => void, observe: (url: string, shop: boolean, now: number) => boolean}} [shopGate]
  * @property {number} [observationGeneration]
- * @property {{state: string, score?: number, evidence?: string[], observedAt?: string, readings?: Record<string, VisibleReading>}|null} [gameScreen]
+ * @property {{state: string, score?: number, evidence?: string[], visibleTables?: string[], tableMatch?: {table: string, method: string}|null, observedAt?: string, readings?: Record<string, VisibleReading>}|null} [gameScreen]
  * @property {Record<string, VisibleReading>} [visibleReadings]
  * @property {{status: 'checking'|'checked'|'error', ip?: string, checkedAt?: string}} [network]
  * @property {boolean} [inspecting]
  * @property {boolean} [monitoring]
  * @property {{state: string, score: number|null, observedAt: string}[]} [screenHistory]
  * @property {{state: string, since: string, message: string}|null} [screenAttention]
+ * @property {{mode: 'dry-run', targetTable: string, state: string, retryCount: number, startedAt: string, updatedAt: string, deadlineAt: string|null, lastObservation: object|null, input: object, history: object[]}|null} [tableNavigation]
  * @property {string|null} [lastPersistedAt] timestamp of the last successful Poolside session save
  */
 

@@ -35,11 +35,39 @@ test('a bare host:port applies to every scheme', () => {
   });
 });
 
+test('the line a provider hands out is accepted exactly as it arrives', () => {
+  // Webshare downloads `host:port:user:pass`, and asking someone to rearrange it by hand is the small chore
+  // that makes a feature feel broken.
+  assert.deepEqual(parseProxySpec('198.105.121.200:6462:leucqwsr:t9jerfvymkw3'), {
+    ok: true,
+    mode: 'fixed_servers',
+    proxyRules: '198.105.121.200:6462',
+    expectedTarget: '198.105.121.200:6462',
+    label: 'http proxy at 198.105.121.200:6462',
+    credentials: { username: 'leucqwsr', password: 't9jerfvymkw3' }
+  });
+  // It must not swallow the shorter forms it resembles.
+  assert.equal(parsed('198.105.121.200:6462').credentials, undefined);
+  assert.equal(parsed('user:pass@198.105.121.200:6462').credentials.username, 'user');
+  assert.match(refused('198.105.121.200:0:user:pass').error, /out of range/);
+});
+
 test('a scheme prefix is preserved, including SOCKS', () => {
   assert.equal(parsed('socks5://10.0.0.9:1080').proxyRules, 'socks5://10.0.0.9:1080');
   assert.equal(parsed('socks5://10.0.0.9:1080').label, 'socks5 proxy at 10.0.0.9:1080');
   assert.equal(parsed('https://proxy.example:443').proxyRules, 'https://proxy.example:443');
   assert.equal(parsed('  Proxy.Example:3128  ').proxyRules, 'Proxy.Example:3128', 'trimmed');
+});
+
+test('proxy credentials are separated from Chromium rules and decoded for authentication', () => {
+  const bare = parsed('nicho:hunter2@127.0.0.1:8080');
+  assert.equal(bare.proxyRules, '127.0.0.1:8080');
+  assert.deepEqual(bare.credentials, { username: 'nicho', password: 'hunter2' });
+  assert.equal(bare.label, 'http proxy at 127.0.0.1:8080', 'the label never carries credentials');
+
+  const encoded = parsed('http://name:p%40ssword@proxy.example:3128');
+  assert.equal(encoded.proxyRules, 'http://proxy.example:3128');
+  assert.deepEqual(encoded.credentials, { username: 'name', password: 'p@ssword' });
 });
 
 test('DIRECT is a route, not an error', () => {

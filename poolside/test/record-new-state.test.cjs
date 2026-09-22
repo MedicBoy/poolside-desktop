@@ -10,7 +10,7 @@ function lab(existing = []) {
   const recorded = [];
   return {
     recorded,
-    states: ['lobby', 'shop', 'unknown'],
+    states: ['lobby', 'shop', 'table-selection'],
     list: () => existing.concat(recorded),
     record: input => {
       recorded.push({ expectedState: input.expectedState, observedState: input.observed.state, cohort: input.cohort });
@@ -34,7 +34,13 @@ test('a state already in the corpus is not recorded again', () => {
 
 test('an unrecognised frame is never filed under a state of its own', () => {
   const store = lab();
-  assert.equal(recordNewState(store, { png: PNG, result: { state: 'unknown' }, frame: FRAME, timing: TIMING }), null);
+  assert.equal(recordNewState(store, { png: PNG, result: { state: 'unrecognized' }, frame: FRAME, timing: TIMING }), null);
+  assert.deepEqual(store.recorded, []);
+});
+
+test('table selection waits for a person to name the intended table', () => {
+  const store = lab();
+  assert.equal(recordNewState(store, { png: PNG, result: { state: 'table-selection' }, frame: FRAME, timing: TIMING }), null);
   assert.deepEqual(store.recorded, []);
 });
 

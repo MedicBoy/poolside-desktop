@@ -41,7 +41,7 @@ test('concurrent work is spread across the pool up to its size', async () => {
   const second = await pool.acquire();
   assert.equal(created.length, 2);
   assert.notEqual(first, second);
-  assert.deepEqual(pool.stats(), { size: 2, created: 2, busy: 2, queued: 0, closed: false });
+  assert.deepEqual(pool.stats(), { size: 2, created: 2, workers: 2, busy: 2, queued: 0, closed: false, warmed: true });
   pool.release(first);
   pool.release(second);
   await pool.closeAll();
@@ -66,6 +66,23 @@ test('work beyond the pool size queues and is served on release, not rejected', 
   assert.equal(entry, held, 'the same warm worker serves the queue');
   assert.equal(entry.uses, 2);
   pool.release(entry);
+  await pool.closeAll();
+});
+
+test('a timed-out waiter leaves the queue and cannot receive the next reader', async () => {
+  const { create } = fakeFactory();
+  const pool = createScreenReaderPool({ size: 1, idleMs: 0, create });
+  const held = await pool.acquire();
+  const abort = new AbortController();
+  const timedOut = pool.acquire({ signal: abort.signal });
+  assert.equal(pool.stats().queued, 1);
+  abort.abort(new Error('timed out'));
+  await assert.rejects(timedOut, /timed out/);
+  assert.equal(pool.stats().queued, 0);
+  const next = pool.acquire();
+  pool.release(held);
+  assert.equal(await next, held);
+  pool.release(held);
   await pool.closeAll();
 });
 
@@ -126,4 +143,84 @@ test('closeAll rejects queued work and closes every worker', async () => {
   await assert.rejects(pool.acquire(), /closed/);
   assert.equal(pool.stats().closed, true);
   pool.release(held);
+});
+
+test('prewarm initializes one pinned reader and concurrent startup does not create duplicates', async () => {
+  let initialize;
+  let creations = 0;
+  let terminations = 0;
+  const pool = createScreenReaderPool({
+    size: 1,
+    idleMs: 0,
+    create: () => {
+      creations++;
+      return new Promise(resolve => {
+        initialize = () => resolve({ close: async () => terminations++ });
+      });
+    }
+  });
+  assert.equal(pool.stats().warmed, false);
+  const first = pool.prewarm();
+  const second = pool.prewarm();
+  assert.equal(creations, 1);
+  assert.equal(first, second);
+  assert.deepEqual(
+    { created: pool.stats().created, busy: pool.stats().busy, warmed: pool.stats().warmed },
+    { created: 1, busy: 1, warmed: false }
+  );
+  initialize();
+  await Promise.all([first, second]);
+  assert.deepEqual(
+    { created: pool.stats().created, busy: pool.stats().busy, warmed: pool.stats().warmed },
+    { created: 1, busy: 0, warmed: true }
+  );
+  await pool.prewarm();
+  const entry = await pool.acquire();
+  await pool.prewarm();
+  pool.release(entry);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(creations, 1);
+  assert.equal(terminations, 0);
+  await pool.closeAll();
+  assert.equal(pool.stats().warmed, false);
+  assert.equal(terminations, 1);
+  await assert.rejects(pool.prewarm(), /closed/);
+});
+
+test('failed prewarm can be retried and never reports a failed worker as warmed', async () => {
+  let attempts = 0;
+  const pool = createScreenReaderPool({
+    size: 1,
+    idleMs: 0,
+    create: async () => {
+      if (++attempts === 1) throw new Error('initialization failed');
+      return { close: async () => {} };
+    }
+  });
+  await assert.rejects(pool.prewarm(), /initialization failed/);
+  assert.equal(pool.stats().warmed, false);
+  await pool.prewarm();
+  assert.equal(pool.stats().warmed, true);
+  assert.equal(attempts, 2);
+  await pool.closeAll();
+});
+
+test('closing during initialization does not report a terminated reader as warmed', async () => {
+  let initialize;
+  let terminations = 0;
+  const pool = createScreenReaderPool({
+    size: 1,
+    idleMs: 0,
+    create: () =>
+      new Promise(resolve => {
+        initialize = () => resolve({ close: async () => terminations++ });
+      })
+  });
+  const warming = pool.prewarm();
+  const closing = pool.closeAll();
+  initialize();
+  await closing;
+  await assert.rejects(warming, /closed/);
+  assert.equal(terminations, 1);
+  assert.equal(pool.stats().warmed, false);
 });

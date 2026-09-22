@@ -15,9 +15,15 @@ const TABLES = [
   'Rome',
   'Paris',
   'Berlin',
-  'Venice',
-  'Miami',
-  'Dallas',
+  'Dubai',
   'Shanghai'
 ];
-module.exports = { TABLES };
+
+// These venues appeared in earlier Poolside builds but are not available in the supported web 1-on-1
+// surface. Keep the migration at the storage boundary only so an old preference cannot make the whole
+// workspace unreadable; no retired name is offered by the UI or accepted for a new setting.
+function migrateStoredTable(value) {
+  return ['Dallas', 'Venice', 'Miami'].includes(value) ? 'Dubai' : value;
+}
+
+module.exports = { TABLES, migrateStoredTable };

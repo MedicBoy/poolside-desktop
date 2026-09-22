@@ -1,28 +1,36 @@
 # POOLSIDE — INCOMPLETE WORK
 
-|                |                                                                                               |
-| -------------- | --------------------------------------------------------------------------------------------- |
-| **Purpose**    | Record the remaining implementation and verification work for the next developer              |
-| **Pairs with** | `ROADMAP.md` (v1.0) — milestone IDs match                                                     |
-| **Baseline**   | commit `5054e82` (M5), preceded by M4 `3907873`, M3 `67c9931`, M2 `252fe17`, and M1 `7f37aa1` |
-| **Status**     | Handoff reference                                                                             |
+|                |                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------- |
+| **Purpose**    | Record the remaining implementation and verification work for the next developer       |
+| **Pairs with** | `poolside/MASTER_ROADMAP.md` and `poolside/docs/work-items.json` (A–Q IDs)             |
+| **Baseline**   | 0.3.11 development preview; use the generated capability report for exact build claims |
+| **Status**     | Remaining-work register; older M-series notes below are historical context             |
 
 This file lists only unfinished or externally verified work. Completed capabilities are documented in
-`PROJECT_HANDOFF.md`, the roadmap, and the architecture records.
+`poolside/docs/CAPABILITIES.md`, the roadmap, and the architecture records. Work-item statuses are tracked in
+`poolside/docs/work-items.json`; do not read the historical M-series shorthand as completion evidence.
 
 ## Remaining verification
 
-| #   | Work still required                                                                            | Completion evidence                                                     |
-| --- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 1   | Expand the recognition corpus with real success and failure captures                           | Labelled corpus contains representative live-game states and failures   |
-| 2   | Validate game-surface ranking on the live site                                                 | `Inspect game` selects the correct surface across representative pages  |
-| 3   | Run CI on the chosen remote                                                                    | All repository checks pass in the hosted runner                         |
-| 4   | Choose and configure the production signing certificate                                        | A signed package installs without an unknown-publisher warning          |
-| 5   | Test install, update, rollback, and removal on a clean Windows VM                              | Release checklist passes on a machine without the development toolchain |
-| 6   | Run the 72-hour soak and 16-session stretch tests                                              | Results and resource measurements are recorded                          |
-| 7   | Reproduce and characterize GPU/compositor failures on target hardware                          | Failure mode, driver/GPU details, and recovery result are recorded      |
-| 8   | Validate recognition accuracy against at least 300 labelled frames                             | ADR-0002 accuracy gate is measured and reported                         |
-| 9   | Measure cold start, capture, classification, IPC throughput, and memory on a reference machine | Performance results are added to the release record                     |
+**Packaging defect corrected in 0.3.11 source:** Windows npm stripped a caret from the old ignore
+expression, omitting `docs/release*` while admitting local `.log` files. The package command now
+uses shell-safe ignore patterns, and `release:inspect` refuses missing capability/release documents,
+version disagreement, unexpected root files, or local-data paths. A fresh standard package and its
+self-test pass locally; hosted CI and clean-VM distribution checks remain O1/O7 work.
+
+| #   | Work still required                                                                            | Completion evidence                                                                                           |
+| --- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 1   | Expand the recognition corpus with real success and failure captures                           | Labelled corpus contains representative live-game states and failures                                         |
+| 2   | Validate game-surface ranking on the live site                                                 | `Inspect game` selects the correct surface across representative pages                                        |
+| 3   | Run CI on the chosen remote                                                                    | All repository checks pass in the hosted runner                                                               |
+| 4   | Choose and configure the production signing certificate                                        | A signed package installs without an unknown-publisher warning                                                |
+| 5   | Test install, update, rollback, and removal on a clean Windows VM                              | Release checklist passes on a machine without the development toolchain                                       |
+| 6   | Run the 72-hour soak and 16-session stretch tests                                              | Results and resource measurements are recorded                                                                |
+| 7   | Reproduce and characterize GPU/compositor failures on target hardware                          | Failure mode, driver/GPU details, and recovery result are recorded                                            |
+| 8   | Expand the current 108 held-out labelled frames to the 300-sample coverage gate and rerun it   | Capture Lab and `npm run validate:corpus` both pass                                                           |
+| 9   | Measure cold start, capture, classification, IPC throughput, and memory on a reference machine | Evidence replay now reports local OCR-stage timing; reference-machine results are added to the release record |
+| 10  | Add an in-app, explicitly confirmed recovery choice for a missing or corrupt workspace primary | A validated `.previous` or staged copy can be previewed and restored without auto-discarding accounts         |
 
 ## Unfinished product capabilities
 
@@ -31,9 +39,10 @@ tests, and live-site validation before they can be treated as product features.
 
 ### Game input integration
 
-No production module sends pointer or keyboard input to the game surface. Completing this requires an
-input adapter, coordinate translation, focus and lifecycle handling, cancellation, error reporting,
-and fixture-backed tests before live validation.
+No production module sends pointer or keyboard input to the game surface. A per-session table-navigation state
+machine, timeout/cancel/retry policy, bounded transition journal, and deliberately no-click dry-run adapter now
+define the integration boundary. Completing live input still requires coordinate translation, focus and lifecycle
+handling, capture-backed target evidence, and fixture-backed input tests before live validation.
 
 ### Multi-account matchmaking coordination
 
@@ -80,8 +89,8 @@ behavior matching are not implemented or validated.
 
 1. Build the real labelled corpus and complete live surface-selection validation.
 2. Run CI, clean-VM release checks, signing, and the long-duration reliability tests.
-3. Define the game-facing state model and integration contracts.
-4. Implement input integration and live match-state observation behind fixture-backed interfaces.
+3. Validate the implemented game-facing table-navigation state model against the completed capture corpus.
+4. Implement coordinate-aware input and live match-state observation behind the existing dry-run interface.
 5. Add coordination, match completion, and accounting as separate testable modules.
 6. Add any required identity, routing, or import capabilities with explicit validation and diagnostics.
 
@@ -90,4 +99,4 @@ behavior matching are not implemented or validated.
 - Session/profile platform, configuration, diagnostic timeline, telemetry, and settings UI are implemented.
 - Recognition foundations are implemented, but real-world accuracy remains unmeasured.
 - Production release verification is incomplete until hosted CI, signing, clean-VM, soak, and scale tests pass.
-- The game-facing automation and transfer workflow described above remains unimplemented.
+- The table-navigation workflow is implemented as a no-click dry run; live input, coordination, completion, and transfer remain unimplemented.

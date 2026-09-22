@@ -1,5 +1,5 @@
 // Recognise a prolonged local loading/connecting observation. This reports a condition; it never acts on the game.
-const STUCK_STATES = new Set(['loading', 'connecting', 'unknown']);
+const STUCK_STATES = new Set(['loading', 'connecting']);
 const STUCK_AFTER_MS = 45000;
 function observe(current, screen, now = Date.now()) {
   if (!screen || !STUCK_STATES.has(screen.state)) return null;

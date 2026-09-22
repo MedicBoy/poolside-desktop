@@ -4,6 +4,23 @@
  * @param {{dialog: import('electron').Dialog, dashboard: () => import('electron').BrowserWindow|null, selfTest: boolean}} deps
  */
 function createNativeDialogs({ dialog, dashboard, selfTest }) {
+  async function confirmChange(title, detail, confirmLabel = 'Continue') {
+    if (selfTest) return false;
+    const prompt = {
+      type: /** @type {'question'} */ ('question'),
+      buttons: ['Cancel', confirmLabel],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Poolside',
+      message: title,
+      detail
+    };
+    const parent = dashboard();
+    const { response } = parent ? await dialog.showMessageBox(parent, prompt) : await dialog.showMessageBox(prompt);
+    return response === 1;
+  }
+
   async function confirmDestructive(title, detail) {
     if (selfTest) return false;
     const prompt = {
@@ -30,7 +47,7 @@ function createNativeDialogs({ dialog, dashboard, selfTest }) {
     return result.canceled || !result.filePaths.length ? null : result.filePaths[0];
   }
 
-  return { confirmDestructive, chooseDirectory };
+  return { confirmChange, confirmDestructive, chooseDirectory };
 }
 
 module.exports = { createNativeDialogs };

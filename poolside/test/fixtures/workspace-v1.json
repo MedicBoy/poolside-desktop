@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "accounts": [
+    {
+      "id": "e5b1c1b3-0000-4000-8000-000000000000",
+      "name": "Newfie",
+      "role": "receiver",
+      "archived": false,
+      "createdAt": "2026-09-18T00:00:00.000Z",
+      "note": "Local reminder only.",
+      "routePresetId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "identity": {
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "acceptLanguages": "en-CA,en",
+        "locale": "en-CA",
+        "timezone": "America/St_Johns",
+        "viewport": { "width": 900, "height": 700 },
+        "colorScheme": "dark",
+        "quotaBytes": 268435456
+      },
+      "proxy": { "spec": "198.105.121.200:6462:leucqwsr:secret", "bypass": "<local>" },
+      "profile": {
+        "generation": 2,
+        "established": true,
+        "firstSeenAt": "2026-09-18T00:00:00.000Z",
+        "corruption": {
+          "count": 1,
+          "lastAt": "2026-09-19T00:00:00.000Z",
+          "lastReason": "the saved session is unusable",
+          "lastAction": "quarantined"
+        }
+      }
+    },
+    {
+      "id": "f0e1d2c3-1111-4222-8333-444444444444",
+      "name": "Gmail",
+      "role": "sender",
+      "archived": true,
+      "createdAt": "2026-09-18T00:00:01.000Z"
+    }
+  ],
+  "settings": {
+    "table": "Bangkok",
+    "limit": 10,
+    "identity": { "timezone": "Europe/London" },
+    "proxy": { "spec": "127.0.0.1:8080" }
+  },
+  "routePresets": [
+    {
+      "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "name": "London-1",
+      "enabled": true,
+      "spec": "198.105.121.200:6462:leucqwsr:secret",
+      "bypass": "",
+      "lastCheckedAt": "2026-09-22T01:00:00.000Z",
+      "lastResult": "ok",
+      "lastDetail": "left through 198.105.121.200 in 340 ms",
+      "checks": 2,
+      "failures": []
+    }
+  ],
+  "windows": {
+    "e5b1c1b3-0000-4000-8000-000000000000": {
+      "x": 40,
+      "y": 60,
+      "width": 1060,
+      "height": 800,
+      "maximized": false,
+      "displayId": 1,
+      "at": "2026-09-21T23:00:00.000Z"
+    }
+  }
+}

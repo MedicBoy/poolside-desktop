@@ -26,7 +26,12 @@ const crypto = {
  */
 function withWorkspace(run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'poolside-manager-'));
-  const previous = { data: workspace.data, storeFile: workspace.storeFile, readOnly: workspace.readOnly };
+  const previous = {
+    data: workspace.data,
+    storeFile: workspace.storeFile,
+    readOnly: workspace.readOnly,
+    authoritative: workspace.authoritative
+  };
   const account = /** @type {import('../src/types.cjs').Account} */ ({
     id: ID,
     name: 'Main',
@@ -36,6 +41,7 @@ function withWorkspace(run) {
   });
   workspace.storeFile = path.join(root, 'workspace.json');
   workspace.readOnly = false;
+  workspace.authoritative = true;
   workspace.data = { version: 1, accounts: [account], settings: { table: 'Bangkok', limit: 10 } };
   sessions.clear();
   profileReports.clear();
@@ -43,6 +49,7 @@ function withWorkspace(run) {
     workspace.storeFile = previous.storeFile;
     workspace.data = previous.data;
     workspace.readOnly = previous.readOnly;
+    workspace.authoritative = previous.authoritative;
     sessions.clear();
     profileReports.clear();
     fs.rmSync(root, { recursive: true, force: true });
@@ -177,24 +184,59 @@ test('the scan leaves a healthy account alone and reports a clean summary', () =
   });
 });
 
-test('the sweep removes unclaimed storage and leaves everything else alone', () => {
+test('the startup scan reports unclaimed login storage but never removes it', () => {
   withWorkspace(({ root, manager }) => {
     // Unclaimed: a partition directory and a cookie file for an account that is not in the document.
     fs.mkdirSync(profileDirectory(root, OTHER), { recursive: true });
     fs.mkdirSync(path.dirname(carryOverFile(root, OTHER)), { recursive: true });
     fs.writeFileSync(carryOverFile(root, OTHER), 'stale');
+    fs.writeFileSync(`${carryOverFile(root, OTHER)}.tmp`, 'interrupted but potentially recoverable session');
     // Not ours: a Chromium directory and an unrecognised file name.
     fs.mkdirSync(path.join(root, 'Partitions', 'Shared Dictionary'), { recursive: true });
     fs.writeFileSync(path.join(root, 'accounts', 'notes.txt'), 'mine');
     // Ours and claimed: this account's own storage.
     fs.mkdirSync(profileDirectory(root, ID), { recursive: true });
 
-    manager.scan(workspace.data.accounts);
-    assert.equal(fs.existsSync(profileDirectory(root, OTHER)), false, 'an unclaimed profile is removed');
-    assert.equal(fs.existsSync(carryOverFile(root, OTHER)), false);
+    const result = manager.scan(workspace.data.accounts);
+    assert.equal(fs.existsSync(profileDirectory(root, OTHER)), true, 'an unclaimed profile survives startup');
+    assert.equal(fs.existsSync(carryOverFile(root, OTHER)), true, 'unclaimed session cookies survive startup');
+    assert.equal(fs.existsSync(`${carryOverFile(root, OTHER)}.tmp`), true, 'an interrupted session write survives startup');
+    assert.deepEqual(result.orphans.removed, { profiles: [], carryOver: [] });
+    assert.deepEqual(result.orphans.kept.unclaimed.sort(), [`${OTHER}.plist`, `poolside-${OTHER}`].sort());
     assert.equal(fs.existsSync(path.join(root, 'Partitions', 'Shared Dictionary')), true, "Chromium's directory is not ours to delete");
     assert.equal(fs.existsSync(path.join(root, 'accounts', 'notes.txt')), true, "an unrecognised name may be the user's own backup");
     assert.equal(fs.existsSync(profileDirectory(root, ID)), true, 'a claimed profile is never swept');
+  });
+});
+
+test('unclaimed storage is removed only through an explicit applied sweep', () => {
+  withWorkspace(({ root, manager }) => {
+    fs.mkdirSync(profileDirectory(root, OTHER), { recursive: true });
+    fs.mkdirSync(path.dirname(carryOverFile(root, OTHER)), { recursive: true });
+    fs.writeFileSync(carryOverFile(root, OTHER), 'saved session');
+
+    const result = manager.sweepOrphans(workspace.data.accounts, { apply: true });
+
+    assert.deepEqual(result.removed.profiles, [`poolside-${OTHER}`]);
+    assert.deepEqual(result.removed.carryOver, [`${OTHER}.plist`]);
+    assert.equal(fs.existsSync(profileDirectory(root, OTHER)), false);
+    assert.equal(fs.existsSync(carryOverFile(root, OTHER)), false);
+  });
+});
+
+test('the startup scan never removes profiles without an authoritative workspace', () => {
+  withWorkspace(({ root, manager }) => {
+    fs.mkdirSync(profileDirectory(root, OTHER), { recursive: true });
+    fs.mkdirSync(path.dirname(carryOverFile(root, OTHER)), { recursive: true });
+    fs.writeFileSync(carryOverFile(root, OTHER), 'saved session');
+    workspace.authoritative = false;
+
+    const result = manager.scan([], { measure: false });
+
+    assert.equal(fs.existsSync(profileDirectory(root, OTHER)), true, 'the browser profile survives');
+    assert.equal(fs.existsSync(carryOverFile(root, OTHER)), true, 'the saved-session file survives');
+    assert.deepEqual(result.orphans.removed, { profiles: [], carryOver: [] });
+    assert.deepEqual(result.orphans.kept.unclaimed.sort(), [`${OTHER}.plist`, `poolside-${OTHER}`].sort());
   });
 });
 

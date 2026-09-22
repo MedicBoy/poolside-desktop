@@ -2,7 +2,7 @@
 //
 // The recogniser returns a text blob. Everything downstream then treats it as one string, which means a
 // term is either present or not, with no way to say *where* it was seen or how sure the recogniser was.
-// That is enough to classify a screen and not enough to debug one: "unknown" from a blob tells you nothing
+// That is enough to classify a screen and not enough to debug one: an unrecognized result from a blob tells you nothing
 // about whether the phrase was absent, misread, or read at low confidence from a blurry edge.
 //
 // So a recognition pass becomes a grid: cells with the text, the box it was seen in, the confidence the

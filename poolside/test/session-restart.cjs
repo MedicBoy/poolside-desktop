@@ -2,6 +2,7 @@ const { app, session, safeStorage, BrowserWindow } = require('electron');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const saved = require('../src/saved-session.cjs');
+const { createProfileStore } = require('../src/profiles.cjs');
 const [root, mode] = process.argv.slice(2);
 app.setPath('userData', root);
 app
@@ -13,6 +14,7 @@ app
     // iteration. Keep one window alive for the duration of the run.
     const keepAlive = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
     await keepAlive.loadURL('data:text/html,<title>keep-alive</title>');
+    const profiles = createProfileStore({ log: () => {} });
     /** @type {import('../src/types.cjs').Account[]} */
     const accounts = [
       {
@@ -31,6 +33,7 @@ app
       store.protocol.handle('https', () => new Response('<title>Local storage fixture</title>'));
       const window = new BrowserWindow({ show: false, webPreferences: { session: store, sandbox: true } });
       await window.loadURL('https://example.test/');
+      await profiles.prepare(account, store);
       if (mode === 'seed') {
         await store.cookies.set({
           url: 'https://example.test',
@@ -47,7 +50,8 @@ app
           expirationDate: Date.now() / 1000 + 86400
         });
         await window.webContents.executeJavaScript(`localStorage.setItem('account', '${i}')`);
-        await saved.saveSession(root, account, store, safeStorage);
+        // Production calls this when the account window closes, before the process-wide quit flush.
+        await profiles.flushAccount(account.id);
         const xml = fs.readFileSync(saved.fileFor(root, account.id), 'utf8');
         assert.ok(xml.includes('<plist version="1.0">'));
         assert.ok(xml.includes('<key>Scope</key><string>session-cookies</string>'));
@@ -68,7 +72,6 @@ app
         );
         assert.ok(!JSON.stringify(payload).includes(`test-persistent-${i}`), 'persistent cookie must not be duplicated into the plist');
       } else {
-        await saved.restoreSession(root, account, store, safeStorage);
         assert.equal((await store.cookies.get({ name: 'session' }))[0].value, `test-session-${i}`);
         assert.equal((await store.cookies.get({ name: 'persistent' }))[0].value, `test-persistent-${i}`);
         assert.equal(await window.webContents.executeJavaScript("localStorage.getItem('account')"), String(i));

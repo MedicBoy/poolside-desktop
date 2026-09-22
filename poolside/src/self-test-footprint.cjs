@@ -13,6 +13,7 @@ const { resolveProxyRoute } = require('./proxy.cjs');
 const { rememberBounds, restoreBounds } = require('./geometry.cjs');
 const { applySessionFootprint, applyProxyRoute, measureStorage, verifyRoute } = require('./footprint.cjs');
 const { applyTargetFootprint } = require('./target-identity.cjs');
+const identityReadback = require('./identity-readback.cjs');
 
 // Read the properties the roadmap promised to assert, from inside the page.
 const READ_BACK = `(() => ({
@@ -70,6 +71,9 @@ async function runFootprintChecks(ctx, assert, log) {
     const targetResult = await applyTargetFootprint(window.webContents, { identity }, log);
     await window.loadURL('https://identity.test/');
     const read = await window.webContents.executeJavaScript(READ_BACK);
+    // And the same read the dashboard's own comparison uses, so the wording the operator sees is asserted against
+    // real pages rather than against a fixture object.
+    const readback = await window.webContents.executeJavaScript(identityReadback.SCRIPT);
     // Printed as well as asserted: these values are the evidence for what this session claims to be, and
     // a failure on another machine is far easier to read with them in the output.
     console.log(`... footprint: ${partition} overrides -> ${JSON.stringify(targetResult)}`);
@@ -77,11 +81,19 @@ async function runFootprintChecks(ctx, assert, log) {
     // Read while the window is alive: the page reports its own quota, which is what makes the configured
     // ceiling a comparison the app makes rather than a cap Chromium applies.
     const estimate = await window.webContents.executeJavaScript('navigator.storage.estimate()');
-    return { identity, read, targetResult, estimate, window };
+    return { identity, read, readback, targetResult, estimate, window };
   }
 
   const a = await readIdentity(IDENTITY_A, 'test-identity-a');
   assert.equal(a.targetResult.applied.length, 5, 'user agent, locale, timezone, viewport and colour scheme were all accepted');
+  // Each accepted override is named by the field it belongs to, not by its CDP method: a refusal has to be
+  // reportable as "the control you have to clear" rather than as "Emulation.setTimezoneOverride".
+  assert.deepEqual(
+    a.targetResult.applied,
+    ['User agent', 'Language (locale)', 'Time zone', 'Window size', 'Colour scheme'],
+    'the applied overrides are named by field'
+  );
+  assert.deepEqual(a.targetResult.refused, [], 'nothing was refused in the fixture identity');
   assert.equal(a.read.userAgent, IDENTITY_A.userAgent, 'the session user agent reaches navigator.userAgent');
   assert.equal(a.read.language, 'en-GB', 'accepted languages drive navigator.language');
   assert.equal(a.read.languages, 'en-GB,en', 'the ordered list is preserved');
@@ -101,6 +113,24 @@ async function runFootprintChecks(ctx, assert, log) {
   assert.equal(b.read.viewport, '1024x400');
   assert.equal(b.read.dark, false, 'an explicit light scheme is not the same as unset');
   assert.notEqual(a.read.userAgent, b.read.userAgent);
+
+  // --- The side-by-side comparison, against the two real sessions --------------------------------
+  // What the operator sees when they ask whether two sessions look like one machine. The two windows above carry
+  // deliberately different identities, and they are on the same display, so a correct comparison reports the
+  // differences *and* at least one shared field rather than one or the other.
+  const compared = identityReadback.compare([
+    { id: 'identity-a', name: 'Identity A', read: a.readback },
+    { id: 'identity-b', name: 'Identity B', read: b.readback }
+  ]);
+  const row = key => /** @type {any} */ (compared.rows.find(entry => entry.key === key));
+  console.log(`... footprint: comparison verdict ${JSON.stringify(compared.verdict)}`);
+  assert.equal(row('userAgent').same, false, 'the two sessions report different user agents');
+  assert.equal(row('timeZone').same, false, 'and different time zones');
+  assert.equal(row('colorScheme').same, false, 'and different colour schemes');
+  assert.equal(row('screen').same, true, 'while the display they are both on is the same');
+  assert.ok(compared.compared > 3, 'more than a few fields were comparable');
+  assert.match(compared.verdict, /fields are the same on both sessions/);
+  assert.ok(compared.sharedFields.includes('Screen size'), 'the shared field is named, so the sentence can be checked against the table');
   b.window.destroy();
   a.window.destroy();
 
@@ -168,7 +198,7 @@ async function runFootprintChecks(ctx, assert, log) {
   assert.equal(restored.bounds?.width, 1060, 'and it restores at the size it was saved with');
 
   console.log(
-    'PASS: per-session identity (user agent, languages, locale, timezone, viewport, colour scheme) read back from navigator and Intl, isolated between sessions, with the route, the storage ceiling and remembered window geometry reported honestly.'
+    'PASS: per-session identity (user agent, languages, locale, timezone, viewport, colour scheme) read back from navigator and Intl, isolated between sessions and compared side by side field by field, with the route, the storage ceiling and remembered window geometry reported honestly.'
   );
 }
 

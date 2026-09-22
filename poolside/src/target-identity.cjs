@@ -33,6 +33,11 @@ function withDeadline(promise, ms, label) {
  * The target-level half, over CDP. Returns the commands that were accepted; the debugger stays attached,
  * because detaching is what clears these overrides.
  *
+ * Each override is applied on its own. One refused value must not take the others with it — a browser that
+ * dislikes a time zone should leave the language, window size and colour scheme in place — and what is refused
+ * is reported by the field it belongs to, with the value, because "Target overrides failed after 1 of 5" told
+ * the operator nothing about which control to clear.
+ *
  * Trade-off, stated plainly: an attached debugger means DevTools cannot be opened on that window and the
  * target is inspectable. That is why this is opt-in per account rather than always on.
  * @param {import('electron').WebContents} webContents
@@ -47,6 +52,8 @@ async function applyTargetFootprint(webContents, footprint, log) {
   // Declared outside the try so the catch can report how far it got.
   /** @type {string[]} */
   const applied = [];
+  /** @type {{field: string, value: unknown, error: string}[]} */
+  const refused = [];
   try {
     // A window that has never navigated has no renderer. CDP commands sent to it are *accepted* but their
     // replies never arrive, so the awaits below would hang forever with no window to close (measured:
@@ -57,17 +64,26 @@ async function applyTargetFootprint(webContents, footprint, log) {
       await webContents.loadURL('about:blank');
     }
     if (!debug.isAttached()) debug.attach(DEBUGGER_PROTOCOL_VERSION);
-    for (const { method, params } of commands) {
-      await withDeadline(debug.sendCommand(method, params), COMMAND_DEADLINE_MS, method);
-      applied.push(method.replace('Emulation.', ''));
+    for (const command of commands) {
+      try {
+        await withDeadline(debug.sendCommand(command.method, command.params), COMMAND_DEADLINE_MS, command.method);
+        applied.push(command.field);
+      } catch (error) {
+        // Reported by field and value, and the rest of the identity still applies.
+        refused.push({ field: command.field, value: command.value, error: messageOf(error) });
+        log(
+          `${command.field} "${String(command.value)}" was refused by the browser (${messageOf(error)}). The rest of this session's identity still applies; clear or correct that field in Settings, or in this account's preferences.`,
+          'warning'
+        );
+      }
     }
     log(`Session footprint: applied ${applied.join(', ')} to the live page.`);
-    return { applied, attached: true };
+    return { applied, refused, attached: true };
   } catch (error) {
     // A refused override must not stop the session opening: report it and carry on. The commands that
     // did land are kept — reporting an empty list would hide a partially applied identity.
     log(`Target overrides failed after ${applied.length} of ${commands.length}: ${messageOf(error)}`, 'warning');
-    return { applied, attached: debug.isAttached(), error: messageOf(error) };
+    return { applied, refused, attached: debug.isAttached(), error: messageOf(error) };
   }
 }
 

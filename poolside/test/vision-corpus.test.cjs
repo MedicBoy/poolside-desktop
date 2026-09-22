@@ -18,7 +18,7 @@ const { clampRect, toCaptureRect, toPageRect } = require('../src/vision-frame.cj
 const { describeGrid, LOW_CONFIDENCE } = require('../src/vision-grid.cjs');
 
 const corpus = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'vision-corpus.json'), 'utf8'));
-const VOCABULARY = [...RULES.map(rule => rule.state), 'unknown'];
+const VOCABULARY = [...RULES.map(rule => rule.state), 'unrecognized'];
 
 /** The surface a frame is drawn on, with the corpus defaults filled in. */
 function surfaceOf(frame) {
@@ -76,7 +76,7 @@ test('every state the rule engine can produce is covered, and the negatives are 
   const covered = new Set(corpus.frames.map(frame => frame.state));
   const missing = RULES.map(rule => rule.state).filter(state => !covered.has(state));
   assert.deepEqual(missing, [], `no frame exercises: ${missing.join(', ')} — a new rule needs a frame here`);
-  const negatives = corpus.frames.filter(frame => frame.state === 'unknown');
+  const negatives = corpus.frames.filter(frame => frame.state === 'unrecognized');
   assert.ok(negatives.length >= 6, `only ${negatives.length} negative frame(s): the suite this replaces had none`);
   const sources = new Set(corpus.frames.map(frame => frame.source));
   for (const fixture of [
@@ -163,14 +163,14 @@ test('low-confidence telemetry survives into the grid', () => {
 });
 
 test('the measured limitation this corpus exists to justify', () => {
-  // scaled-window is one misread gate term away from the lobby. The gate fails, so the result is unknown —
+  // scaled-window is one misread gate term away from the lobby. The gate fails, so the result is unrecognized —
   // the classifier scores the match but never recovers from a single bad term. That is the finding the
   // roadmap's "loosen the gates, justified by the corpus" step has to answer, and it is pinned here so the
   // day classifier v2 changes it, this test says so out loud.
   const frame = corpus.frames.find(entry => entry.id === 'scaled-window');
   const grid = pipelineFor(frame).read(frame.lines);
   const text = pipelineFor(frame).text(grid);
-  assert.equal(classify(text).state, 'unknown', 'a single misread gate term currently loses the whole screen');
+  assert.equal(classify(text).state, 'unrecognized', 'a single misread gate term currently loses the whole screen');
   assert.ok(text.includes('SPECIAI'), 'the misread term is the one the recogniser actually returned');
   assert.equal(/special/.test(text), false, 'and it is not the word the gate needs');
 

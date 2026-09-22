@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { account, updateAccount, settings, decode } = require('../src/model.cjs');
+const { account, updateAccount, settings, decode, TABLES } = require('../src/model.cjs');
 test('account slots have distinct IDs and prevent ambiguous receiver or duplicate labels', () => {
   const main = account({ name: ' Main ', role: 'receiver' });
   const sender = account({ name: 'Sender', role: 'sender' }, [main]);
@@ -39,6 +39,25 @@ test('workspace decoder rejects invalid paths, duplicate IDs, and malformed sett
   assert.throws(() => settings({ table: 'Bangkok', limit: 0 }));
   assert.throws(() => settings({ table: 'Bangkok', limit: 1.5 }));
   assert.throws(() => settings({ table: 'Unknown', limit: 10 }));
+});
+
+test('the retired Dallas preference migrates to the real Dubai 1-on-1 table', () => {
+  const a = account({ name: 'Main', role: 'receiver' });
+  const decoded = decode({ version: 1, accounts: [a], settings: { table: 'Dallas', limit: 10 } });
+  assert.equal(decoded.settings.table, 'Dubai');
+  assert.equal(settings({ table: 'Dubai', limit: 10 }).table, 'Dubai');
+  assert.throws(() => settings({ table: 'Dallas', limit: 10 }), /supported table/);
+});
+
+test('retired web tables are not offered and old preferences remain loadable', () => {
+  const a = account({ name: 'Primary', role: 'receiver' });
+  const decoded = decode({ version: 1, accounts: [a], settings: { table: 'Venice', limit: 10 } });
+  assert.equal(decoded.settings.table, 'Dubai');
+  assert.equal(decode({ version: 1, accounts: [a], settings: { table: 'Miami', limit: 10 } }).settings.table, 'Dubai');
+  assert.equal(TABLES.includes('Venice'), false);
+  assert.equal(TABLES.includes('Dallas'), false);
+  assert.equal(TABLES.includes('Miami'), false);
+  assert.equal(TABLES.includes('Dubai'), true);
 });
 
 // The D3 defect was a decode that silently dropped a field on the way to disk, so the same shape of

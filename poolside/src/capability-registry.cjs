@@ -1,0 +1,159 @@
+// Public product claims. Keep modes conservative: tests establish implementation,
+// not real-game reliability, legal permission, or a signed-release qualification.
+const CAPABILITIES = Object.freeze([
+  {
+    id: 'isolated-sessions',
+    name: 'Isolated browser sessions',
+    mode: 'available',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail: 'Separate local Chromium profiles; a window being ready does not verify sign-in.'
+  },
+  {
+    id: 'account-management',
+    name: 'Account slots and roles',
+    mode: 'available',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail: 'Local account records, one receiving role, and independent sending roles.'
+  },
+  {
+    id: 'session-persistence',
+    name: 'Saved session storage',
+    mode: 'available',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail: 'Local profile storage and encrypted session-cookie carry-over; site sign-in can still expire.'
+  },
+  {
+    id: 'capture-lab',
+    name: 'Capture Lab',
+    mode: 'available',
+    validation: 'fixture-proven',
+    flag: 'on',
+    detail: 'Local labelled captures and separate Evidence and Benchmark sets; samples are user-reviewed.'
+  },
+  {
+    id: 'screen-recognition',
+    name: 'Screen recognition',
+    mode: 'limited',
+    validation: 'fixture-proven',
+    flag: 'on',
+    detail:
+      'Local English-screen observations of every game window that is on screen, focused or not — a window that is hidden or minimised is skipped rather than read from its last painted frame. Representative live accuracy is not established.'
+  },
+  {
+    id: 'table-navigation',
+    name: 'Table navigation',
+    mode: 'dry-run',
+    validation: 'fixture-proven',
+    flag: 'dry-run',
+    detail: 'Plans and observes manual steps; never sends game input.'
+  },
+  {
+    id: 'match-coordination',
+    name: 'Match coordination',
+    mode: 'available',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail:
+      "Pairs two of your own accounts into a match, loads both profiles, holds the match at a readiness barrier that reports which participants are ready and blocks release when they are not, records the result and keeps a bounded local ledger. A run plan sets the table it is for, how many matches it is for, and what stops it — a match limit, matches in a row with no result, matches in a row without a confirmed pairing, a time limit, or the operator — and the program ends the run itself when one of those is met; a run can also be paused, which starts nothing further and does not spend the plan's clock. The run card is a live dashboard of where the run is: the stage, the attempt number, the release and how long it took, how old each session's last screen reading is, which condition will stop the run next, and the one thing to do now. Each match carries a pairing verdict judged only from the two sessions' own screen readings: a connecting screen says nothing about which match it is connecting to, so it is never counted, and the verdict is allowed to read \"not enough evidence yet\". A match cannot outlive the process that was holding it: anything still in progress when the app starts is recorded as interrupted, and a match whose window has gone is cancelled as a dropout, so an account is never locked out of a new match by one that is not really happening. It records what you decide: it does not pair accounts on the game service."
+  },
+  {
+    id: 'diagnostics',
+    name: 'Diagnostics export',
+    mode: 'limited',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail:
+      'Local redacted activity/telemetry export with a refusing secret-shape scan, and the same scan in front of the saved run report. It catches the shapes it knows — account names, addresses, filesystem paths, token-shaped strings and route credentials in either form a provider hands out — and refuses the file rather than writing it. A floor, not a privacy proof.'
+  },
+  {
+    id: 'workspace-recovery',
+    name: 'Workspace recovery',
+    mode: 'limited',
+    validation: 'fixture-proven',
+    flag: 'on',
+    detail:
+      'Preserves damaged primary data, lists the recovery copies it can read — when each was written, how many accounts it holds, whether it is usable — and restores one only when the operator chooses it, re-reading and re-validating the restored document. Copies are described through the same redaction as the rest of the dashboard; it shows what it found, it does not choose.'
+  },
+  {
+    id: 'authentication-verification',
+    name: 'Authentication verification',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'Sign-in occurs manually on the game website; Poolside does not verify account authentication.'
+  },
+  {
+    id: 'live-game-input',
+    name: 'Live game input',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'No production pointer or keyboard input to the game; service-rule authorization is unresolved.'
+  },
+  {
+    id: 'matchmaking-pairing',
+    name: 'Matchmaking and pairing',
+    mode: 'limited',
+    validation: 'fixture-proven',
+    flag: 'on',
+    detail:
+      "Pairs two of your own accounts locally and judges the pairing from the two sessions' own screen readings: the same table identified on both, or the same entry paid by both accounts inside a window. It does not pair accounts on the game service, and a local reading is evidence rather than proof — two accounts on different tables of the same fee would look alike."
+  },
+  {
+    id: 'session-comparison',
+    name: 'Session comparison',
+    mode: 'limited',
+    validation: 'integration-proven',
+    flag: 'on',
+    detail:
+      "Reads ten values from each open session's own page — user agent, language and accepted languages, time zone, locale, viewport, screen size, colour scheme, reported processor cores and device memory — and shows them side by side with every field marked the same or different, and the shared ones named. It reports what those pages report to themselves on this machine; it does not make two sessions look different, it changes nothing, and it is not a promise about how any website treats them. A value nobody reported, and a session that could not be read, are excluded rather than counted as matches. A note beside a match verdict states what the two accounts are *configured* to look like, which is configuration rather than observation (ADR-0020)."
+  },
+  {
+    id: 'match-accounting',
+    name: 'Match outcome and balance accounting',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'Recorded results are operator-entered, not verified against the game; there is no balance or transfer accounting.'
+  },
+  {
+    id: 'signed-installer',
+    name: 'Signed installer',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'Portable development package only; no signed installer or clean-VM qualification.'
+  },
+  {
+    id: 'automatic-updates',
+    name: 'Automatic updates and rollback',
+    mode: 'unavailable',
+    validation: 'designed',
+    flag: 'off',
+    detail: 'No updater, signed update metadata, or rollback transaction.'
+  }
+]);
+
+const SUPPORT = Object.freeze({
+  stage: 'Development preview; no production-certified configuration',
+  targetWindows: 'Windows 11 x64, currently serviced 25H2; Windows 10 is outside the target',
+  gameLocale: 'English game text only for current recognition rules',
+  display:
+    'Single monitor, 100% scale, at least 1280 × 720 is the conservative preview target; other scales and layouts remain unvalidated',
+  lifetime: 'Preview builds are superseded by the next preview; there is no guaranteed support term or service-level agreement before 1.0'
+});
+
+function buildCapabilityReport(version) {
+  return {
+    format: 'poolside-capabilities/v1',
+    version: String(version || 'unknown'),
+    channel: 'development-preview',
+    support: { ...SUPPORT },
+    capabilities: CAPABILITIES.map(item => ({ ...item }))
+  };
+}
+
+module.exports = { CAPABILITIES, SUPPORT, buildCapabilityReport };

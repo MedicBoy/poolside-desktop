@@ -1,3 +1,4 @@
+// The shop auto-return: recognise the shop, wait for the headings to settle, then navigate back once per opening.
 const SHOP_DELAY_MS = 5000;
 function officialPage(url) {
   try {

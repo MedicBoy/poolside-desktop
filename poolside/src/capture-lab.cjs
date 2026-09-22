@@ -1,12 +1,16 @@
+// The Capture Lab: a private library of game screens, what the recogniser said about each, and the operator's verdict.
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
-const { evaluate } = require('./capture-evaluation.cjs');
+const { evaluate, sampleMatches } = require('./capture-evaluation.cjs');
+const { validateCaptureCorpus } = require('./capture-validation.cjs');
+const { TABLES } = require('./table-list.cjs');
 const {
   SAMPLE_STATES,
   COHORTS,
   validId,
   validState,
+  validExpectedTable,
   validCohort,
   normaliseCohort,
   timing,
@@ -39,7 +43,7 @@ function createCaptureLab({ root }) {
     prepare();
     const temporary = `${manifest}.tmp`;
     const cleaned = samples.map(normaliseSample).filter(Boolean);
-    fs.writeFileSync(temporary, JSON.stringify({ version: 1, samples: cleaned }, null, 2), { mode: 0o600 });
+    fs.writeFileSync(temporary, JSON.stringify({ version: 2, samples: cleaned }, null, 2), { mode: 0o600 });
     fs.renameSync(temporary, manifest);
   }
 
@@ -50,10 +54,27 @@ function createCaptureLab({ root }) {
 
   function list() {
     return read().map(
-      ({ id, expectedState, observedState, score, source, capturedAt, width, height, cohort, reviewedAt, timing: storedTiming }) => ({
+      ({
         id,
         expectedState,
+        expectedTable,
         observedState,
+        observedTables,
+        score,
+        source,
+        capturedAt,
+        width,
+        height,
+        cohort,
+        reviewedAt,
+        timing: storedTiming
+      }) => ({
+        id,
+        expectedState,
+        expectedTable,
+        observedState,
+        observedTables,
+        matches: sampleMatches({ expectedState, expectedTable, observedState, observedTables }),
         score,
         source,
         capturedAt,
@@ -68,15 +89,15 @@ function createCaptureLab({ root }) {
   }
 
   /**
-   * @param {{png: Buffer, expectedState: unknown, observed: {state?: unknown, score?: unknown, source?: unknown}, frame: {width?: unknown, height?: unknown}, cohort?: unknown, timing?: unknown}} input
+   * @param {{png: Buffer, expectedState: unknown, expectedTable?: unknown, observed: {state?: unknown, score?: unknown, source?: unknown, visibleTables?: unknown}, frame: {width?: unknown, height?: unknown}, cohort?: unknown, timing?: unknown}} input
    */
-  function record({ png, expectedState, observed, frame, cohort = 'evidence', timing: observedTiming }) {
+  function record({ png, expectedState, expectedTable, observed, frame, cohort = 'evidence', timing: observedTiming }) {
     validState(expectedState);
+    validExpectedTable(expectedState, expectedTable);
     validCohort(cohort);
     if (!Buffer.isBuffer(png) || !png.length) throw new Error('The game surface could not be captured.');
     const imageHash = createHash('sha256').update(png).digest('hex');
-    if (read().some(sample => sample.expectedState === expectedState && sample.imageHash === imageHash))
-      throw new Error('This exact screen has already been recorded with the same expected label.');
+    if (read().some(sample => sample.imageHash === imageHash)) throw new Error('This exact screen has already been recorded.');
     prepare();
     const id = randomUUID();
     fs.writeFileSync(imagePath(id), png, { mode: 0o600 });
@@ -85,9 +106,11 @@ function createCaptureLab({ root }) {
       imageHash,
       cohort,
       expectedState,
-      observedState: typeof observed?.state === 'string' ? observed.state : 'unknown',
+      expectedTable: expectedState === 'table-selection' ? expectedTable : null,
+      observedState: typeof observed?.state === 'string' ? observed.state : 'unrecognized',
+      observedTables: Array.isArray(observed?.visibleTables) ? observed.visibleTables : [],
       score: Number.isFinite(observed?.score) ? Math.max(0, Math.min(1, Number(observed.score))) : 0,
-      source: typeof observed?.source === 'string' ? observed.source : 'unknown',
+      source: typeof observed?.source === 'string' ? observed.source : 'unavailable',
       capturedAt: new Date().toISOString(),
       width: Number.isInteger(frame?.width) ? frame.width : null,
       height: Number.isInteger(frame?.height) ? frame.height : null
@@ -125,15 +148,32 @@ function createCaptureLab({ root }) {
     write(samples.map(sample => (sample.id === id ? { ...sample, cohort } : sample)));
   }
 
+  function tableReferences() {
+    return read()
+      .filter(
+        sample =>
+          sample.cohort === 'evidence' &&
+          sample.expectedState === 'table-selection' &&
+          (sample.reviewedAt || sampleMatches(sample)) &&
+          fs.existsSync(imagePath(sample.id))
+      )
+      .map(sample => ({ id: sample.id, table: sample.expectedTable, imageHash: sample.imageHash, path: imagePath(sample.id) }));
+  }
+
   return {
     list,
-    evaluation: () => evaluate(read(), SAMPLE_STATES),
+    evaluation: () => {
+      const samples = read();
+      return { ...evaluate(samples, SAMPLE_STATES, TABLES), validation: validateCaptureCorpus(samples, SAMPLE_STATES) };
+    },
     record,
     image,
     remove,
     markReviewed,
     setCohort,
+    tableReferences,
     states: SAMPLE_STATES,
+    tables: TABLES,
     cohorts: COHORTS
   };
 }

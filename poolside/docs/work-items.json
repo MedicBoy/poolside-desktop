@@ -1,0 +1,1286 @@
+[
+  {
+    "id": "A1",
+    "status": "complete",
+    "owner": "Product engineering",
+    "dependsOn": [],
+    "acceptance": "Convert this blueprint into tracked work items with dependencies, acceptance evidence, and responsible owner.",
+    "requiredEvidence": "Repository document or automated product-truth check",
+    "evidence": ["docs/work-items.json", "scripts/check-work-items.cjs"]
+  },
+  {
+    "id": "A2",
+    "status": "complete",
+    "owner": "Product engineering",
+    "dependsOn": ["A1"],
+    "acceptance": "Add a capability registry consumed by the About/Diagnostics view: implemented mode, validation level, feature flag, and build version.",
+    "requiredEvidence": "Repository document or automated product-truth check",
+    "evidence": ["src/capability-registry.cjs", "docs/CAPABILITIES.md"]
+  },
+  {
+    "id": "A3",
+    "status": "complete",
+    "owner": "Product engineering",
+    "dependsOn": ["A2"],
+    "acceptance": "Remove stale claims from README, architecture notes, incomplete-work register, and ADR-0011 whenever a capability changes level.",
+    "requiredEvidence": "Repository document or automated product-truth check",
+    "evidence": [
+      "docs/CAPABILITIES.md",
+      "README.md",
+      "docs/architecture.md",
+      "docs/adr/0011-game-automation-gaps.md",
+      "../INCOMPLETE_WORK.md"
+    ]
+  },
+  {
+    "id": "A4",
+    "status": "complete",
+    "owner": "Product engineering",
+    "dependsOn": ["A1"],
+    "acceptance": "Record product boundaries, supported Windows versions, supported game locale(s), supported display configurations, and support lifetime.",
+    "requiredEvidence": "Repository document or automated product-truth check",
+    "evidence": ["docs/support-policy.md"]
+  },
+  {
+    "id": "A5",
+    "status": "complete",
+    "owner": "Product engineering",
+    "dependsOn": ["A1"],
+    "acceptance": "Add decision templates for game-facing input, updater infrastructure, signing, and data migrations.",
+    "requiredEvidence": "Repository document or automated product-truth check",
+    "evidence": ["docs/decision-templates/README.md"]
+  },
+  {
+    "id": "A6",
+    "status": "complete",
+    "owner": "Product engineering",
+    "dependsOn": ["A1"],
+    "acceptance": "Establish a release evidence folder format containing reports, hashes, screenshots without secrets, matrix results, and sign-off.",
+    "requiredEvidence": "Repository document or automated product-truth check",
+    "evidence": ["docs/release-evidence/README.md", "scripts/check-release-evidence.cjs"]
+  },
+  {
+    "id": "B1",
+    "status": "open",
+    "owner": "Storage engineering",
+    "dependsOn": ["A6"],
+    "acceptance": "Introduce an explicit workspace schema version and ordered migration registry with golden fixtures from every released version.",
+    "requiredEvidence": "Migration and fault-injection tests with recovery record",
+    "evidence": []
+  },
+  {
+    "id": "B2",
+    "status": "open",
+    "owner": "Storage engineering",
+    "dependsOn": ["B1"],
+    "acceptance": "Use atomic write: validate → write temporary sibling → flush → rename → retain bounded previous-known-good copy.",
+    "requiredEvidence": "Migration and fault-injection tests with recovery record",
+    "evidence": []
+  },
+  {
+    "id": "B3",
+    "status": "open",
+    "owner": "Storage engineering",
+    "dependsOn": ["B1"],
+    "acceptance": "Add startup recovery choices for corrupt primary plus valid backup; never auto-discard account records.",
+    "requiredEvidence": "Migration and fault-injection tests with recovery record",
+    "evidence": []
+  },
+  {
+    "id": "B4",
+    "status": "open",
+    "owner": "Storage engineering",
+    "dependsOn": ["B1"],
+    "acceptance": "Complete portable Poolside backup/export with manifest, checksums, version, encrypted sensitive profile payload, and preflight size estimate.",
+    "requiredEvidence": "Migration and fault-injection tests with recovery record",
+    "evidence": []
+  },
+  {
+    "id": "B5",
+    "status": "open",
+    "owner": "Storage engineering",
+    "dependsOn": ["B1"],
+    "acceptance": "Complete restore into a staging directory, validate everything, detect conflicts, then commit atomically.",
+    "requiredEvidence": "Migration and fault-injection tests with recovery record",
+    "evidence": []
+  },
+  {
+    "id": "B6",
+    "status": "open",
+    "owner": "Storage engineering",
+    "dependsOn": ["B1"],
+    "acceptance": "Define cross-Windows-user behavior for DPAPI material: re-authentication or an explicit user-chosen export encryption key; never imply DPAPI blobs are portable.",
+    "requiredEvidence": "Migration and fault-injection tests with recovery record",
+    "evidence": []
+  },
+  {
+    "id": "B7",
+    "status": "open",
+    "owner": "Storage engineering",
+    "dependsOn": ["B1"],
+    "acceptance": "Add retention controls and test archive/restore/delete independently of profile deletion.",
+    "requiredEvidence": "Migration and fault-injection tests with recovery record",
+    "evidence": []
+  },
+  {
+    "id": "B8",
+    "status": "open",
+    "owner": "Storage engineering",
+    "dependsOn": ["B1"],
+    "acceptance": "Test disk-full, access-denied, interrupted write, partial copy, damaged manifest, old schema, future schema, and OneDrive contention.",
+    "requiredEvidence": "Migration and fault-injection tests with recovery record",
+    "evidence": []
+  },
+  {
+    "id": "C1",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["B3"],
+    "acceptance": "Finish the per-account detail view: role, profile generation, storage health/size, sign-in persistence status, route, identity, observations, recovery history, and safe actions.",
+    "requiredEvidence": "Lifecycle integration test and restart evidence",
+    "evidence": []
+  },
+  {
+    "id": "C2",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["C1"],
+    "acceptance": "Enforce role invariants in one policy module: exactly one active receiver for coordinated runs and one or more eligible senders, without blocking ordinary independent sessions.",
+    "requiredEvidence": "Lifecycle integration test and restart evidence",
+    "evidence": []
+  },
+  {
+    "id": "C3",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["C1"],
+    "acceptance": "Add profile health actions: inspect, quarantine summary, reopen, repair-safe metadata, export, and deliberate delete.",
+    "requiredEvidence": "Lifecycle integration test and restart evidence",
+    "evidence": []
+  },
+  {
+    "id": "C4",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["C1"],
+    "acceptance": "Add conflict-proof names only as display labels; stable IDs remain the authority.",
+    "requiredEvidence": "Lifecycle integration test and restart evidence",
+    "evidence": []
+  },
+  {
+    "id": "C5",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["C1"],
+    "acceptance": "Verify archive, restore, remove-record-only if supported, and remove-record-plus-profile semantics with explicit confirmations.",
+    "requiredEvidence": "Lifecycle integration test and restart evidence",
+    "evidence": []
+  },
+  {
+    "id": "C6",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["C1"],
+    "acceptance": "Add profile-lock detection and clean handling when another Poolside process or security product holds files.",
+    "requiredEvidence": "Lifecycle integration test and restart evidence",
+    "evidence": []
+  },
+  {
+    "id": "C7",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["C1"],
+    "acceptance": "Validate at least two complete restart cycles and machine reboot behavior with multiple real signed-in accounts.",
+    "requiredEvidence": "Lifecycle integration test and restart evidence",
+    "evidence": []
+  },
+  {
+    "id": "D1",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["C1"],
+    "acceptance": "Complete the session FSM states, reason codes, deadlines, and transitions for launch, page readiness, manual challenge, degraded rendering, crash, recovery, and closure.",
+    "requiredEvidence": "Electron failure test and recorded hardware result",
+    "evidence": []
+  },
+  {
+    "id": "D2",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["D1"],
+    "acceptance": "Add renderer-process and GPU-process crash observation with safe crash records and bounded recovery.",
+    "requiredEvidence": "Electron failure test and recorded hardware result",
+    "evidence": []
+  },
+  {
+    "id": "D3",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["D1"],
+    "acceptance": "Build freeze detection from frame-change probes, navigation progress, compositor health, and user focus—not from an invented “blank screen” label.",
+    "requiredEvidence": "Electron failure test and recorded hardware result",
+    "evidence": []
+  },
+  {
+    "id": "D4",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["D1"],
+    "acceptance": "Offer explicit recovery actions: refocus/repaint, reload, reopen window, restart session process, and manual takeover.",
+    "requiredEvidence": "Electron failure test and recorded hardware result",
+    "evidence": []
+  },
+  {
+    "id": "D5",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["D1"],
+    "acceptance": "Characterize hardware acceleration on supported GPUs/drivers and add a documented per-machine fallback flag only when evidence supports it.",
+    "requiredEvidence": "Electron failure test and recorded hardware result",
+    "evidence": []
+  },
+  {
+    "id": "D6",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["D1"],
+    "acceptance": "Test remembered placement across monitor disconnect, DPI change, resolution change, taskbar movement, and off-screen recovery.",
+    "requiredEvidence": "Electron failure test and recorded hardware result",
+    "evidence": []
+  },
+  {
+    "id": "D7",
+    "status": "open",
+    "owner": "Session engineering",
+    "dependsOn": ["D1"],
+    "acceptance": "Prevent duplicate launches and give the second process a safe “focus existing instance” behavior.",
+    "requiredEvidence": "Electron failure test and recorded hardware result",
+    "evidence": []
+  },
+  {
+    "id": "E1",
+    "status": "open",
+    "owner": "Network engineering",
+    "dependsOn": ["D1"],
+    "acceptance": "Complete schema-generated workspace defaults and per-account overrides for every supported identity and route field.",
+    "requiredEvidence": "Route and identity integration test with secret review",
+    "evidence": []
+  },
+  {
+    "id": "E2",
+    "status": "open",
+    "owner": "Network engineering",
+    "dependsOn": ["E1"],
+    "acceptance": "Keep route credentials masked end to end; separate authentication from public route descriptions and diagnostics.",
+    "requiredEvidence": "Route and identity integration test with secret review",
+    "evidence": []
+  },
+  {
+    "id": "E3",
+    "status": "open",
+    "owner": "Network engineering",
+    "dependsOn": ["E1"],
+    "acceptance": "Add route-preset lifecycle: create, edit, test, assign, unassign, delete-if-unused, health timestamp, and failure history.",
+    "requiredEvidence": "Route and identity integration test with secret review",
+    "evidence": []
+  },
+  {
+    "id": "E4",
+    "status": "open",
+    "owner": "Network engineering",
+    "dependsOn": ["E1"],
+    "acceptance": "Add per-session preflight for DNS/connectivity, game reachability, public IP, route mismatch, and latency sample.",
+    "requiredEvidence": "Route and identity integration test with secret review",
+    "evidence": []
+  },
+  {
+    "id": "E5",
+    "status": "open",
+    "owner": "Network engineering",
+    "dependsOn": ["E1"],
+    "acceptance": "Define route readiness rules for coordinated runs and prevent starting with duplicate/missing/unverified routes when policy requires otherwise.",
+    "requiredEvidence": "Route and identity integration test with secret review",
+    "evidence": []
+  },
+  {
+    "id": "E6",
+    "status": "open",
+    "owner": "Network engineering",
+    "dependsOn": ["E1"],
+    "acceptance": "Handle proxy authentication prompts, offline state, captive portals, DNS failure, TLS failure, and partial network recovery without exposing secrets.",
+    "requiredEvidence": "Route and identity integration test with secret review",
+    "evidence": []
+  },
+  {
+    "id": "E7",
+    "status": "open",
+    "owner": "Network engineering",
+    "dependsOn": ["E1"],
+    "acceptance": "State exactly which browser identity surfaces are controlled and which are not. Add live readback tests for every controlled field.",
+    "requiredEvidence": "Route and identity integration test with secret review",
+    "evidence": []
+  },
+  {
+    "id": "F1",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["A4"],
+    "acceptance": "Complete the current evidence and held-out benchmark sets described in `docs/live-validation-runbook.md`.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "F2",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["F1"],
+    "acceptance": "Collect all seven real screen labels: loading, connecting, lucky promotion, lucky shot, lobby, table selection, and shop.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "F3",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["F2"],
+    "acceptance": "Label table-selection samples with the actual supported table target. Cover every table at several scroll positions.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "F4",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["F1"],
+    "acceptance": "Add hard negative outcomes—cropped text, menus, overlays, browser chrome, degraded frames, unrelated pages—as expected `unrecognized` results, never as fake screens.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "F5",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["F1"],
+    "acceptance": "Add action annotations in normalized game-surface coordinates for every control needed by supported navigation. Each annotation includes control name, bounds, visible state, disabled state if applicable, screen label, table target, and reviewer.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "F6",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["F1"],
+    "acceptance": "Cover at least three window sizes, two display scales where hardware permits, multiple launches, early/settled transitions, multiple background themes, and occlusion/failure examples.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "F7",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["F1"],
+    "acceptance": "Keep evidence and benchmark samples separate. Any benchmark sample used to tune a rule returns to evidence and is replaced with a later held-out sample.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "F8",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["F1"],
+    "acceptance": "Add corpus version, recognizer version, capture geometry, duplicate detection, reviewer history, and exportable aggregate report.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "F9",
+    "status": "open",
+    "owner": "Recognition data owner",
+    "dependsOn": ["F1"],
+    "acceptance": "Define retention and deletion for images and ensure captures containing private data are rejected or immediately removable.",
+    "requiredEvidence": "Reviewed local capture corpus and aggregate validation",
+    "evidence": []
+  },
+  {
+    "id": "G1",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["F4"],
+    "acceptance": "Validate surface ranking against real multi-canvas/iframe layouts and no-surface failures.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "G2",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["G1"],
+    "acceptance": "Move from concatenated OCR to the existing spatial grid only when benchmark results demonstrate improvement.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "G3",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["F5"],
+    "acceptance": "Add control/anchor detection for navigation using a tested combination of OCR, layout geometry, color/shape features, and template matching as justified by data.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "G4",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["G1"],
+    "acceptance": "Produce a typed observation: screen, visible tables, controls, readings, confidence, contradictions, capture identity, timings, and rule version.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "G5",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["G1"],
+    "acceptance": "Calibrate thresholds per observation type. Table visibility and clickable-control readiness require stronger evidence than a passive UI label.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "G6",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["G1"],
+    "acceptance": "Complete balance/rank/trophy and match-result regions with current/uncertain/stale handling, normalized number parsing, and explicit approximate-value behavior.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "G7",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["G1"],
+    "acceptance": "Add transition smoothing: require stable repeated evidence where appropriate while retaining fast response for safety stops.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "G8",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["G1"],
+    "acceptance": "Detect contradictory evidence and return `unrecognized`/`unsafe`, never pick the highest weak guess.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "G9",
+    "status": "open",
+    "owner": "Recognition engineering",
+    "dependsOn": ["G1"],
+    "acceptance": "Version recognizer rules and record before/after benchmark reports for every change.",
+    "requiredEvidence": "Held-out benchmark report and typed-observation tests",
+    "evidence": []
+  },
+  {
+    "id": "H1",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["G5"],
+    "acceptance": "Preserve the dry-run adapter and add a production input-adapter interface; feature flag remains off until all H gates pass.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "H2",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["H1"],
+    "acceptance": "Define one action catalog: close supported detour, return/back, open play, choose 1-on-1, move table list, select target table, enter table, leave/cancel supported flow, and other explicitly approved navigation actions.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "H3",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["G3"],
+    "acceptance": "Resolve control bounds from the current observation in normalized game-surface coordinates and transform them through the existing CSS/DIP/image coordinate model.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "H4",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["H1"],
+    "acceptance": "For every action, enforce: fresh observation → expected screen → required control confidence → bounds inside surface → window/session generation match → input → postcondition wait.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "H5",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["H1"],
+    "acceptance": "Add idempotency and duplicate suppression so a delayed postcondition cannot cause a second destructive click.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "H6",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["H1"],
+    "acceptance": "Add per-action deadline, retry policy, backoff, attempt count, screenshot hash, and safe failure result.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "H7",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["H1"],
+    "acceptance": "Pause immediately on focus loss, window movement during dispatch, manual pointer/keyboard activity, security challenge, or emergency stop.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "H8",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["H1"],
+    "acceptance": "Create a deterministic fake input adapter and a fixture window for integration tests; never use the live game in CI.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "H9",
+    "status": "open",
+    "owner": "Input safety engineering",
+    "dependsOn": ["H1"],
+    "acceptance": "Add visible “automation active” indication and an always-available global stop hotkey whose handler does not depend on renderer responsiveness.",
+    "requiredEvidence": "Safety-gate test, fixture input test, and live approval record",
+    "evidence": []
+  },
+  {
+    "id": "I1",
+    "status": "open",
+    "owner": "Navigation engineering",
+    "dependsOn": ["H1"],
+    "acceptance": "Extend the current dry-run FSM into the complete navigation graph: inspect current state, leave supported detours, reach lobby, open table selection, locate table, open table, reach ready/matchmaking, complete or fail.",
+    "requiredEvidence": "Table and starting-state validation record",
+    "evidence": []
+  },
+  {
+    "id": "I2",
+    "status": "open",
+    "owner": "Navigation engineering",
+    "dependsOn": ["I1"],
+    "acceptance": "Model table list direction, visible range, wrap/no-wrap behavior, repeated-frame detection, maximum search steps, and “table unavailable” outcome.",
+    "requiredEvidence": "Table and starting-state validation record",
+    "evidence": []
+  },
+  {
+    "id": "I3",
+    "status": "open",
+    "owner": "Navigation engineering",
+    "dependsOn": ["I1"],
+    "acceptance": "Keep target table as data from the shared table catalog, not as separate screen labels.",
+    "requiredEvidence": "Table and starting-state validation record",
+    "evidence": []
+  },
+  {
+    "id": "I4",
+    "status": "open",
+    "owner": "Navigation engineering",
+    "dependsOn": ["I1"],
+    "acceptance": "Add manual, assisted, and live modes behind the same state contract.",
+    "requiredEvidence": "Table and starting-state validation record",
+    "evidence": []
+  },
+  {
+    "id": "I5",
+    "status": "open",
+    "owner": "Navigation engineering",
+    "dependsOn": ["I1"],
+    "acceptance": "Persist only redacted bounded navigation events; a restarted app must not resume input from a stale plan.",
+    "requiredEvidence": "Table and starting-state validation record",
+    "evidence": []
+  },
+  {
+    "id": "I6",
+    "status": "open",
+    "owner": "Navigation engineering",
+    "dependsOn": ["I1"],
+    "acceptance": "Add cancel, retry-from-safe-state, return-to-lobby, and manual takeover paths for every nonterminal state.",
+    "requiredEvidence": "Table and starting-state validation record",
+    "evidence": []
+  },
+  {
+    "id": "I7",
+    "status": "open",
+    "owner": "Navigation engineering",
+    "dependsOn": ["I1"],
+    "acceptance": "Validate each supported table and each supported starting screen with live evidence.",
+    "requiredEvidence": "Table and starting-state validation record",
+    "evidence": []
+  },
+  {
+    "id": "J1",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["I7"],
+    "acceptance": "Add a pure coordination-run FSM with states: draft, preflight, preparing, waiting-ready, armed, releasing, matching, verifying-pairing, active-match, reconciling, between-matches, paused, completed, cancelled, and failed.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J2",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J1"],
+    "acceptance": "Create a run plan containing participant IDs/roles, target table, match limit, route policy, timing policy, retry limits, and stop conditions.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J3",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J1"],
+    "acceptance": "Preflight every participant: open/healthy session, manual challenges cleared, correct target, route policy satisfied, recent high-confidence observation, input enabled, and no conflicting run.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J4",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J1"],
+    "acceptance": "Navigate participants independently to a common readiness barrier. A failure removes readiness and blocks release.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J5",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J1"],
+    "acceptance": "Implement monotonic-clock barrier release and record requested versus actual dispatch skew per session.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J6",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J5"],
+    "acceptance": "Verify pairing from approved visible evidence. Do not infer successful pairing solely from simultaneous connecting screens.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J7",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J1"],
+    "acceptance": "If pairing is not confirmed, cancel or recover according to an explicit bounded policy and require manual intervention after the limit.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J8",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J1"],
+    "acceptance": "Support pause after a safe boundary, immediate emergency cancel, participant dropout, replacement policy if supported, and clean return to independent session control.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J9",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J1"],
+    "acceptance": "Ensure only one coordinator owns a session and one active run owns a participant.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "J10",
+    "status": "open",
+    "owner": "Coordination engineering",
+    "dependsOn": ["J1"],
+    "acceptance": "Add a run dashboard with readiness, current stage, attempt, skew, observation age, stop reason, and per-session next action.",
+    "requiredEvidence": "Coordination fixture and live pairing proof",
+    "evidence": []
+  },
+  {
+    "id": "K1",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["J6"],
+    "acceptance": "Define the supported match lifecycle and collect/label the additional real frames required to observe it. Do not invent labels before evidence exists.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "K2",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["K1"],
+    "acceptance": "Detect match start, participant identity/pairing evidence, in-match state, result, return flow, and interrupted/abandoned outcome.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "K3",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["K1"],
+    "acceptance": "Snapshot approved visible balances before and after with confidence and observation age.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "K4",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["K1"],
+    "acceptance": "Create an append-only match ledger with run ID, participants, timestamps, outcome evidence, balance evidence, and reconciliation verdict.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "K5",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["K3"],
+    "acceptance": "Calculate expected versus observed changes using a pure accounting module with integer-safe units and table/rule metadata.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "K6",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["K1"],
+    "acceptance": "Mark each record confirmed, uncertain, contradicted, or incomplete. Never silently rewrite an earlier observation; corrections are linked records.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "K7",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["K1"],
+    "acceptance": "Enforce configured match/run limits, loss/balance floors, maximum consecutive failures, maximum duration, and manual stop.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "K8",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["K1"],
+    "acceptance": "Present summaries by run and account: matches attempted/confirmed, outcomes, observed balance changes, uncertainty, retries, and stop reason.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "K9",
+    "status": "open",
+    "owner": "Accounting engineering",
+    "dependsOn": ["K1"],
+    "acceptance": "Export a redacted user-owned report without profile data, credentials, arbitrary browser text, or capture images unless separately selected.",
+    "requiredEvidence": "Ledger and reconciliation test with reviewed match evidence",
+    "evidence": []
+  },
+  {
+    "id": "L1",
+    "status": "open",
+    "owner": "Reliability engineering",
+    "dependsOn": ["D2"],
+    "acceptance": "Introduce stable event codes, correlation IDs for session/navigation/run/match, severity, monotonic time, and redacted structured context.",
+    "requiredEvidence": "Fault-injection result and redacted diagnostics",
+    "evidence": []
+  },
+  {
+    "id": "L2",
+    "status": "open",
+    "owner": "Reliability engineering",
+    "dependsOn": ["L1"],
+    "acceptance": "Add rotating durable JSON logs with size/count limits, crash-safe append strategy, and user-controlled erasure.",
+    "requiredEvidence": "Fault-injection result and redacted diagnostics",
+    "evidence": []
+  },
+  {
+    "id": "L3",
+    "status": "open",
+    "owner": "Reliability engineering",
+    "dependsOn": ["L1"],
+    "acceptance": "Add main, renderer, child-process, GPU, unhandled rejection, and fatal startup crash records with build identity and recent safe events.",
+    "requiredEvidence": "Fault-injection result and redacted diagnostics",
+    "evidence": []
+  },
+  {
+    "id": "L4",
+    "status": "open",
+    "owner": "Reliability engineering",
+    "dependsOn": ["L1"],
+    "acceptance": "Record frame timings: capture, preprocessing, OCR, classification, queue wait, action-to-postcondition, coordination skew, and UI render.",
+    "requiredEvidence": "Fault-injection result and redacted diagnostics",
+    "evidence": []
+  },
+  {
+    "id": "L5",
+    "status": "open",
+    "owner": "Reliability engineering",
+    "dependsOn": ["L1"],
+    "acceptance": "Finish the diagnostics bundle with manifest, hashes, capability report, configuration-with-secrets-removed, recent events, crash files, and explicit preview before export.",
+    "requiredEvidence": "Fault-injection result and redacted diagnostics",
+    "evidence": []
+  },
+  {
+    "id": "L6",
+    "status": "open",
+    "owner": "Reliability engineering",
+    "dependsOn": ["L1"],
+    "acceptance": "Build a fault-injection harness for disk full, permission denied, corrupt files, OCR timeout, worker crash, browser crash, GPU crash, route loss, delayed IPC, stale observation, invalid transition, clock jump, and partial update.",
+    "requiredEvidence": "Fault-injection result and redacted diagnostics",
+    "evidence": []
+  },
+  {
+    "id": "L7",
+    "status": "open",
+    "owner": "Reliability engineering",
+    "dependsOn": ["L1"],
+    "acceptance": "Define operator-facing error taxonomy and next action for every terminal failure code.",
+    "requiredEvidence": "Fault-injection result and redacted diagnostics",
+    "evidence": []
+  },
+  {
+    "id": "L8",
+    "status": "open",
+    "owner": "Reliability engineering",
+    "dependsOn": ["L1"],
+    "acceptance": "Add support-bundle compatibility tests and secret/privacy scans that refuse export on a match.",
+    "requiredEvidence": "Fault-injection result and redacted diagnostics",
+    "evidence": []
+  },
+  {
+    "id": "M1",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["A2"],
+    "acceptance": "Define design tokens for color, typography, spacing, radius, elevation, motion, focus, status, and charts.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M2",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Build reusable components for buttons, fields, selects, badges, cards, dialogs, tables, tabs, toasts, empty states, progress, timelines, and destructive confirmations.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M3",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Complete the information architecture: Sessions, Run, Activity, Accounts, Capture Lab, Settings, and Help/About.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M4",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Add a focused per-session detail view instead of forcing every advanced control into an account card.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M5",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Add first-run setup and contextual guidance: create roles, open/sign in, capture/validate, configure route if needed, run dry mode, then enable validated live mode.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M6",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Add command palette and documented hotkeys for focus/open/close/inspect/start/pause/cancel/emergency stop, with conflict handling.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M7",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Complete keyboard navigation, logical focus order, visible focus, screen-reader names/states, error association, reduced motion, zoom/reflow, contrast, and non-color status cues.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M8",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Externalize all user-facing strings and establish locale fallback, pluralization, date/number formatting, and layout-resilience tests. Declare which game locale recognition supports separately.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M9",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Ensure zero-state, loading, stale, uncertain, unavailable, disconnected, permission, and recovery states are deliberately designed.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M10",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["M1"],
+    "acceptance": "Show application version, build/channel, update state, storage location, privacy controls, and support-bundle action in About.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "M11",
+    "status": "open",
+    "owner": "UX and accessibility",
+    "dependsOn": ["A2"],
+    "acceptance": "Conduct usability tests on first-run, account recovery, dry-run navigation, live-run stop, update, and restore.",
+    "requiredEvidence": "Accessible UI test and usability evidence",
+    "evidence": []
+  },
+  {
+    "id": "N1",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["A5"],
+    "acceptance": "Update the threat model for live input, coordination, updater, installer, backup encryption, logs, crash files, and exported reports.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "N2",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["N1"],
+    "acceptance": "Minimize and version IPC; validate sender, account/session ownership, arguments, size, rate, and state preconditions at every handler.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "N3",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["N1"],
+    "acceptance": "Retain Electron hardening: context isolation, sandboxing where supported, no Node integration in game windows, navigation allowlists, popup control, blocked downloads, and permission denial by default.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "N4",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["N1"],
+    "acceptance": "Add automated secret scanning, dependency vulnerability review, license policy, SBOM generation, and release provenance.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "N5",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["N1"],
+    "acceptance": "Define local data inventory and retention. Provide erase controls for activity, captures, logs, backups, and profiles independently.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "N6",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["N1"],
+    "acceptance": "Protect update metadata with signatures and anti-rollback/minimum-version rules where necessary, while preserving a safe documented rollback path.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "N7",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["N1"],
+    "acceptance": "Review route credentials, support bundles, clipboard actions, renderer HTML escaping, local file permissions, and Windows temporary-file behavior.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "N8",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["N1"],
+    "acceptance": "Complete a compliance review of coordinated game input before enabling it by default. Record supported use, restrictions, and manual-only fallback.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "N9",
+    "status": "open",
+    "owner": "Security owner",
+    "dependsOn": ["N1"],
+    "acceptance": "Commission or perform an independent security review before 1.0 and triage all findings.",
+    "requiredEvidence": "Threat/security review and negative test",
+    "evidence": []
+  },
+  {
+    "id": "O1",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["N4"],
+    "acceptance": "Expand the existing Windows CI on pull request and main: retain clean install, formatting, lint, type check, unit tests, and SBOM checks; add explicit corpus validation, package, package inspection, and packaged self-test stages.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O2",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Add artifact retention for test reports, benchmark aggregates, SBOM, hashes, and package logs.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O3",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Choose and implement installer format, install scope, shortcuts, protocol/association policy if any, repair behavior, and clean uninstall semantics.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O4",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Acquire protected Windows code-signing capability; sign executables, installer, uninstaller, and update artifacts; verify signatures in CI/release ceremony.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O5",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Add stable/beta update channels, signed manifest, staged download, hash/signature verification, explicit user control, release notes, and failure reporting.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O6",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Implement update transaction: preflight disk/schema compatibility → close sessions safely → backup workspace metadata → install → first-start health check → commit or rollback.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O7",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Test upgrade and rollback from every supported previous version, including no-network, corrupt download, power/process interruption, insufficient space, and schema incompatibility.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O8",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Produce reproducible-build evidence. Prefer byte-for-byte artifacts; where upstream packaging embeds unavoidable metadata, document and independently verify normalized contents and dependency provenance.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O9",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Publish version, SHA-256, signature identity, SBOM, release notes, known limitations, and minimum requirements together.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "O10",
+    "status": "open",
+    "owner": "Release engineering",
+    "dependsOn": ["O1"],
+    "acceptance": "Rehearse signing-key loss/rotation, bad-update withdrawal, and emergency release procedures.",
+    "requiredEvidence": "Hosted CI, signed artifacts, hashes, clean-VM result",
+    "evidence": []
+  },
+  {
+    "id": "P1",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["O1"],
+    "acceptance": "Define a reference machine and a low-end supported machine, including Windows build, CPU, RAM, GPU/driver, display scale, and network conditions.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "P2",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["P1"],
+    "acceptance": "Establish measured budgets for cold start, dashboard responsiveness, session open, capture, OCR, observation freshness, input postcondition, coordination skew, memory, CPU, disk growth, and shutdown.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "P3",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["P1"],
+    "acceptance": "Add repeatable performance scripts and reports; fail CI or release review on unexplained regression beyond the agreed tolerance.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "P4",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["P1"],
+    "acceptance": "Run 1-, 4-, 8-, and 16-session stretch tests for launch, arrangement, periodic reading, navigation readiness, route checks, and clean shutdown.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "P5",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["P1"],
+    "acceptance": "Run a 72-hour soak with representative session churn, capture cadence, route interruption, sleep/wake, monitor change, and log rotation.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "P6",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["P1"],
+    "acceptance": "Test GPU/compositor configurations, 100/125/150/175/200% scaling, supported resolutions, single/multi-monitor, and remote/virtualized environments if supported.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "P7",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["P1"],
+    "acceptance": "Test offline startup, slow network, high latency, packet loss, DNS failure, proxy loss, suspend/resume, clock change, low disk, antivirus scanning, and OneDrive-managed workspace surroundings.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "P8",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["P1"],
+    "acceptance": "Measure storage growth and prove configured bounds for logs, history, captures, backups, quarantines, and update caches.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "P9",
+    "status": "open",
+    "owner": "Performance QA",
+    "dependsOn": ["P1"],
+    "acceptance": "Publish supported maximum active sessions based on evidence, not aspiration. When the limit is reached, refuse gracefully with an explanation.",
+    "requiredEvidence": "Measured reference-machine report and thresholds",
+    "evidence": []
+  },
+  {
+    "id": "Q1",
+    "status": "open",
+    "owner": "Support owner",
+    "dependsOn": ["O9"],
+    "acceptance": "Write user guide, first-run guide, backup/restore guide, troubleshooting decision tree, privacy guide, and update/rollback guide.",
+    "requiredEvidence": "Published support documentation and review log",
+    "evidence": []
+  },
+  {
+    "id": "Q2",
+    "status": "open",
+    "owner": "Support owner",
+    "dependsOn": ["Q1"],
+    "acceptance": "Define severity levels, response targets, supported-version window, data requested for support, and escalation paths.",
+    "requiredEvidence": "Published support documentation and review log",
+    "evidence": []
+  },
+  {
+    "id": "Q3",
+    "status": "open",
+    "owner": "Support owner",
+    "dependsOn": ["Q1"],
+    "acceptance": "Add a known-issues document tied to build versions and workarounds.",
+    "requiredEvidence": "Published support documentation and review log",
+    "evidence": []
+  },
+  {
+    "id": "Q4",
+    "status": "open",
+    "owner": "Support owner",
+    "dependsOn": ["Q1"],
+    "acceptance": "Define compatibility monitoring for Electron, Windows, OCR dependencies, and live-game layout changes.",
+    "requiredEvidence": "Published support documentation and review log",
+    "evidence": []
+  },
+  {
+    "id": "Q5",
+    "status": "open",
+    "owner": "Support owner",
+    "dependsOn": ["Q1"],
+    "acceptance": "Add a safe recognizer/corpus update procedure that requires benchmark and release gates; never load remote rules at runtime.",
+    "requiredEvidence": "Published support documentation and review log",
+    "evidence": []
+  },
+  {
+    "id": "Q6",
+    "status": "open",
+    "owner": "Support owner",
+    "dependsOn": ["Q1"],
+    "acceptance": "Schedule dependency, threat-model, backup-restore, signing, and disaster-recovery reviews.",
+    "requiredEvidence": "Published support documentation and review log",
+    "evidence": []
+  },
+  {
+    "id": "Q7",
+    "status": "open",
+    "owner": "Support owner",
+    "dependsOn": ["Q1"],
+    "acceptance": "Define rollback/kill-switch behavior for automation locally through signed releases or user-controlled settings—not remote executable code.",
+    "requiredEvidence": "Published support documentation and review log",
+    "evidence": []
+  }
+]

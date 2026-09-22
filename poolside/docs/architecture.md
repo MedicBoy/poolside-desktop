@@ -28,7 +28,7 @@ and a pooled OCR worker.
 │  profile-repair.cjs quarantine a damaged file (never deletes)               │
 │  profile-removal.cjs delete a profile: files, directory, record             │
 │  profile-diagnostics.cjs measure a profile, compare with its ceiling        │
-│  profile-sweep.cjs  remove profile storage no account claims                │
+│  profile-sweep.cjs  report unclaimed storage; delete only on explicit use   │
 │  config-schema.cjs  what config exists: fields, sections, defaults (pure)   │
 │  config-walk.cjs    walk a declaration, collect every problem (pure)        │
 │  config-validator.cjs the boundary: settings, account, whole profile (pure) │
@@ -76,11 +76,180 @@ and a pooled OCR worker.
 └──────────────────────┘                  └──────────────────────────┘
 ```
 
+The box above is the shape of the thing; it is not the inventory. The inventory below is generated from
+`src/*.cjs` itself, so a module that exists is a module that is listed, and a module nobody can describe in a
+sentence is reported rather than passing quietly.
+
+<!-- modules:begin -->
+
+_Generated from the source by `scripts/architecture-modules.cjs`. 152 modules, each with the
+first line of its own header comment. `npm run docs:check` fails if a module is missing, or if it has no
+description to carry._
+
+| Module                         | What it is                                                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `main.cjs`                     | Poolside composition root.                                                                                           |
+| `ipc.cjs`                      | The IPC contract.                                                                                                    |
+| `preload.cjs`                  | The dashboard's bridge: one named method per channel, no generic invoke, nothing else exposed.                       |
+| `account-management-ipc.cjs`   | Account-directory mutations live outside the general IPC wiring so the three account lifecycle                       |
+| `account-overview.cjs`         | A dashboard-safe account summary.                                                                                    |
+| `activity-journal.cjs`         | A small, private, redacted activity journal.                                                                         |
+| `attention.cjs`                | Everything that needs the operator's attention, gathered in one place.                                               |
+| `backup-ipc.cjs`               | Backup IPC handlers. The filesystem work remains in workspace-backup.cjs.                                            |
+| `backup-manifest.cjs`          | The document that describes a Poolside backup, and the decision about what a restore may touch.                      |
+| `bulk-plan.cjs`                | What a bulk account action would do, decided before anything is touched.                                             |
+| `capability-registry.cjs`      | Public product claims. Keep modes conservative: tests establish implementation,                                      |
+| `capture-evaluation.cjs`       | A local evidence summary for Capture Lab. This is deliberately descriptive rather than an accuracy claim:            |
+| `capture-lab-ipc.cjs`          | The dashboard contract for the Capture Lab: reference frames, samples and evaluation.                                |
+| `capture-lab.cjs`              | The Capture Lab: a private library of game screens, what the recogniser said about each, and the operator's verdict. |
+| `capture-manifest.cjs`         | What one capture pass recorded: geometry, outcome, timings, and the bounded per-stage breakdown.                     |
+| `capture-validation.cjs`       | The corpus gate: cohort counts, per-label precision and recall, and the release conditions over a frozen set.        |
+| `config-schema.cjs`            | The configuration surface, declared once.                                                                            |
+| `config-validator.cjs`         | The configuration boundary: which declarations a session is made of, and what its problems mean.                     |
+| `config-walk.cjs`              | Walking a declared configuration specification, generically.                                                         |
+| `dashboard-telemetry.cjs`      | The dashboard's metrics, collated into layers.                                                                       |
+| `diagnostics-bundle.cjs`       | Local, share-safe diagnostics export.                                                                                |
+| `diagnostics-state.cjs`        | What the machine was doing when a support bundle was written.                                                        |
+| `display-geometry.cjs`         | How a rectangle relates to a monitor layout: how much of it is visible, whether a user can reach it,                 |
+| `errors.cjs`                   | Error helpers.                                                                                                       |
+| `footprint.cjs`                | Apply a session's configured footprint — identity (identity.cjs) and route (proxy.cjs) — and report                  |
+| `game-region.cjs`              | Locates the game surface inside the page.                                                                            |
+| `game-screen.cjs`              | Reading a game screen: two OCR passes, the contrast band, the local table matcher, and the verdict they support.     |
+| `geometry.cjs`                 | Remembered window geometry: restore, clamp, and per-monitor bounds.                                                  |
+| `guidance.cjs`                 | What to do next, for a workspace that has not been set up yet.                                                       |
+| `hardening.cjs`                | Session and navigation policy.                                                                                       |
+| `identity-fields.cjs`          | The identity field grammar: which values are usable, and what a usable value looks like.                             |
+| `identity-ipc.cjs`             | The dashboard's way to ask each open session what it reports about itself.                                           |
+| `identity-readback.cjs`        | What each open session reports about itself, side by side.                                                           |
+| `identity.cjs`                 | Per-session identity configuration.                                                                                  |
+| `inspection.cjs`               | Screen inspection: locate the game surface, capture it, classify it, and report a state.                             |
+| `layout.cjs`                   | Pure layout arithmetic for game windows.                                                                             |
+| `match-barrier.cjs`            | The readiness barrier: when a match may be released, and when release must be withdrawn.                             |
+| `match-coordination.cjs`       | Local match coordination: pair two of your own accounts into a match, record the result, and keep a                  |
+| `match-dropout.cjs`            | Dropout: a participant whose session is gone.                                                                        |
+| `match-ipc.cjs`                | Dashboard surface for local match coordination. Validation lives in the engine so the message the                    |
+| `match-journal.cjs`            | The local match ledger on disk.                                                                                      |
+| `match-ledger.cjs`             | The ledger of record: the one place the match and run ledger is read, written, published and projected.              |
+| `match-lifecycle.cjs`          | What settling a match does: record it, then let the run's plan judge it — in one write.                              |
+| `match-outcome.cjs`            | The balances around a match, kept for the one write that records what happened.                                      |
+| `match-pairing.cjs`            | The pairing checker: the wiring between the evidence rules and the running application.                              |
+| `match-participants.cjs`       | Bringing a match's participants up, and reading the address they leave through.                                      |
+| `match-preflight.cjs`          | What has to be true about one participant before a match may be released.                                            |
+| `match-record.cjs`             | The shape of a match ledger record, and the only place that decides whether a stored one is trusted.                 |
+| `match-release.cjs`            | The count-in, and the measurement that comes out of it.                                                              |
+| `match-runs.cjs`               | The run keeper: the wiring between the run rules and the running application.                                        |
+| `match-service.cjs`            | Runtime bridge between the workspace accounts and the pure match-coordination engine.                                |
+| `match-start.cjs`              | Starting a match, and asking for release again.                                                                      |
+| `match-view.cjs`               | The dashboard-safe projection of the match ledger.                                                                   |
+| `model-storage.cjs`            | Disposable profile bookkeeping and remembered window geometry in a workspace document.                               |
+| `model.cjs`                    | The workspace document: what an account and a setting may contain, and the round trip that keeps them.               |
+| `native-dialogs.cjs`           | Native confirmation and folder-selection dialogs kept outside the composition root.                                  |
+| `network-ipc.cjs`              | The dashboard's Check IP action: read an address through one session, and never through the machine's own route.     |
+| `network.cjs`                  | The rules of reading a session's public address, and why the transport is not part of them.                          |
+| `observation-services.cjs`     | Wiring for the two observation services the composition root needs: the inspector and the screen monitor.            |
+| `outcome-evidence.cjs`         | What a match did to the balances, recorded from the sessions' own readings.                                          |
+| `output-inventory.cjs`         | What Poolside itself has written, and the one erasure control that may touch it.                                     |
+| `outputs-ipc.cjs`              | The dashboard surface for the files Poolside wrote itself: see them, and erase them deliberately.                    |
+| `pairing-evidence.cjs`         | Pairing evidence: what the two sessions actually showed, and whether that is enough to say they met.                 |
+| `participant-contrast.cjs`     | What the two accounts of a match are configured to look like, said next to the pairing verdict.                      |
+| `plist.cjs`                    | Minimal property-list writer and reader for Poolside's saved-session files.                                          |
+| `profile-diagnostics.cjs`      | Measuring a profile: how much disk it occupies, and how that compares with its configured ceiling.                   |
+| `profile-integrity.cjs`        | Integrity checking for an account's carry-over file.                                                                 |
+| `profile-manager.cjs`          | Profile lifecycle for one account: establish its storage, track a generation, check its integrity,                   |
+| `profile-paths.cjs`            | Where an account's profile lives, and the guards that make deleting one safe.                                        |
+| `profile-removal.cjs`          | Deleting one account's storage. The only destructive operation in the application.                                   |
+| `profile-repair.cjs`           | Repair for a damaged carry-over file.                                                                                |
+| `profile-scan.cjs`             | Sequence startup profile maintenance. Startup is deliberately non-destructive: an account record can                 |
+| `profile-sweep.cjs`            | Sweeping the storage directories: what is on disk that no account claims.                                            |
+| `profiles.cjs`                 | Saved browser profiles: restore an account's session on open and keep it saved afterwards.                           |
+| `proxy-auth.cjs`               | Supply credentials only to the proxy endpoint configured for this one browser window.                                |
+| `proxy-public.cjs`             | Renderer-safe proxy labels. Credentials stay in main-process configuration only.                                     |
+| `proxy-spec.cjs`               | Parse one proxy route without exposing credentials to Chromium's proxyRules grammar.                                 |
+| `proxy.cjs`                    | Per-session proxy routes: storage shape, validation, and honest reporting.                                           |
+| `reading-regions.cjs`          | Which recognised numbers are account balances, and what each one is worth.                                           |
+| `reading-status.cjs`           | Whether a locally recognised account reading can be trusted as a current figure, and why not.                        |
+| `record-text.cjs`              | The two helpers every stored record shares: how a piece of text is made safe to store, and how a moment is           |
+| `recovery-ipc.cjs`             | The dashboard's way back: what recovery copies exist, and restoring one deliberately.                                |
+| `recovery-policy.cjs`          | Recovery policy: how long to wait, how many times to try, and how to describe a failure.                             |
+| `recovery-settings.cjs`        | Per-account reliability preferences. They affect only Poolside's browser window behaviour.                           |
+| `recovery.cjs`                 | Per-window recovery supervision: shop detection with automatic return, and post-load repaints.                       |
+| `release-countdown.cjs`        | The count-in for queueing a pair by hand, and the measurement of what two hands actually achieve.                    |
+| `route-health.cjs`             | What a session actually did, recorded against the saved location it was told to use.                                 |
+| `route-preset-ipc.cjs`         | The dashboard contract for saved network locations: save, edit, tick on and off, try, and delete when unused.        |
+| `route-presets.cjs`            | Saved network locations: their grammar, their stored health, and the sentences the Settings list shows.              |
+| `route-probe-format.cjs`       | Turning a probe's raw answer into something worth reading.                                                           |
+| `route-probe.cjs`              | Trying an address before saving it.                                                                                  |
+| `run-coordination.cjs`         | Runs: a plan, the matches played under it, and the reasons it stops.                                                 |
+| `run-plan.cjs`                 | A run plan: how many matches this run is for, and what makes it stop.                                                |
+| `run-record.cjs`               | The shape of a run record, and the only place that decides whether a stored one is trusted.                          |
+| `run-report.cjs`               | A record of a run, written where the operator can find it and send it on.                                            |
+| `run-status.cjs`               | Where a run is, and what the operator should do about it.                                                            |
+| `run-view.cjs`                 | The dashboard-safe projection of a run.                                                                              |
+| `saved-session.cjs`            | On-disk persistence for one account's carry-over session cookies.                                                    |
+| `screen-attention.cjs`         | Recognise a prolonged local loading/connecting observation. This reports a condition; it never acts on the game.     |
+| `screen-history.cjs`           | Compact, in-memory screen-state history for one open session. A record is added only when the                        |
+| `screen-monitor.cjs`           | Local screen observation scheduler. Production sessions start it automatically and the UI can stop                   |
+| `screen-reader-pool.cjs`       | A small pool of screen readers.                                                                                      |
+| `self-test-context.cjs`        | What the self-test suite is allowed to inspect.                                                                      |
+| `self-test-dropout.cjs`        | The dropout scenario of the self-test: a match with no session behind it.                                            |
+| `self-test-fixtures.cjs`       | The fixture-session scenarios of the packaged self-test: navigation back to the game, automatic                      |
+| `self-test-footprint.cjs`      | Footprint assertions for the packaged self-test: what a session _claims_ to be, read back out of a                   |
+| `self-test-matches.cjs`        | The match-coordination scenario of the self-test: pairing two real accounts, loading both profiles,                  |
+| `self-test-outputs.cjs`        | The self-test's view of the files Poolside wrote itself.                                                             |
+| `self-test-profiles.cjs`       | Profile management checks for --self-test.                                                                           |
+| `self-test-run-plan.cjs`       | The run-plan scenario of the self-test: a plan, its matches, and the program ending the run itself.                  |
+| `self-test-workspace.cjs`      | Where a self-test keeps its throwaway user-data directory, and which older ones are safe to remove.                  |
+| `self-test.cjs`                | The --self-test suite.                                                                                               |
+| `session-actions.cjs`          | Commands for an already-created account window.                                                                      |
+| `session-config.cjs`           | What a session is configured with, and applying it.                                                                  |
+| `session-cookies.cjs`          | Cookie policy: which cookies this application is willing to carry between runs, and the shape of                     |
+| `session-events.cjs`           | What a session window's own events do to the session.                                                                |
+| `session-fsm.cjs`              | The session state machine.                                                                                           |
+| `session-ip.cjs`               | Reading a session's public address through its own route — including a route that needs a password.                  |
+| `session-window.cjs`           | Creating and measuring a session window: its remembered geometry, the displays that exist now, and                   |
+| `settings-form-mapper.cjs`     | The settings form, derived from the declaration instead of written by hand.                                          |
+| `settings-form-values.cjs`     | The values a form carries: what comes back from the controls.                                                        |
+| `settings-ui-controller.cjs`   | The settings form's backend: one command in, one safe state out.                                                     |
+| `shop-recovery.cjs`            | The shop auto-return: recognise the shop, wait for the headings to settle, then navigate back once per opening.      |
+| `state.cjs`                    | Shared process-lifetime state.                                                                                       |
+| `supervision.cjs`              | Crash and stall supervision for one session window.                                                                  |
+| `table-list.cjs`               | The supported 8 Ball Pool 1-on-1 venue labels.                                                                       |
+| `table-navigation-input.cjs`   | Dry-run game-input adapter. It explains the next manual action and deliberately performs none.                       |
+| `table-navigation-journal.cjs` | Bounded, local-only journal for table-navigation plans. It stores no browser text or account names.                  |
+| `table-navigation-service.cjs` | Runtime bridge between screen inspection and the pure table-navigation state machine.                                |
+| `table-navigation-state.cjs`   | Pure table-navigation state machine. It describes what must happen without sending game input.                       |
+| `table-visual.cjs`             | A conservative, local visual assist for the selected 1-on-1 venue card.                                              |
+| `target-identity.cjs`          | The target half of a session footprint: the CDP overrides that make a _live page_ claim a configured                 |
+| `telemetry-redaction.cjs`      | What may leave the machine.                                                                                          |
+| `timeline-engine.cjs`          | The diagnostic timeline: one ordered history, compiled from the two rings that already record one.                   |
+| `timeline-query.cjs`           | Reading the compiled timeline: the questions a failure asks.                                                         |
+| `timeline-transfer.cjs`        | What may leave the machine.                                                                                          |
+| `types.cjs`                    | Shared JSDoc typedefs.                                                                                               |
+| `visible-readings.cjs`         | Extract display-only account readings from locally recognised text. Values require an explicit nearby                |
+| `vision-frame.cjs`             | Coordinate frames for a capture.                                                                                     |
+| `vision-grid.cjs`              | Parsing recognised text into a positioned grid.                                                                      |
+| `vision-pipeline.cjs`          | The capture pipeline, as one object.                                                                                 |
+| `webrtc-policy.cjs`            | Which WebRTC policy one session gets.                                                                                |
+| `window-arrange.cjs`           | Arranging the open session windows into a grid on the primary display's work area.                                   |
+| `window-title.cjs`             | One session window's title.                                                                                          |
+| `windows.cjs`                  | session: it drives the FSM (session-fsm.cjs) from real Electron events, hands recovery policy to                     |
+| `workspace-backup.cjs`         | Copying a workspace out to a backup folder, and copying one back in.                                                 |
+| `workspace-file.cjs`           | Durable workspace-document replacement. Only validated version-1 documents reach disk.                               |
+| `workspace-history.cjs`        | The workspace-facing adapter around the persistent activity journal.                                                 |
+| `workspace-recovery.cjs`       | The workspace's own recovery material, read as candidates rather than guessed at.                                    |
+| `workspace-snapshot.cjs`       | Build the dashboard-safe view of process and workspace state.                                                        |
+| `workspace-version.cjs`        | Which workspace documents this build will read, and what it says about the ones it will not.                         |
+| `workspace.cjs`                | The persisted workspace document, activity feed, and snapshot the dashboard renders.                                 |
+
+**Every module carries a description.**
+
+<!-- modules:end -->
+
 ### Dependency rules
 
 | Rule                                 | Enforced by                  |
 | ------------------------------------ | ---------------------------- |
-| No module over 200 lines             | `test/architecture.test.cjs` |
+| No module over 300 lines             | `test/architecture.test.cjs` |
 | No cycles in the local require graph | `test/architecture.test.cjs` |
 | No unreferenced modules              | `test/architecture.test.cjs` |
 | `main.cjs` is wiring only            | review + the size ceiling    |
@@ -144,6 +313,9 @@ Rules the machine enforces:
 - **An event that does not apply is refused, not applied.** `send()` returns `false` and logs
   (`'loaded' does not apply in state 'idle'`) rather than throwing or silently corrupting state. A
   second `openAccount` on a live window therefore cannot restart the machine.
+- Browser navigation can emit more than one `did-finish-load` while sign-in redirects settle. The
+  session-event adapter sends `loaded` only when the machine currently accepts it, making repeated
+  browser completion signals idempotent without weakening refusal logging for other invalid events.
 - **Every transition is recorded** with its timestamp, event and reason, capped at the last 50
   (`HISTORY_LIMIT`) — the input M4's timeline view will render, and what makes a support report
   diagnosable.
@@ -189,12 +361,12 @@ explains itself rather than just changing colour.
 
 `gameScreen.state` transitions:
 
-| From         | To                             | Trigger                                                       |
-| ------------ | ------------------------------ | ------------------------------------------------------------- |
-| any          | `null`                         | main-frame navigation begins (**bumps the generation**)       |
-| `null`       | `inspecting`                   | `inspectGame` starts                                          |
-| `inspecting` | recognised state, or `unknown` | classification completes **and** the generation still matches |
-| `inspecting` | `unknown`                      | inspection failed **and** the generation still matches        |
+| From         | To                                  | Trigger                                                       |
+| ------------ | ----------------------------------- | ------------------------------------------------------------- |
+| any          | `null`                              | main-frame navigation begins (**bumps the generation**)       |
+| `null`       | `inspecting`                        | `inspectGame` starts                                          |
+| `inspecting` | recognised state, or `unrecognized` | classification completes **and** the generation still matches |
+| `inspecting` | `inspection-failed`                 | inspection failed **and** the generation still matches        |
 
 The generation counter is what makes a stale result harmless: a result computed before a navigation
 is discarded rather than written over newer state.
@@ -212,8 +384,8 @@ because it bounds a single operation _inside_ a session rather than the session'
 
 M1's identity, geometry and route work landed in this milestone: per-session identity configuration
 (§2.4), remembered window geometry with per-monitor clamping (§2.5), and per-session proxy support as
-infrastructure (§2.4). What remains of M1 is the profile manager: create, delete, quota reporting,
-corruption detection and repair.
+infrastructure (§2.4). Profile creation, deletion, quota reporting and corruption detection now exist;
+full user-directed workspace recovery and portable restore remain Module B work.
 
 The supervisor's failure paths are unit-tested against a fake `webContents`, and the dashboard contract
 for session state is asserted in the packaged self-test. Driving them against a genuinely crashed
@@ -295,8 +467,12 @@ workspace cannot smuggle unrelated data into the config.
 second copy. It holds session cookies only, encrypted with `safeStorage` (DPAPI), and a restore never
 overwrites a cookie the profile already has.
 
-`workspace.json` is written atomically (temp file + rename, mode `0600`). A malformed document puts
-the app into read-only mode instead of overwriting data the user may still want.
+`workspace.json` is validated, written to a unique flushed sibling, then renamed into place
+(ADR-0018). A bounded `.previous` copy supports deliberate recovery; it is never auto-loaded as
+authoritative data and is purged when removed account or route values would otherwise linger.
+A malformed document, or a missing primary with recovery material present, puts the app into
+read-only mode rather than overwriting data the user may still want. The pending B3 work is an
+in-app recovery choice and clean-VM interruption proof.
 
 ## 4. IPC contract
 
@@ -325,13 +501,31 @@ inspection.cjs
      • score = 0.65 × shape distance from 16:9 + 0.35 × viewport coverage
   3. capturePage(rect scaled by zoom) ──▶ PNG
   4. screen-reader-pool.acquire() ──▶ warm Tesseract worker
-  5. game-screen.inspect(): OCR → Sharp luminance mask → second OCR → classify()
+  5. game-screen.inspect(): first OCR → classify(); a strong local visual venue match on an
+     already-recognized table-selection screen, or the reviewed Lucky Promotion/Lucky Shot/Shop
+     wording, can skip the second full-frame OCR. Other observations keep the luminance-mask
+     OCR pass → classify()
   6. release the worker; discard the result if the generation changed
 ```
 
-`classify()` returns `{state, score, evidence, alternatives}` and only ever returns a state label —
-never OCR text, balances or names. Gates are the original conditions, kept deliberately unchanged
-(ADR-0002), and a regression test embeds the previous implementation to prove it.
+`classify()` returns a state, score, matched phrases, alternatives, and supported visible table
+names — never raw OCR text or account details. Original gates remain regression-tested, while
+narrow additional gates recognize reviewed Lucky Promotion and Shop layout variants. Duplicate
+rules for one state produce one candidate, not conflicting alternatives.
+
+The optional visual venue assist in `table-visual.cjs` compares a small centered-card feature to
+reviewed or detector-confirmed local **Evidence** images. It verifies image hashes, requires several
+examples per venue, and refuses distant or ambiguous matches. It never learns from the held-out
+Benchmark cohort or makes a screen into table selection on its own. Existing capture records keep
+their original detector results; `npm run analyze:tables` is a development-only, aggregate
+leave-one-out check, not production accuracy evidence.
+`npm run replay:evidence` reprocesses reviewed Evidence through the current OCR pipeline and
+reports aggregate first-pass/full-pipeline recognition and fixed numeric stage timings without changing stored samples
+or reading Benchmark images. Its table-name count is in-sample only because those images can also
+be visual references; it never replaces the frozen held-out corpus gate.
+An inspection that exceeds its deadline reports failure; any later OCR result is discarded before
+capture recording or session publication, and a timed-out queue waiter is removed from the reader
+pool. Surface timing ends before waiting for a pooled reader.
 
 Failure produces prose, not `null`: `describeRegionFailure` names the reason and lists the surfaces
 it saw (ADR-0009).
@@ -351,22 +545,22 @@ it saw (ADR-0009).
 
 ## 7. Security posture
 
-| Control                                                                                   | Where               |
-| ----------------------------------------------------------------------------------------- | ------------------- |
-| Game windows: sandboxed, no preload, no Node, context isolated                            | `windows.cjs`       |
-| HTTPS-only navigation; popups inherit the account session and are re-hardened recursively | `hardening.cjs`     |
-| Downloads blocked; all permission requests and checks denied                              | `hardening.cjs`     |
-| Dashboard: CSP `default-src 'self'`, `connect-src 'none'`, no external requests           | `src/ui/index.html` |
-| IPC trust guard on every handler                                                          | `ipc.cjs`           |
-| Workspace written atomically, `0600`, read-only fallback on corruption                    | `workspace.cjs`     |
-| Session file id-validated (no traversal), `0600`, encrypted via DPAPI                     | `saved-session.cjs` |
-| Recognition returns a label, a score and matched phrases only                             | `game-screen.cjs`   |
-| No telemetry, no remote config, no updater                                                | ADR-0010            |
+| Control                                                                                       | Where                |
+| --------------------------------------------------------------------------------------------- | -------------------- |
+| Game windows: sandboxed, no preload, no Node, context isolated                                | `windows.cjs`        |
+| HTTPS-only navigation; popups inherit the account session and are re-hardened recursively     | `hardening.cjs`      |
+| Downloads blocked; all permission requests and checks denied                                  | `hardening.cjs`      |
+| Dashboard: CSP `default-src 'self'`, `connect-src 'none'`, no external requests               | `src/ui/index.html`  |
+| IPC trust guard on every handler                                                              | `ipc.cjs`            |
+| Workspace validated and staged with a flushed, bounded recovery copy; read-only on corruption | `workspace-file.cjs` |
+| Session file id-validated (no traversal), `0600`, encrypted via DPAPI                         | `saved-session.cjs`  |
+| Recognition returns a label, a score and matched phrases only                                 | `game-screen.cjs`    |
+| No telemetry, no remote config, no updater                                                    | ADR-0010             |
 
 ## 8. Observability
 
-Today: an in-memory activity feed (last 100 events) with `info`/`warning` kinds, surfaced in the
-dashboard, plus console output. It records actions, not credentials and not full URLs.
+Today: a bounded in-memory activity feed and a local redacted activity journal (up to 200 messages),
+surfaced in the dashboard, plus console output. They record actions, not credentials or full URLs.
 
 M4 compiles that feed together with the session FSM's transition history (last 50 per session) into one
 ordered **diagnostic timeline** (`timeline-engine.cjs`), reads it with `timeline-query.cjs`, and collates the
@@ -376,8 +570,8 @@ machine: `telemetry-redaction.cjs` produces it, rewriting every string, and `dia
 return a payload that fails its own scan (ADR-0016). Addresses, filesystem paths and token-shaped strings are
 matched by shape; account names by literal.
 
-Still to come in M4: durable JSON logs with rotation, frame-timing
-instrumentation, and validation of that bundle against scripted failure scenarios.
+Fixed OCR-stage timing measurements exist. Rotating durable structured logs, wider capture/action/render
+timings, crash files, and support-bundle fault-injection validation remain Modules L/P work.
 
 ## 9. Testing architecture
 
@@ -405,7 +599,7 @@ else creates, repairs or deletes it.
 | Repair    | `profile-repair.cjs`                       | renames a corrupt file to `<id>.plist.corrupt-<timestamp>`. Never deletes, never rebuilds, and re-checks the verdict first so it cannot move a healthy file |
 | Delete    | `profile-removal.cjs`                      | removes the carry-over file, its quarantined copies and the partition directory, then the persisted record                                                  |
 | Measure   | `profile-diagnostics.cjs`                  | walks the directory under a file cap (and reports `truncated`), then compares the total with the account's configured ceiling                               |
-| Sweep     | `profile-sweep.cjs`                        | removes `poolside-<uuid>` directories and `<uuid>.plist` files that no account claims; every other name is reported foreign and left alone                  |
+| Sweep     | `profile-sweep.cjs`                        | startup reports unclaimed `poolside-<uuid>` directories and `<uuid>.plist` files without deleting; an explicit applied sweep owns any later cleanup         |
 
 Two storage layers, with different authority (ADR-0004):
 
@@ -416,8 +610,8 @@ Two storage layers, with different authority (ADR-0004):
 
 **Startup order.** The integrity scan runs before the window is shown — one small file per account — and
 the measurement runs after it via `setImmediate`, because walking every profile directory is the slow half
-and the dashboard should not wait for it. The scan sweeps abandoned `.tmp` files, removes storage no
-account claims, checks each account and quarantines what is damaged, then logs one summary line.
+and the dashboard should not wait for it. The scan preserves interrupted `.tmp` files, reports storage no
+account claims without deleting it, checks each account and quarantines what is damaged, then logs one summary line.
 
 **Durable vs volatile.** The generation counter and the corruption history are persisted per account in the
 workspace document. `directoryBytes`, `fileCount`, `quotaBytes` and `overQuota` are re-derived on every
@@ -534,36 +728,27 @@ The rules that matter, all arithmetic rather than claims about a window:
 The grid is **built but not yet in the recognition path**: the geometry is wired, the classifier still reads the
 concatenation of its two OCR passes. Changing what it reads needs the labelled corpus (ADR-0002), so it waits.
 
-## 13. Known gaps
+## 13. Table navigation: plan first, input later
 
-Carried deliberately, with the milestone that closes each:
+`table-navigation-state.cjs` is a pure reducer for the sequence from lobby to table selection, target discovery,
+table opening, and matchmaking. `table-navigation-service.cjs` attaches one plan to an open session and advances
+it only from a fresh inspection or an explicit acknowledgement of a manual step. Every active stage has a
+two-minute deadline; cancellation and retry are real transitions rather than renderer-only flags.
 
-| Gap                                                                   | Milestone                                                                                              |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| No transition history or deadline enforcement on session state        | M1 (closed — `session-fsm.cjs`)                                                                        |
-| No crash/stall handlers or per-session health record                  | M1 (closed — `supervision.cjs`)                                                                        |
-| Identity configuration, per session                                   | M1 (closed — `identity.cjs`, ADR-0012)                                                                 |
-| Remembered geometry and per-monitor bounds                            | M1 (closed — `geometry.cjs`)                                                                           |
-| Per-session route as infrastructure, honestly reported                | M1 (closed — `proxy.cjs`)                                                                              |
-| No profile lifecycle (establish, check, delete)                       | M1 (closed — `profile-manager.cjs`)                                                                    |
-| No corruption detection on stored session data                        | M1 (closed — `profile-integrity.cjs`)                                                                  |
-| Config is hand-validated in `model.cjs`; venues are hardcoded         | M2 (closed — `config-schema.cjs`)                                                                      |
-| The roadmap sketch's five-section config is not built                 | M2 remainder                                                                                           |
-| Corpus is seven positive fixtures and no negatives                    | M3 (harness in: `test/fixtures/vision-corpus.json`)                                                    |
-| Region ranking unvalidated against the live site                      | M3 (needs a live pass)                                                                                 |
-| No labelled frame corpus, so accuracy is unmeasurable                 | M3 remainder                                                                                           |
-| No regression harness with enforced accuracy thresholds               | M3 remainder                                                                                           |
-| No ordered history across sessions; two rings with opposite orderings | M4 (closed — `timeline-engine.cjs`, ADR-0016)                                                          |
-| Metrics scattered across four subsystems, re-joined by the dashboard  | M4 (closed — `dashboard-telemetry.cjs`)                                                                |
-| No rule for what a diagnostics payload may contain                    | M4 (closed — `telemetry-redaction.cjs`: redaction + a refusing scan)                                   |
-| No durable logs, no frame timings, no crash file                      | M4 remainder                                                                                           |
-| The (future) bundle is validated against no scripted failure scenario | M4 remainder                                                                                           |
-| No settings UI bound to the configuration schema                      | M5 (closed — `settings-form-mapper.cjs`, ADR-0017)                                                     |
-| No per-session detail view; account overrides have no UI              | M5 remainder                                                                                           |
-| No design tokens, component kit, i18n or accessibility audit          | M5 remainder                                                                                           |
-| No command palette or hotkeys                                         | M5 remainder                                                                                           |
-| No fault-injection harness, no soak results                           | M6                                                                                                     |
-| No threat model, SBOM or secret scanning                              | M7 in progress — threat model and reproducible SBOM are in; privacy scanning and release review remain |
-| No signing, no updater, no reproducible-build proof                   | M8                                                                                                     |
-| No performance budgets measured on a reference machine                | M9                                                                                                     |
-| `main.cjs` wiring is reviewed, not enforced                           | M0 remainder                                                                                           |
+The input boundary is intentionally already present. `table-navigation-input.cjs` implements it in `dry-run`
+mode: every requested action returns `performed: false` and a human-readable instruction. It never receives an
+Electron window and cannot send pointer or keyboard input. Replacing it with a live adapter requires the real
+capture corpus, coordinate transforms, and fixture-backed input tests rather than a conditional in the UI.
+
+Each transition is held on the live session for the dashboard and appended to the bounded local
+`table-navigation-history.json` journal. That file carries account IDs, table labels, states, events, and
+timestamps only. Account names, browser text, images, routes, and credentials are not accepted by the journal's
+fixed writer shape.
+
+## 14. Current limitations and claim authority
+
+The [generated capability report](CAPABILITIES.md) is the build-specific inventory of available, limited, dry-run, and unavailable behavior. The [work-item register](work-items.json) tracks the 142 final-product deliverables, their owners, dependencies, and required evidence. The [support policy](support-policy.md) records the preview operating boundary. These are checked by `npm run product:check`.
+
+Important remaining limitations are workspace restore UX and full backup portability (Module B), hardware/GPU and failure characterization (D/P), representative held-out game recognition evidence (F/G), live game input (H/I), pairing (J), match accounting (K), durable fault diagnostics (L), accessibility/localization (M), external security/compliance review (N), and signed installation/update/rollback and clean-VM release proof (O). Existing local tests and Capture Lab evidence are not interchangeable with those external gates.
+
+ADR-0011 records the game-facing automation boundary. Do not describe a browser window as authenticated, a pair as matched, or a match/transfer as complete based solely on session or screen state.

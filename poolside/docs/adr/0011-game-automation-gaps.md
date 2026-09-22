@@ -2,24 +2,24 @@
 
 - **Status:** Current implementation record
 - **Date:** 2026-09-18
-- **Related:** ADR-0007, `INCOMPLETE_WORK.md`, roadmap §0.1
+- **Related:** ADR-0007, `INCOMPLETE_WORK.md`, `MASTER_ROADMAP.md` Modules H–K, generated `docs/CAPABILITIES.md`
 
 ## Context
 
-The application currently provides isolated Chromium sessions, local screen-state recognition,
+The application currently provides isolated Chromium sessions, limited local screen-state recognition,
 profile management, diagnostics, and configuration. The intended end-to-end workflow also requires
 game input, match coordination, outcome tracking, and transfer accounting. Those components do not
 exist in the current module graph.
 
 Several completed infrastructure features are adjacent to that missing workflow. Per-session routes
 do not select matchmaking pools. Session identity settings do not provide device-fingerprint controls.
-Screen capture and OCR do not operate game controls. Cookie persistence does not import credentials
+Screen capture and OCR do not operate game controls. The table-navigation state machine is a no-click dry run: it can plan and observe manual steps, but cannot select a table for the user. Cookie persistence does not import credentials
 from external files. These distinctions describe the present implementation and prevent completed
 infrastructure from being mistaken for an end-to-end automation system.
 
 ## Current state
 
-The following capabilities are unfinished:
+The following capabilities are unfinished. The generated capability report is the version-specific claim authority:
 
 1. Production pointer and keyboard input to the game surface.
 2. Shared matchmaking state and multi-account scheduling.
@@ -44,6 +44,7 @@ and partial failure behavior are observable rather than implicit.
 - The existing read-only session and telemetry interfaces are suitable foundations for later work.
 - Estimates for the remaining workflow must include both implementation and live-site validation.
 - Changes to game-facing behavior should update this record and `INCOMPLETE_WORK.md` as components land.
+- Every mode change must update the registry, generated report, About view, work-item evidence, and this ADR in the same review.
 
 ## Verification
 

@@ -16,6 +16,12 @@ const TABLE_SELECTION = `Berlin Platz GET A RING! 0/75 Wins Prize: 50M Players O
 
 const LUCKY_PROMOTION = `Lucky Shot Come back every day Play Free Gold Ball`;
 const SHOP = `FEATURED Super Pro Bundle WEB SHOP EXCLUSIVE Ultimate Windy City Bundle`;
+const LUCKY_PROMOTION_REVIEWED = 'Come back eve Y & win! Land the Gold Ball on the target to win the Prizes!';
+const LUCKY_SHOT_REVIEWED = "Land the Gold Ball on the target to win the Prizes! Enjoy today's FREE Lucky Shot! Play Free";
+const SHOP_REVIEWED = '8 Ball Pool Official Page Route 66 Cue Set Daily Reward Pool Pass Free Daily Cue Piece Weekly Deals';
+const SHOP_REVIEWED_OCR_VARIANT = '8 Ball Pool official Page Route 66 Cue Set Daily Rewart Pool Pass Free Daily Cue Piec Weekly Deals';
+const SHOP_LOYALTY_REVIEWED = 'Official Page Earn Loyalty Points Exchange Points Premium Content Pool Pass';
+const SHOP_GAME_PANEL_REVIEWED = 'Shop Surprise Boxes Cues Social Coins Cash Promotions Play Focus Mode';
 
 test('the gates still recognise the real screens (no behaviour change from the regex chain)', () => {
   assert.equal(classifyText(LOBBY), 'lobby');
@@ -24,6 +30,20 @@ test('the gates still recognise the real screens (no behaviour change from the r
   assert.equal(classifyText('Connecting'), 'connecting');
   assert.equal(classifyText('Lucky Shot Play Free'), 'lucky-shot');
   assert.equal(classifyText(SHOP), 'shop');
+});
+
+test('reviewed real-page variants are recognized without relying on one obscured heading', () => {
+  assert.equal(classifyText(LUCKY_PROMOTION_REVIEWED), 'lucky-promotion');
+  assert.equal(classifyText(LUCKY_SHOT_REVIEWED), 'lucky-shot', 'shared instructions do not turn the play screen into a promotion');
+  assert.equal(classifyText(SHOP_REVIEWED), 'shop');
+  assert.equal(classifyText(SHOP_REVIEWED_OCR_VARIANT), 'shop');
+  assert.equal(classifyText(SHOP_LOYALTY_REVIEWED), 'shop');
+  assert.equal(classifyText(SHOP_GAME_PANEL_REVIEWED), 'shop');
+  assert.equal(classifyText('Gold Ball target Prizes'), 'unrecognized');
+  assert.equal(classifyText('Come back Land the Gold Ball'), 'unrecognized');
+  assert.equal(classifyText('Daily Reward Pool Pass'), 'unrecognized');
+  assert.equal(classifyText('Weekly Deals'), 'unrecognized');
+  assert.ok(!classify(`${SHOP} ${SHOP_REVIEWED}`).alternatives.some(alternative => alternative.state === 'shop'));
 });
 
 test('table selection wins over lobby wording, because the lobby renders behind it', () => {
@@ -37,7 +57,7 @@ test('table selection wins over lobby wording, because the lobby renders behind 
   );
 });
 
-test('incomplete or unrelated text stays unknown instead of guessing', () => {
+test('incomplete or unrelated text is unrecognized instead of being invented as a screen', () => {
   for (const text of [
     '',
     '8 Ball Pool',
@@ -52,7 +72,7 @@ test('incomplete or unrelated text stays unknown instead of guessing', () => {
     'Entry fee',
     '9 Ball'
   ]) {
-    assert.equal(classifyText(text), 'unknown', text);
+    assert.equal(classifyText(text), 'unrecognized', text);
   }
 });
 
@@ -64,9 +84,9 @@ test('the bare loading gate is permissive by design and is flagged for M3', () =
   assert.equal(classifyText('Loading your profile'), 'loading');
 });
 
-test('unknown results carry no confidence', () => {
+test('unrecognized results carry no confidence', () => {
   const result = classify('Play');
-  assert.equal(result.state, 'unknown');
+  assert.equal(result.state, 'unrecognized');
   assert.equal(result.score, 0);
   assert.deepEqual(result.evidence, []);
 });
@@ -89,29 +109,27 @@ test('a fuller screen scores at least as high as a sparser one of the same state
 test('arrays of OCR passes are scored together, matching the pipeline contract', () => {
   assert.equal(classify([LOBBY, '']).state, 'lobby');
   assert.equal(classify([null, LOBBY]).state, 'lobby');
-  assert.equal(classify([]).state, 'unknown');
-  assert.equal(classify(undefined).state, 'unknown');
+  assert.equal(classify([]).state, 'unrecognized');
+  assert.equal(classify(undefined).state, 'unrecognized');
 });
 
-test('non-English or reworded screens degrade to unknown rather than a wrong label', () => {
+test('non-English or reworded screens remain unrecognized rather than receiving a wrong label', () => {
   const spanish = 'Jugar 1 contra 1 Jugar Especial Tarifa de entrada Premio';
-  assert.equal(classifyText(spanish), 'unknown');
-  assert.equal(classifyText('Come back every day'), 'unknown', 'partial promotion wording is not enough');
+  assert.equal(classifyText(spanish), 'unrecognized');
+  assert.equal(classifyText('Come back every day'), 'unrecognized', 'partial promotion wording is not enough');
 });
 
 test('every rule declares a gate and no rule can match on hints alone', () => {
   for (const rule of RULES) {
     assert.ok(rule.all.length > 0, `${rule.state} needs a required term`);
     const hintsOnly = rule.hints.concat([]).join(' ') || '';
-    if (hintsOnly) assert.equal(classifyText(hintsOnly), 'unknown', `${rule.state} must not match hints alone`);
+    if (hintsOnly) assert.equal(classifyText(hintsOnly), 'unrecognized', `${rule.state} must not match hints alone`);
   }
 });
 
-// The legacy regex chain, embedded verbatim. The rewrite was supposed to change reporting
-// (score, evidence, alternatives) and nothing else, so the two implementations must agree on the
-// whole corpus. If a future edit loosens or tightens a gate, this fails and the change has to be
-// deliberate. It already earned its place: it caught the rewrite dropping \b semantics, which made
-// "Reconnecting to the server" satisfy the "connecting" gate.
+// The legacy regex chain, embedded verbatim. Existing phrases must retain their original
+// decisions; the new reviewed shop/promotion variants are tested separately above. This caught
+// the rewrite dropping \b semantics, which made "Reconnecting" satisfy "connecting".
 function legacyClassify(text) {
   const s = String(text || '')
     .toLowerCase()
@@ -123,8 +141,14 @@ function legacyClassify(text) {
   if (/play/.test(s) && /special/.test(s) && /9 ball/.test(s) && /box|unlock/.test(s)) return 'lobby';
   if (/\bconnecting\b/.test(s)) return 'connecting';
   if (/\bloading\b/.test(s)) return 'loading';
-  return 'unknown';
+  return 'unrecognized';
 }
+
+test('table selection reports the supported table names visible in the capture', () => {
+  const result = classify(TABLE_SELECTION);
+  assert.deepEqual(result.visibleTables, ['Berlin']);
+  assert.deepEqual(classify('Entry fee Prize London Las Vegas Rome').visibleTables, ['London', 'Las Vegas', 'Rome']);
+});
 
 test('the rewrite is behaviour-preserving against the embedded legacy classifier', () => {
   const corpus = [

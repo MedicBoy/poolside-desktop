@@ -17,17 +17,22 @@
  * @param {() => void} deps.onClosed runs after the session is gone
  * @param {import('./types.cjs').LogFn} deps.log
  */
+const { windowTitleFor } = require('./window-title.cjs');
+
 function attachSessionEvents(deps) {
   const { window, group, fsm, supervision, accountName, beforeClose, onClosed, log } = deps;
 
   window.on('page-title-updated', event => {
     event.preventDefault();
-    window.setTitle(`Poolside · ${accountName}`);
+    window.setTitle(windowTitleFor(accountName, group.network && group.network.ip));
   });
 
   window.webContents.on('did-finish-load', () => {
     if (window.isDestroyed()) return;
-    fsm.send('loaded');
+    // A sign-in redirect can finish another main-frame load after the first one already moved the
+    // session to ready. Treat that browser event as idempotent here; refused transitions elsewhere
+    // still remain visible because they normally signal a real lifecycle bug.
+    if (fsm.canSend('loaded')) fsm.send('loaded');
     log(`${accountName}: page loaded. Sign-in is managed in the game window.`);
   });
 

@@ -60,7 +60,9 @@ function resolveIdentity(account = {}, settings = {}) {
  * @param {ReturnType<typeof emptyIdentity>} identity
  */
 function cdpOverrides(identity) {
-  /** @type {{method: string, params: Record<string, unknown>}[]} */
+  // Each command carries the identity field it belongs to, so a browser that refuses one can be reported by
+  // the control the operator has to clear rather than by the CDP method name.
+  /** @type {{method: string, params: Record<string, unknown>, field: string, value: unknown}[]} */
   const commands = [];
   if (identity.userAgent || identity.acceptLanguages) {
     commands.push({
@@ -68,20 +70,38 @@ function cdpOverrides(identity) {
       params: {
         ...(identity.userAgent ? { userAgent: identity.userAgent } : {}),
         ...(identity.acceptLanguages ? { acceptLanguage: identity.acceptLanguages } : {})
-      }
+      },
+      field: identity.userAgent ? 'User agent' : 'Accepted languages',
+      value: identity.userAgent || identity.acceptLanguages
     });
   }
-  if (identity.locale) commands.push({ method: 'Emulation.setLocaleOverride', params: { locale: identity.locale } });
-  if (identity.timezone) commands.push({ method: 'Emulation.setTimezoneOverride', params: { timezoneId: identity.timezone } });
+  if (identity.locale)
+    commands.push({
+      method: 'Emulation.setLocaleOverride',
+      params: { locale: identity.locale },
+      field: 'Language (locale)',
+      value: identity.locale
+    });
+  if (identity.timezone)
+    commands.push({
+      method: 'Emulation.setTimezoneOverride',
+      params: { timezoneId: identity.timezone },
+      field: 'Time zone',
+      value: identity.timezone
+    });
   if (identity.viewport)
     commands.push({
       method: 'Emulation.setDeviceMetricsOverride',
-      params: { width: identity.viewport.width, height: identity.viewport.height, deviceScaleFactor: 1, mobile: false }
+      params: { width: identity.viewport.width, height: identity.viewport.height, deviceScaleFactor: 1, mobile: false },
+      field: 'Window size',
+      value: `${identity.viewport.width}×${identity.viewport.height}`
     });
   if (identity.colorScheme)
     commands.push({
       method: 'Emulation.setEmulatedMedia',
-      params: { media: 'screen', features: [{ name: 'prefers-color-scheme', value: identity.colorScheme }] }
+      params: { media: 'screen', features: [{ name: 'prefers-color-scheme', value: identity.colorScheme }] },
+      field: 'Colour scheme',
+      value: identity.colorScheme
     });
   return commands;
 }

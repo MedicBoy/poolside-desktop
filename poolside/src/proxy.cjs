@@ -14,45 +14,11 @@
 // Pure module: no Electron, no fs. Enforced by test/architecture.test.cjs.
 
 const MAX_BYPASS_ENTRIES = 50;
-const PROXY_SCHEMES = { http: 'http://', https: 'https://', socks4: 'socks4://', socks5: 'socks5://' };
+const { parseProxySpec, PROXY_SCHEMES } = require('./proxy-spec.cjs');
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-/**
- * Parse one route specification into Chromium's `proxyRules` grammar.
- * Accepts `DIRECT`, `host:port`, and `scheme://host:port` for http/https/socks4/socks5.
- * @param {unknown} spec
- * @returns {{ok: true, mode: 'direct'|'fixed_servers', proxyRules: string, expectedTarget: string|null, label: string} | {ok: false, error: string}}
- */
-function parseProxySpec(spec) {
-  if (typeof spec !== 'string') return { ok: false, error: 'a route must be given as a string' };
-  const trimmed = spec.trim();
-  if (!trimmed) return { ok: false, error: 'a route cannot be empty' };
-  if (/^direct$/i.test(trimmed)) {
-    return { ok: true, mode: 'direct', proxyRules: '', expectedTarget: null, label: 'Direct connection' };
-  }
-  const match = /^(?:([a-z0-9]+):\/\/)?([^\s:/@]+)(?::(\d{1,5}))?$/i.exec(trimmed);
-  if (!match) return { ok: false, error: `"${trimmed}" is not host:port or scheme://host:port` };
-  const [, rawScheme, host, rawPort] = match;
-  const scheme = rawScheme ? rawScheme.toLowerCase() : null;
-  if (scheme && !PROXY_SCHEMES[scheme]) {
-    return { ok: false, error: `"${scheme}" is not one of ${Object.keys(PROXY_SCHEMES).join(', ')}` };
-  }
-  if (rawPort === undefined) return { ok: false, error: `"${trimmed}" has no port` };
-  const port = Number(rawPort);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) return { ok: false, error: `port ${rawPort} is out of range` };
-  const target = `${host}:${port}`;
-  return {
-    ok: true,
-    mode: 'fixed_servers',
-    // A bare host:port applies to every scheme, which is the honest reading of a bare spec.
-    proxyRules: scheme ? `${PROXY_SCHEMES[scheme]}${target}` : target,
-    expectedTarget: target,
-    label: `${scheme || 'http'} proxy at ${target}`
-  };
 }
 
 /**
@@ -134,7 +100,8 @@ function resolveProxyRoute(account = {}, settings = {}) {
     proxyRules: parsed.proxyRules,
     bypassRules: bypass.value,
     expectedTarget: parsed.expectedTarget,
-    label: parsed.label
+    label: parsed.label,
+    credentials: parsed.credentials
   };
 }
 

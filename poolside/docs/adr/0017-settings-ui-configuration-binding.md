@@ -71,6 +71,10 @@ presented as set with `value: null`, and the credential never reaches the page. 
 fields that were edited, leaving a masked field alone cannot clear it — the usual failure of masked inputs is
 structurally impossible under this contract, not merely avoided.
 
+Credential-bearing proxy specs are executable, not presentation-only: the parser removes the credential from
+Chromium's proxy rules, and the matching session window answers only a proxy authentication challenge for the
+configured host and port. Origin-server authentication and challenges from any other endpoint are left alone.
+
 ### 4. Merge first, validate second, store the validated value
 
 A patch cannot be validated on its own: `table` and `limit` are required by the schema, so a command that only
@@ -154,7 +158,7 @@ first of those has a visible label beside it. The validator's messages already d
    error whose `path` is `table`, a usable one is stored with a number typed as text arriving as a number, an
    undeclared key never reaches the workspace document, every declared field has a control, and the number of
    controls in the dashboard's DOM equals the number the schema declared.
-4. `test/architecture.test.cjs` — the four modules are declared pure (no `electron` import), under the 200-line
+4. `test/architecture.test.cjs` — the four modules are declared pure (no `electron` import), under the 300-line
    ceiling, and reachable from source or tests.
 
 ## Not decided here

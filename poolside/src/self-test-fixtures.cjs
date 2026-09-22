@@ -12,6 +12,8 @@
 async function runFixtureScenarios(ctx, assert, receiver) {
   const { BrowserWindow, workspace, sessions, GAME_URL, SHOP_PROBE, attachRecovery, createSessionFsm } = ctx;
   const dashboard = workspace.dashboard;
+  const { POLL_INTERVAL_MS, PROBE_TIMEOUT_MS } = require('./recovery.cjs');
+  const { resolveRecovery } = require('./recovery-settings.cjs');
 
   // --- Navigation and recovery, against a local HTTPS fixture ----------------------------------
   receiver.protocol.handle(
@@ -72,13 +74,31 @@ async function runFixtureScenarios(ctx, assert, receiver) {
   assert.equal(await probe(), false);
   await navigationWindow.webContents.executeJavaScript(`document.querySelector('input').remove()`);
   attachRecovery(navigationId, sessions.get(navigationId));
+  // Wait for the outcome, not for one event by a fixed clock. The return is driven by a one-second poll
+  // whose probe may be slow on a loaded machine, so the deadline is derived from the delay this account
+  // is actually configured with plus the intervals involved, and the condition is the thing being
+  // asserted: the window is back on the game and the gate says it returned it.
+  const shopDelayMs = resolveRecovery(workspace.data.accounts[0]).shopReturnDelaySeconds * 1000;
+  const returnDeadlineMs = shopDelayMs + POLL_INTERVAL_MS * 2 + PROBE_TIMEOUT_MS + 15000;
+  const waitingSince = Date.now();
   await /** @type {Promise<void>} */ (
     new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Automatic shop return timed out in fixture')), 12000);
-      navigationWindow.webContents.once('did-finish-load', () => {
-        clearTimeout(timeout);
-        resolve();
-      });
+      const check = () => {
+        const group = sessions.get(navigationId);
+        if (!navigationWindow || navigationWindow.isDestroyed())
+          return reject(new Error('Automatic shop return: the fixture window closed first.'));
+        if (navigationWindow.webContents.getURL() === GAME_URL && group && group.shopGate && group.shopGate.used) return resolve();
+        if (Date.now() - waitingSince > returnDeadlineMs)
+          return reject(
+            new Error(
+              `Automatic shop return did not happen within ${Math.round(
+                returnDeadlineMs / 1000
+              )} s (url ${navigationWindow.webContents.getURL()}, gate used ${Boolean(group && group.shopGate && group.shopGate.used)}, delay ${shopDelayMs} ms).`
+            )
+          );
+        setTimeout(check, 250);
+      };
+      check();
     })
   );
   assert.equal(navigationWindow.webContents.getURL(), GAME_URL);
@@ -95,8 +115,21 @@ async function runFixtureScenarios(ctx, assert, receiver) {
   })()`);
   const inspected = await dashboard.webContents.executeJavaScript(`poolside.inspect(${JSON.stringify(navigationId)})`);
   assert.equal(inspected.ok, true, inspected.error);
+  // The canvas is drawn synchronously but composited asynchronously, and a window that is not on screen hands
+  // back the last frame it painted — so a single inspection can catch the frame from before the drawing and
+  // read "unrecognized". Measured: one run in about fifteen. Retry until the screen the fixture drew is the
+  // screen that was read, and report what was seen if it never is.
+  const readableUntil = Date.now() + 10000;
+  while (sessions.get(navigationId).gameScreen.state !== 'connecting' && Date.now() < readableUntil) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await dashboard.webContents.executeJavaScript(`poolside.inspect(${JSON.stringify(navigationId)})`);
+  }
   const observed = sessions.get(navigationId).gameScreen;
-  assert.equal(observed.state, 'connecting');
+  assert.equal(
+    observed.state,
+    'connecting',
+    `the drawing was never read: ${JSON.stringify({ state: observed.state, evidence: observed.evidence })}`
+  );
   assert.ok(observed.score > 0, 'a recognised screen reports a confidence');
   assert.ok(observed.evidence.includes('connecting'), 'evidence names the matched phrase');
   // Regression D4: the locator used to require exactly one visible canvas, so a second surface on

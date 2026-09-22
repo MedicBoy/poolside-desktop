@@ -77,6 +77,16 @@ function createProfileStore(deps) {
     );
   }
 
+  /** Persist one account as soon as its browser window closes. The process-wide quit flush remains
+   * the final barrier, but this narrows the window in which an interrupted update could lose a newly
+   * issued session cookie. */
+  async function flushAccount(id) {
+    const store = sessionStores.get(id);
+    if (!store) return;
+    await store.ready;
+    await store.flush();
+  }
+
   function hasProfiles() {
     return sessionStores.size > 0;
   }
@@ -85,7 +95,7 @@ function createProfileStore(deps) {
     return sessionStores.size;
   }
 
-  return { prepare, flushAll, hasProfiles, count };
+  return { prepare, flushAccount, flushAll, hasProfiles, count };
 }
 
 module.exports = { createProfileStore, SAVE_DEBOUNCE_MS };
