@@ -903,7 +903,12 @@ function matchPairing(match, actionable) {
   const action = actionable
     ? `<button class="text-button" data-action="match-pairing" data-match="${escapeHtml(match.matchId)}">Check pairing evidence</button>`
     : '';
-  return `<small class="match-meta match-pairing ${escapeHtml(verdict)}">Pairing evidence: ${escapeHtml(detail)}</small><div class="match-actions">${action}</div>`;
+  // What the two accounts are configured to look like, from the stored settings — never a claim about what the
+  // sessions reported, which is what the Sessions view's comparison reads from the live pages.
+  const contrast = (match.contrast || [])
+    .map(entry => `<small class="match-meta match-contrast ${escapeHtml(entry.code)}">${escapeHtml(entry.text)}</small>`)
+    .join('');
+  return `<small class="match-meta match-pairing ${escapeHtml(verdict)}">Pairing evidence: ${escapeHtml(detail)}</small>${contrast}<div class="match-actions">${action}</div>`;
 }
 // The count-in: one exact moment to aim at, the order to click in, and then the measurement of what two hands
 // actually achieved. It is the operator's click that queues an account — this only says how close together

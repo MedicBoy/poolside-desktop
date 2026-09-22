@@ -394,6 +394,17 @@ test('a saved network location can be edited, and the address field cannot be fi
   assert.match(renderer, /poolside\.testPresetLocation\(test\.dataset\.routePresetTest\)/);
 });
 
+test('the match card says what the two accounts are configured to look like, next to the verdict', () => {
+  const renderer = ui('renderer.js');
+  const snapshot = fs.readFileSync(path.join(__dirname, '..', 'src', 'workspace-snapshot.cjs'), 'utf8');
+  // Derived on every snapshot from the workspace rather than stored with the verdict, so it cannot go stale while a
+  // match sits there, and it is configuration rather than a claim about what the sessions reported.
+  assert.match(snapshot, /contrast: contrast\.notes\(\{/);
+  assert.match(renderer, /const contrast = \(match\.contrast \|\| \[\]\)/);
+  assert.match(renderer, /class="match-meta match-contrast \$\{escapeHtml\(entry\.code\)\}"/);
+  assert.match(renderer, /\$\{contrast\}<div class="match-actions">/);
+});
+
 test('the match card reports what the balances did, in the wording the evidence owns', () => {
   const renderer = ui('renderer.js');
   const css = ui('style.css');

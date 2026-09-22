@@ -12,6 +12,7 @@ const { buildCapabilityReport } = require('./capability-registry.cjs');
 const { dashboardView } = require('./match-coordination.cjs');
 const { view: runsView } = require('./run-coordination.cjs');
 const { statusFor } = require('./run-status.cjs');
+const contrast = require('./participant-contrast.cjs');
 const attention = require('./attention.cjs');
 const guidance = require('./guidance.cjs');
 const { participantReady } = require('./match-service.cjs');
@@ -128,7 +129,14 @@ function matchesView() {
     ...match,
     participants: match.participants.map(matchParticipantView),
     // The count-in lives in memory for the few seconds it lasts; what it measured goes into the match history.
-    release: service && typeof service.releaseStatus === 'function' ? service.releaseStatus(match.matchId) : null
+    release: service && typeof service.releaseStatus === 'function' ? service.releaseStatus(match.matchId) : null,
+    // What the two accounts are *configured* to look like, said next to the verdict. Derived on every snapshot
+    // from the workspace, so it cannot go stale, and it reports configuration rather than observation.
+    contrast: contrast.notes({
+      participants: match.participants,
+      accounts: workspace.data.accounts,
+      routePresets: workspace.data.routePresets || []
+    })
   });
   const runs = view.runs || runsView(matchState.current);
   const decorateRun = run => {
