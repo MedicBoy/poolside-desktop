@@ -29,6 +29,7 @@ function harness(overrides = {}) {
             opened.push(id);
           },
     participant: overrides.participant || null,
+    observe: overrides.observe || null,
     journal: {
       // A ledger left behind by a previous run, when a test wants one.
       read: () => overrides.initial || coordination.emptyState(),
@@ -398,4 +399,47 @@ test('a blocked match names the check that failed, not just the participant', as
   assert.equal(match().readiness.verdict, 'blocked');
   assert.match(match().readiness.reason, /Alice \(The route could not be read: resolveProxy failed\.\)/);
   assert.match(match().readiness.reason, /Bob \(The route could not be read: resolveProxy failed\.\)/);
+});
+
+test('the balances around a match are recorded when it settles', async () => {
+  const AT2 = Date.parse('2026-09-21T12:00:00.000Z');
+  const reading = (value, at) => ({
+    label: 'Coins',
+    value,
+    exact: true,
+    confidence: 0.95,
+    observedAt: new Date(at).toISOString(),
+    source: 'in-game header'
+  });
+  const screens = { a: { readings: { coins: reading(1000, AT2) } }, b: { readings: { coins: reading(1000, AT2) } } };
+  const { service, match, setClock } = harness({ observe: id => screens[id] });
+  await service.start({ first: 'a', second: 'b', load: false });
+  // The match is played, and both accounts pay the same entry: the readings move before it settles.
+  setClock(AT2 + 60000);
+  screens.a = { readings: { coins: reading(950, AT2 + 60000) } };
+  screens.b = { readings: { coins: reading(950, AT2 + 60000) } };
+  service.complete({ matchId: 'match-1', winner: 'a' });
+  assert.equal(match().state, 'completed');
+  assert.equal(match().outcome.verdict, 'observed');
+  assert.equal(
+    match().outcome.reason,
+    'Alice: Coins 1,000 → 950 (-50). Bob: Coins 1,000 → 950 (-50). Recorded, not reconciled: Poolside has no table of entry fees or prizes to check a change against.'
+  );
+  assert.deepEqual(
+    match().outcome.readings.map(entry => [entry.name, entry.from, entry.to, entry.delta]),
+    [
+      ['Alice', 1000, 950, -50],
+      ['Bob', 1000, 950, -50]
+    ]
+  );
+  assert.equal(match().history.at(-1).event, 'outcome-evidence');
+});
+
+test('a match with no screen readings settles as incomplete rather than claiming a change', async () => {
+  const { service, match } = harness();
+  await service.start({ first: 'a', second: 'b', load: false });
+  service.cancel({ matchId: 'match-1', reason: 'no table was free' });
+  assert.equal(match().outcome.verdict, 'incomplete');
+  assert.match(match().outcome.reason, /no balance reading before or after/);
+  assert.deepEqual(match().outcome.readings, []);
 });

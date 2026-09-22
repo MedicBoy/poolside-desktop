@@ -812,6 +812,13 @@ function matchPairing(match, actionable) {
 // The count-in: one exact moment to aim at, the order to click in, and then the measurement of what two hands
 // actually achieved. It is the operator's click that queues an account — this only says how close together
 // the two clicks landed, read from the two sessions' own screens.
+// What the balances did around the match, from the readings the sessions themselves produced. The wording is
+// the evidence's, not the card's: "recorded, not reconciled" is the honest ceiling until there is a fee table.
+function matchOutcome(match) {
+  const outcome = match.outcome;
+  if (!outcome) return '';
+  return `<small class="match-meta match-outcome ${escapeHtml(outcome.verdict)}">Balances: ${escapeHtml(outcome.reason)}</small>`;
+}
 function matchRelease(match, actionable) {
   if (match.readiness?.verdict !== 'ready') return '';
   const button = (label, action) =>
@@ -870,6 +877,7 @@ function matchCard(match, actionable) {
       ${matchReadiness(match)}
       ${matchPairing(match, actionable)}
       ${matchRelease(match, actionable)}
+      ${matchOutcome(match)}
       ${matchSessions(match)}
       ${match.reason ? `<small class="match-meta">${escapeHtml(match.reason)}</small>` : ''}
       ${actions}

@@ -153,6 +153,10 @@ async function runMatchChecks(ctx, assert) {
       secondResultOk: refusedResult.ok,
       ledger: after.value.matches.totals,
       winner: after.value.matches.recent[0].winnerName,
+      // The balances around the match: this suite's fixture sessions have no screen readings, so the honest
+      // answer is "not read" rather than a change nobody observed.
+      outcomeVerdict: after.value.matches.recent[0].outcome ? after.value.matches.recent[0].outcome.verdict : null,
+      outcomeReason: after.value.matches.recent[0].outcome ? after.value.matches.recent[0].outcome.reason : '',
       capabilityMode: capability ? capability.mode : 'missing',
       navigable: document.querySelectorAll('[data-view="matches"]').length,
       logged: after.value.events.filter(event => /in progress|recorded as the winner|ready/i.test(event.message)).length
@@ -165,6 +169,8 @@ async function runMatchChecks(ctx, assert) {
   assert.equal(matchFlow.secondResultOk, false, 'a settled match cannot record a second result');
   assert.deepEqual(matchFlow.ledger, { recorded: 1, active: 0, completed: 1, cancelled: 0 });
   assert.equal(matchFlow.winner, 'Test sender');
+  assert.equal(matchFlow.outcomeVerdict, 'incomplete', 'no readings means no claim about the balances');
+  assert.match(matchFlow.outcomeReason, /no balance reading before or after/);
   assert.equal(matchFlow.capabilityMode, 'available', 'the capability report agrees the coordinator exists');
   assert.equal(matchFlow.navigable, 1, 'the coordinator has its own dashboard view');
   assert.ok(matchFlow.logged >= 2, 'the pairing and the result both reached the activity history');

@@ -348,3 +348,15 @@ test('settings offers the recovery copies, and says a restore can itself be undo
   // The panel is filled when the settings view is opened, not on every dashboard render.
   assert.match(renderer, /if \(name === 'settings'\) loadRecovery\(\);/);
 });
+
+test('the match card reports what the balances did, in the wording the evidence owns', () => {
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  assert.match(renderer, /function matchOutcome\(match\)/);
+  assert.match(renderer, /Balances: \$\{escapeHtml\(outcome\.reason\)\}/);
+  assert.match(renderer, /\$\{matchOutcome\(match\)\}/);
+  // The four verdicts the record accepts each get a colour, and the weakest is not coloured like a result.
+  for (const verdict of ['observed', 'uncertain', 'unchanged', 'incomplete']) {
+    assert.match(css, new RegExp('\\.match-outcome\\.' + verdict));
+  }
+});

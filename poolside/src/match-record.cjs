@@ -1,12 +1,16 @@
 // The shape of a match ledger record, and the only place that decides whether a stored one is trusted.
 //
-// Split out of `match-coordination.cjs` for the same reason the ledger exists at all: this shape is read
-// back from a file, written by one process and read by another, and shown in the dashboard. Every field
-// therefore arrives from somewhere that could be wrong — a half-written file, a hand-edited edit, an
-// older build — so the rules for accepting a record are kept together, away from the operations that
-// move a ledger from one valid state to another.
+// This shape is read back from a file, written by one process and read by another, and shown in the dashboard.
+// Every field therefore arrives from somewhere that could be wrong — a half-written file, a hand-edited edit,
+// an older build — so the rules for accepting a record are kept together, away from the operations that move a
+// ledger from one valid state to another.
+//
+// Two things this module used to carry live in their own files now: the text helpers every record shares
+// (`record-text.cjs`) and the shape of a run (`run-record.cjs`), which is the same kind of record and grew
+// here until the module hit its size ceiling.
 
-const runPlan = require('./run-plan.cjs');
+const { text, stamp, NAME_LIMIT, TEXT_LIMIT, ID_LIMIT } = require('./record-text.cjs');
+const { RUN_LEDGER_LIMIT, RUN_HISTORY_LIMIT, RUN_STATES, RUN_OUTCOMES, cleanRun } = require('./run-record.cjs');
 
 const FORMAT = 'poolside-match-coordination/v2';
 /**
@@ -17,36 +21,14 @@ const LEGACY_FORMATS = ['poolside-match-coordination/v1'];
 /** Bounded because the ledger is broadcast to the dashboard on every change and written on every match. */
 const LEDGER_LIMIT = 200;
 const HISTORY_LIMIT = 12;
-/** Runs are rarer than matches and are the record of a plan, so fewer are kept. */
-const RUN_LEDGER_LIMIT = 50;
-const RUN_HISTORY_LIMIT = 8;
-const NAME_LIMIT = 60;
-const TEXT_LIMIT = 200;
-const ID_LIMIT = 64;
 
 const STATES = ['active', 'completed', 'cancelled'];
 /** The readiness barrier: a match is released only when every participant is ready. */
 const READINESS_VERDICTS = ['preparing', 'ready', 'blocked'];
-const RUN_STATES = ['active', 'paused', 'ended'];
-/** What ended a run. `limit` is the plan finishing; the rest are stops. */
-const RUN_OUTCOMES = ['limit', 'failures', 'duration', 'stopped', 'participants'];
-const ROLES = ['receiver', 'sender'];
 /** What a pairing claim may be. The wording lives with the rules in `pairing-evidence.cjs`. */
 const PAIRING_VERDICTS = ['paired', 'agreed', 'mismatch', 'incomplete'];
-
-/** @param {unknown} value @param {number} max */
-function text(value, max) {
-  return typeof value === 'string'
-    ? value
-        .replace(/[\r\n\t]+/g, ' ')
-        .trim()
-        .slice(0, max)
-    : '';
-}
-
-function stamp(now) {
-  return new Date(now).toISOString();
-}
+/** What a recorded change to the balances amounts to. The wording lives in `outcome-evidence.cjs`. */
+const OUTCOME_VERDICTS = ['observed', 'unchanged', 'uncertain', 'incomplete'];
 
 /** @returns {{format: string, sequence: number, runSequence: number, matches: any[], runs: any[]}} */
 function emptyState() {
@@ -58,14 +40,6 @@ function cleanParticipant(value) {
   const id = text(value.id, ID_LIMIT);
   const name = text(value.name, NAME_LIMIT);
   return id && name ? { id, name } : null;
-}
-
-/** The same, for a participant of a run, which also records the role the account played. */
-function cleanRunParticipant(value) {
-  const participant = cleanParticipant(value);
-  if (!participant) return null;
-  const role = value && ROLES.includes(value.role) ? value.role : null;
-  return role ? { ...participant, role } : null;
 }
 
 function cleanHistory(value) {
@@ -140,6 +114,40 @@ function cleanPairing(value) {
   };
 }
 
+/**
+ * A recorded outcome, or null. What the balances did, from the two sessions' own readings — deliberately not a
+ * reconciliation: there is no fee table here to check a change against.
+ * @param {unknown} value
+ */
+function cleanOutcome(value) {
+  if (!value || typeof value !== 'object') return null;
+  const source = /** @type {any} */ (value);
+  const verdict = OUTCOME_VERDICTS.includes(source.verdict) ? source.verdict : null;
+  const reason = text(source.reason, TEXT_LIMIT);
+  const checkedAt = text(source.checkedAt, 40);
+  if (!verdict || !reason || !Number.isFinite(Date.parse(checkedAt))) return null;
+  const readings = (Array.isArray(source.readings) ? source.readings : [])
+    .map(entry => {
+      if (!entry || typeof entry !== 'object') return null;
+      const name = text(entry.name, NAME_LIMIT);
+      const currency = entry.currency === 'coins' || entry.currency === 'cash' ? entry.currency : null;
+      if (!name || !currency) return null;
+      if (!Number.isFinite(entry.from) || !Number.isFinite(entry.to) || !Number.isFinite(entry.delta)) return null;
+      return {
+        name,
+        currency,
+        from: Math.round(entry.from),
+        to: Math.round(entry.to),
+        delta: Math.round(entry.delta),
+        exact: entry.exact !== false,
+        status: ['current', 'uncertain', 'stale'].includes(entry.status) ? entry.status : 'uncertain'
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+  return { verdict, reason, checkedAt, readings };
+}
+
 function cleanMatch(value) {
   if (!value || typeof value !== 'object') return null;
   const handle = text(value.handle, 24);
@@ -166,65 +174,8 @@ function cleanMatch(value) {
     endedAt: Number.isFinite(Date.parse(endedAt)) ? endedAt : null,
     readiness: cleanReadiness(value.readiness),
     pairing: cleanPairing(value.pairing),
+    outcome: cleanOutcome(value.outcome),
     history: cleanHistory(value.history)
-  };
-}
-
-/** A run's history entry carries no state transition, only what happened and when. */
-function cleanRunHistory(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(entry => {
-      if (!entry || typeof entry !== 'object') return null;
-      const at = text(entry.at, 40);
-      const event = text(entry.event, 32);
-      if (!Number.isFinite(Date.parse(at)) || !/^[a-z0-9-]+$/.test(event)) return null;
-      return { at, event, detail: text(entry.detail, TEXT_LIMIT) };
-    })
-    .filter(Boolean)
-    .slice(-RUN_HISTORY_LIMIT);
-}
-
-/**
- * A run, or null. The plan is re-validated rather than trusted: a stored plan is a stored decision, and a
- * run whose plan cannot be read is a run whose stop conditions cannot be enforced.
- * @param {unknown} value
- */
-function cleanRun(value) {
-  if (!value || typeof value !== 'object') return null;
-  const source = /** @type {any} */ (value);
-  const handle = text(source.handle, 24);
-  const runId = text(source.runId, ID_LIMIT);
-  const participants = Array.isArray(source.participants) ? source.participants.map(cleanRunParticipant).filter(Boolean) : [];
-  const state = RUN_STATES.includes(source.state) ? source.state : null;
-  const startedAt = text(source.startedAt, 40);
-  if (!/^r\d+$/.test(handle) || !runId || participants.length !== 2 || !state || !Number.isFinite(Date.parse(startedAt))) return null;
-  /** @type {any} */
-  let plan = null;
-  try {
-    plan = runPlan.plan(source.plan);
-  } catch {
-    return null;
-  }
-  const endedAt = text(source.endedAt, 40);
-  const outcome = RUN_OUTCOMES.includes(source.outcome) ? source.outcome : null;
-  const pausedAt = text(source.pausedAt, 40);
-  const pausedMs = Number.isInteger(source.pausedMs) && source.pausedMs >= 0 ? source.pausedMs : 0;
-  return {
-    handle,
-    runId,
-    participants,
-    plan,
-    state,
-    outcome: state === 'ended' ? outcome : null,
-    reason: text(source.reason, TEXT_LIMIT),
-    startedAt,
-    endedAt: state === 'ended' && Number.isFinite(Date.parse(endedAt)) ? endedAt : null,
-    // A paused run keeps the time it has already spent paused, so resuming cannot lose it and the plan's
-    // clock stays honest across a restart.
-    pausedAt: state === 'paused' && Number.isFinite(Date.parse(pausedAt)) ? pausedAt : null,
-    pausedMs,
-    history: cleanRunHistory(source.history)
   };
 }
 
@@ -251,29 +202,30 @@ function cleanState(value) {
 }
 
 module.exports = {
+  // Re-exported so the rest of the ledger keeps one import for the shapes and the helpers they use.
+  text,
+  stamp,
+  NAME_LIMIT,
+  TEXT_LIMIT,
+  ID_LIMIT,
+  RUN_LEDGER_LIMIT,
+  RUN_HISTORY_LIMIT,
+  RUN_STATES,
+  RUN_OUTCOMES,
   FORMAT,
   LEGACY_FORMATS,
   LEDGER_LIMIT,
   HISTORY_LIMIT,
-  RUN_LEDGER_LIMIT,
-  RUN_HISTORY_LIMIT,
-  NAME_LIMIT,
-  TEXT_LIMIT,
-  ID_LIMIT,
   STATES,
   READINESS_VERDICTS,
   PAIRING_VERDICTS,
-  RUN_STATES,
-  RUN_OUTCOMES,
-  text,
-  stamp,
+  OUTCOME_VERDICTS,
   emptyState,
   cleanParticipant,
-  cleanRunParticipant,
   cleanHistory,
-  cleanRunHistory,
   cleanReadiness,
   cleanPairing,
+  cleanOutcome,
   cleanMatch,
   cleanRun,
   cleanState

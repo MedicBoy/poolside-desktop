@@ -2118,6 +2118,18 @@ dialog p {
 .match-release.cancelled {
   color: var(--text);
 }
+/* What the balances did: green when something moved and it was read confidently, amber when the reading is
+   not worth much, muted when nothing moved. */
+.match-outcome.observed {
+  color: var(--mint);
+}
+.match-outcome.uncertain {
+  color: var(--amber);
+}
+.match-outcome.incomplete,
+.match-outcome.unchanged {
+  color: var(--muted);
+}
 .match-subheading {
   margin: 20px 0 0;
 }

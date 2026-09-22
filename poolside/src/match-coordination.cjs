@@ -123,6 +123,22 @@ function recordReleaseStep(state, { matchId, event, detail, now = Date.now() }) 
   return addStep(state, matchId, event, detail, now);
 }
 
+/**
+ * Record what the balances did around a settled match. Written once, when the match settles, from readings the
+ * sessions themselves produced — evidence with its age in it, and no reconciliation, because there is no fee
+ * table here to check a change against.
+ * @param {any} state
+ * @param {{matchId: string, outcome: any, now?: number}} input
+ */
+function recordOutcome(state, { matchId, outcome, now = Date.now() }) {
+  const evidence = { ...outcome, checkedAt: stamp(now) };
+  // This is the one step written *after* the match has settled — the balances are read at that moment — so it
+  // is not restricted to a match still in progress the way the other steps are.
+  const match = state.matches.find(candidate => candidate.matchId === matchId);
+  if (!match) throw new Error('That match is not in the local ledger.');
+  return replaced(state, moved({ ...match, outcome: evidence }, match.state, 'outcome-evidence', evidence.reason, now));
+}
+
 function locate(state, handleOrId) {
   const wanted = text(handleOrId, ID_LIMIT);
   const match = state.matches.find(candidate => candidate.matchId === wanted || candidate.handle === wanted);
@@ -254,6 +270,7 @@ module.exports = {
   settleReadiness,
   recordPairing,
   recordReleaseStep,
+  recordOutcome,
   dashboardView,
   cleanState,
   emptyState,

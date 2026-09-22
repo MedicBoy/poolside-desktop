@@ -8,15 +8,20 @@
 const coordination = require('./match-coordination.cjs');
 
 /**
- * @param {{store: {current: any}, commit: (state: any, message: string|null) => any, runs: {judge: Function, announce: Function, syncPoll: Function}, now?: () => number}} deps
+ * @param {{store: {current: any}, commit: (state: any, message: string|null) => any, runs: {judge: Function, announce: Function, syncPoll: Function}, outcomeFor?: ((match: any) => any)|null, now?: () => number}} deps
  */
-function createMatchLifecycle({ store, commit, runs, now = () => Date.now() }) {
+function createMatchLifecycle({ store, commit, runs, outcomeFor = null, now = () => Date.now() }) {
   /**
    * Record a settled match and judge the run plans against it in one write: the result and the run it ends
    * reach the file and the dashboard together.
    */
-  function settle(next, message) {
-    const outcome = runs.judge(next);
+  function settle(next, matchId, message) {
+    // The balances are read at the moment the match settles and compared with what was read before it was
+    // released. Both go into the same ledger write as the result, so a match never settles without its evidence.
+    const settled = next.matches.find(match => match.matchId === matchId) || null;
+    const withOutcome =
+      settled && outcomeFor ? coordination.recordOutcome(next, { matchId, outcome: outcomeFor(settled), now: now() }) : next;
+    const outcome = runs.judge(withOutcome);
     const view = commit(outcome.state, message);
     runs.announce(outcome.ended);
     runs.syncPoll();
@@ -27,14 +32,14 @@ function createMatchLifecycle({ store, commit, runs, now = () => Date.now() }) {
   function complete({ matchId, winner }) {
     const next = coordination.complete(store.current, { matchId, winner, now: now() });
     const settled = next.matches.find(match => match.matchId === matchId);
-    return settle(next, settled ? `${settled.handle}: ${settled.winnerName} recorded as the winner.` : null);
+    return settle(next, matchId, settled ? `${settled.handle}: ${settled.winnerName} recorded as the winner.` : null);
   }
 
   /** @param {{matchId: string, reason?: string}} input */
   function cancel({ matchId, reason }) {
     const next = coordination.cancel(store.current, { matchId, reason, now: now() });
     const settled = next.matches.find(match => match.matchId === matchId);
-    return settle(next, settled ? `${settled.handle}: ${settled.reason}` : null);
+    return settle(next, matchId, settled ? `${settled.handle}: ${settled.reason}` : null);
   }
 
   return { complete, cancel, settle };

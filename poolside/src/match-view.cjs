@@ -25,6 +25,7 @@ function matchView(match) {
     endedAt: match.endedAt,
     readiness: match.readiness ? { ...match.readiness } : null,
     pairing: match.pairing ? { ...match.pairing } : null,
+    outcome: match.outcome ? { ...match.outcome, readings: (match.outcome.readings || []).map(entry => ({ ...entry })) } : null,
     history: match.history.slice(-4).map(item => ({ ...item }))
   };
 }

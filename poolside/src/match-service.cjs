@@ -1,13 +1,13 @@
 // Runtime bridge between the workspace accounts and the pure match-coordination engine.
 //
-// The engine decides; this module holds the ledger, notices when a participant has left the workspace,
-// brings each participant's own browser session up when a match starts, writes the file, and tells the
-// dashboard. Every mutation publishes, so a match appears, loads, settles and disappears in the
-// dashboard while the app is running rather than after a restart.
+// This module is the composition root for the coordinator, and nothing else: it builds the pieces — the
+// ledger of record, the readiness barrier, the run keeper, the pairing checker, the dropout watcher, the
+// hand-queueing count-in, the lifecycle that settles a match, and the job that starts one — and exposes the
+// commands the dashboard has. Each of those jobs lives in its own module with its own tests; what is left here
+// is the wiring, which is why a reader can see the whole coordinator's shape in one screen.
 
 const crypto = require('node:crypto');
 const coordination = require('./match-coordination.cjs');
-const runPlan = require('./run-plan.cjs');
 const { createBarrier } = require('./match-barrier.cjs');
 const { createRunKeeper } = require('./match-runs.cjs');
 const { createPairingChecker } = require('./match-pairing.cjs');
@@ -15,6 +15,8 @@ const { createDropoutWatcher } = require('./match-dropout.cjs');
 const { createMatchLedger } = require('./match-ledger.cjs');
 const { createMatchLifecycle } = require('./match-lifecycle.cjs');
 const { createReleaseService } = require('./match-release.cjs');
+const { createMatchStart } = require('./match-start.cjs');
+const { createOutcomeRecorder } = require('./match-outcome.cjs');
 const { createParticipantLoader } = require('./match-participants.cjs');
 const { text, ID_LIMIT } = require('./match-record.cjs');
 
@@ -62,7 +64,7 @@ function createMatchService({
   }
 
   // The ledger of record. Everything that changes it goes through here, so the file and the dashboard cannot
-  // drift apart.
+  // drift apart, and opening it settles what a previous run of the program could not still be holding.
   const ledger = createMatchLedger({ store, journal, log, publish, now });
   const { persist, commit } = ledger;
 
@@ -98,12 +100,12 @@ function createMatchService({
     clearTimer
   });
 
-  // Sessions belong to the match, but loading them and proving their exits is a separate job from
-  // coordinating the pairing.
+  // Sessions belong to the match, but loading them and proving their exits is a separate job from coordinating
+  // the pairing. A participant whose session is gone is the dropout watcher's business.
   const participants = createParticipantLoader({ store, publish, log, openSession, participant, probeExit });
 
-  // What the two screens amounted to. Judged only after release, and re-judged while it is still unproven,
-  // so the verdict improves by itself once the operator has looked at each window.
+  // What the two screens amounted to. Judged only after release, and re-judged while it is still unproven, so
+  // the verdict improves by itself once the operator has looked at each window.
   const pairing = createPairingChecker({
     store,
     persist,
@@ -118,8 +120,11 @@ function createMatchService({
     clearTimer
   });
 
-  // A participant whose session is gone. Cancelling goes through the coordinator's own cancel, so a dropout
-  // is recorded, counted against the run's plan and published like any other match with no result.
+  // The balances around a match: read before release, read again when it settles, recorded once.
+  const outcomes = createOutcomeRecorder({ store, observe, now });
+
+  // A participant whose session is gone. Cancelling goes through the lifecycle's own cancel, so a dropout is
+  // recorded, counted against the run's plan and published like any other match with no result.
   const dropouts = createDropoutWatcher({
     store,
     participant,
@@ -132,12 +137,10 @@ function createMatchService({
     clearTimer
   });
 
-  // Settling a match: record the result, then let the run's plan judge it, in one write.
-  const lifecycle = createMatchLifecycle({ store, commit, runs, now });
+  // Settling a match: record the result, the balances it moved, and let the run's plan judge it, in one write.
+  const lifecycle = createMatchLifecycle({ store, commit, runs, now, outcomeFor: outcomes.take });
 
   // Counting the operator in to queue both windows by hand, and measuring the gap their clicks produced.
-  // It sends no input to the game: the clicks are the operator's, and this only says how close together they
-  // landed, from the two sessions' own screens.
   const release = createReleaseService({
     store,
     commit,
@@ -148,6 +151,25 @@ function createMatchService({
     tickMs: releaseTickMs,
     setTimer,
     clearTimer
+  });
+
+  // Starting a match: create it, bring both sessions up, put it in front of the barrier.
+  const starter = createMatchStart({
+    store,
+    commit,
+    view: () => ledger.view(),
+    coordination,
+    participants,
+    barrier,
+    pairing,
+    runs,
+    outcomes,
+    roster,
+    now,
+    makeId,
+    readyDeadlineMs,
+    text,
+    idLimit: ID_LIMIT
   });
 
   /**
@@ -170,100 +192,13 @@ function createMatchService({
     runs.enforce();
     pairing.checkReleased();
     dropouts.watch();
+    // Balances as they stand before release: that is when the screens are on the table screen, and it is the
+    // last moment before an entry could be paid.
+    outcomes.rememberWaiting();
     return ledger.view();
   }
 
-  /** @param {{matchId: string}} input */
-  async function load({ matchId }) {
-    const results = await participants.open(matchId);
-    store.current = persist(
-      coordination.requestReadiness(store.current, {
-        matchId,
-        now: now(),
-        deadlineMs: readyDeadlineMs,
-        reason: 'Release was requested again.'
-      })
-    );
-    barrier.noteRequest(matchId);
-    await participants.proveExits(matchId);
-    barrier.advance();
-    pairing.checkReleased();
-    return { ...ledger.view(), load: results };
-  }
-
-  /**
-   * Create a match, open its participants' sessions, and publish it. `base` lets a run be committed in the
-   * same step as its first match, so a match that cannot start does not leave an empty run behind.
-   * @param {{first: string, second: string, runId?: string|null, run?: any, base?: any, load?: boolean}} input
-   */
-  async function openMatch({ first, second, runId = null, run = null, base = null, load: shouldLoad = true }) {
-    const from = base || store.current;
-    const created = coordination.start(from, { first, second, accounts: roster(), now: now(), matchId: makeId(), runId });
-    const opened = created.matches.find(
-      match => match.state === 'active' && !from.matches.some(before => before.matchId === match.matchId)
-    );
-    if (!opened) throw new Error('The match could not be created.');
-    // The barrier exists from the moment the match does, so a restart never finds an active match with
-    // no readiness deadline attached to it.
-    const next = coordination.requestReadiness(created, {
-      matchId: opened.matchId,
-      now: now(),
-      deadlineMs: readyDeadlineMs,
-      reason: 'Waiting for both participants to load.'
-    });
-    barrier.noteRequest(opened.matchId);
-    const plan = run ? `${run.handle}: ${runPlan.describe(run.plan)}. ` : '';
-    const view = commit(next, `${plan}${opened.participants[0].name} vs ${opened.participants[1].name}: ${opened.handle} is in progress.`);
-    if (shouldLoad === false) {
-      barrier.syncPoll();
-      // The same shape either way: "nothing was asked to load" is a list, not a missing key, so a caller
-      // never has to wonder whether it forgot to load or the reply forgot to say.
-      return { ...view, load: [] };
-    }
-    const results = await participants.open(opened.matchId);
-    await participants.proveExits(opened.matchId);
-    barrier.advance();
-    pairing.checkReleased();
-    return { ...ledger.view(), load: results };
-  }
-
-  /**
-   * Start a match. When a run is in progress the match joins it — the run's counters are counted from the
-   * matches that carry its id — and a pair that is not the run's pair is refused rather than played beside
-   * it. With no run in progress this is the standalone pairing it has always been.
-   * @param {{first: string, second: string, load?: boolean}} input
-   */
-  async function start({ first, second, load: shouldLoad = true }) {
-    const bound = runs.binding({ first: text(first, ID_LIMIT), second: text(second, ID_LIMIT) });
-    return await openMatch({ first, second, runId: bound.runId, run: bound.run, load: shouldLoad });
-  }
-
-  /**
-   * Start a run: the plan, and its first match, in one action. Nothing is written unless the match itself
-   * can be created, so a refusal here leaves the ledger exactly as it was.
-   * @param {{first: string, second: string, plan?: any, load?: boolean}} input
-   */
-  async function startRun({ first, second, plan, load: shouldLoad = true }) {
-    const created = runs.start({ first: text(first, ID_LIMIT), second: text(second, ID_LIMIT), plan });
-    return await openMatch({ first, second, runId: created.run.runId, run: created.run, base: created.state, load: shouldLoad });
-  }
-
-  /** Stop a run by hand. A match of its still in progress is cancelled with the reason. */
-  function stopRun({ runId, reason }) {
-    return runs.stopRun({ runId: text(runId, ID_LIMIT), reason });
-  }
-
-  /** Hold a run where it is: the match being played is left alone and no further match is started. */
-  function pauseRun({ runId, reason }) {
-    return runs.pauseRun({ runId: text(runId, ID_LIMIT), reason });
-  }
-
-  /** Let a paused run continue, with the time it spent paused taken out of the plan's clock. */
-  function resumeRun({ runId }) {
-    return runs.resumeRun({ runId: text(runId, ID_LIMIT) });
-  }
-
-  /** Stop the barrier check. Used when the app is shutting down and by tests. */
+  /** Stop the checks. Used when the app is shutting down and by tests. */
   function dispose() {
     barrier.dispose();
     runs.dispose();
@@ -273,18 +208,18 @@ function createMatchService({
   }
 
   return {
-    start,
-    startRun,
-    stopRun,
-    pauseRun,
-    resumeRun,
-    checkPairing: pairing.command,
-    releaseStatus: release.status,
-    armRelease: release.armCommand,
-    cancelRelease: release.cancelCommand,
+    start: starter.start,
+    startRun: starter.startRun,
+    load: starter.load,
     complete: lifecycle.complete,
     cancel: lifecycle.cancel,
-    load,
+    stopRun: runs.stopRun,
+    pauseRun: runs.pauseRun,
+    resumeRun: runs.resumeRun,
+    checkPairing: pairing.command,
+    armRelease: release.armCommand,
+    cancelRelease: release.cancelCommand,
+    releaseStatus: release.status,
     refresh,
     advance: barrier.advance,
     dispose,
