@@ -644,6 +644,25 @@ function restoreAccountDisclosureIds(ids) {
 }
 // Everything that needs the operator's attention, gathered above the account list. Every rule behind it is in
 // attention.cjs; this is only how the list is drawn, and it is drawn only when there is something to say.
+// What to do next, for a workspace that is not set up yet. The steps come from the workspace itself
+// (guidance.cjs), so the panel cannot tell somebody to add an account they already have; it hides as soon as
+// there is a problem to show instead, because one instruction at a time is enough.
+function renderGuidance() {
+  const guidance = state.guidance || { show: false, title: '', steps: [], note: null };
+  const panel = $('#guidance-panel');
+  panel.hidden = guidance.show !== true || !guidance.steps.length;
+  if (panel.hidden) return;
+  $('#guidance-title').textContent = guidance.title;
+  $('#guidance-note').textContent = guidance.note || '';
+  $('#guidance-steps').innerHTML = guidance.steps
+    .map(step => {
+      const action = step.action
+        ? `<button class="secondary" data-action="${escapeHtml(step.action)}">${escapeHtml(step.title)}</button>`
+        : '';
+      return `<li><strong>${escapeHtml(step.title)}</strong><p>${escapeHtml(step.detail)}</p>${action}</li>`;
+    })
+    .join('');
+}
 function renderAttention() {
   const attention = state.attention || { items: [], summary: 'Nothing needs your attention.' };
   const items = attention.items || [];
@@ -1070,6 +1089,7 @@ function render(next) {
         : 'The last inspected screen could not be recognized';
   renderWorkspaceState();
   renderAttention();
+  renderGuidance();
   $('#receiver-name').textContent = state.accounts.find(a => a.role === 'receiver')?.name || 'Not selected';
   $('#sender-count').textContent = state.accounts.filter(a => a.role === 'sender').length;
   $('#table-value').textContent = state.settings.table;
@@ -1114,6 +1134,16 @@ document.addEventListener('click', async event => {
   if (!button || button.disabled) return;
   if (button.dataset.view) view(button.dataset.view);
   if (button.classList.contains('add-account')) openDialog();
+  // The guidance steps carry the same actions the panels do, so they use the same handlers rather than a second
+  // implementation of "open the add-account dialog" or "open every account".
+  if (button.dataset.action === 'open-all') {
+    await call(() => poolside.openAll());
+    return;
+  }
+  if (button.dataset.action === 'add-account') {
+    openDialog();
+    return;
+  }
   if (button.dataset.bulk) {
     await runBulk(button.dataset.bulk);
     return;

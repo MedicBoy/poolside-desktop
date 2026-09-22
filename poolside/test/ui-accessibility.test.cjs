@@ -375,3 +375,18 @@ test('the sessions view lists what needs attention, and hides itself when there 
   assert.match(renderer, /class="attention-item \$\{escapeHtml\(entry\.level\)\}"/);
   assert.match(css, /\.attention-panel\s*\{/);
 });
+
+test('a new workspace is told what to do, and the guidance yields to a problem', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  const css = ui('style.css');
+  assert.match(html, /id="guidance-panel" hidden aria-labelledby="guidance-title"/);
+  assert.match(html, /<h2 id="guidance-title">Set up your first session<\/h2>/);
+  assert.match(html, /id="guidance-steps"/);
+  assert.match(renderer, /function renderGuidance\(\)/);
+  // The steps reuse the existing actions rather than a second implementation of them.
+  assert.match(renderer, /poolside\.openAll\(\)/);
+  assert.match(renderer, /dataset\.action === 'add-account'/);
+  assert.match(renderer, /renderGuidance\(\);/);
+  assert.match(css, /\.guidance-panel\s*\{/);
+});

@@ -2161,6 +2161,30 @@ dialog p {
 .attention-item.info strong {
   color: var(--amber);
 }
+/* Getting started, shown only while the workspace is new: the same three facts every time, in the order they
+   have to happen, and gone as soon as the workspace is in use. */
+.guidance-panel {
+  margin: 18px 0 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.guidance-panel h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+.guidance-panel ol {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 10px;
+  font-size: 0.84rem;
+}
+.guidance-panel p {
+  margin: 2px 0 6px;
+  color: var(--muted);
+}
 .match-subheading {
   margin: 20px 0 0;
 }

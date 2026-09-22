@@ -13,6 +13,7 @@ const { dashboardView } = require('./match-coordination.cjs');
 const { view: runsView } = require('./run-coordination.cjs');
 const { statusFor } = require('./run-status.cjs');
 const attention = require('./attention.cjs');
+const guidance = require('./guidance.cjs');
 const { participantReady } = require('./match-service.cjs');
 const { participantPreflight } = require('./match-preflight.cjs');
 
@@ -240,10 +241,14 @@ function buildSnapshot(activityHistory) {
   // twice and publish twice for one snapshot.
   const matches = matchesView();
   const attentionItems = attention.items({ accounts, readOnly: workspace.readOnly, matches });
+  // What to do next, but only while there is nothing wrong: two panels telling the operator what to do at the
+  // same time is one panel too many, and a problem outranks getting started.
+  const guide = guidance.forWorkspace({ accounts });
   return {
     accounts,
     archivedAccounts,
     attention: { items: attentionItems, summary: attention.summary(attentionItems) },
+    guidance: attentionItems.length ? { ...guide, show: false } : guide,
     settings: publicSettings(workspace.data.settings),
     tables: TABLES,
     routePresets: (workspace.data.routePresets || []).map(publicRoutePreset),

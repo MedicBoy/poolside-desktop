@@ -69,6 +69,14 @@ async function runSelfTest(ctx) {
   reopened.destroy();
 
   // --- Dashboard IPC: validation and sandbox ----------------------------------------------------
+  // Before anything is added: a brand-new workspace tells the operator what to do, in the order it has to
+  // happen. Read here, while the workspace really is empty, rather than assumed from the later state.
+  const emptyWorkspace = await dashboard.webContents.executeJavaScript(`(async () => {
+    const state = await poolside.get();
+    return { show: state.value.guidance.show, steps: state.value.guidance.steps.map(step => step.title) };
+  })()`);
+  assert.equal(emptyWorkspace.show, true, 'an empty workspace offers the getting-started steps');
+  assert.deepEqual(emptyWorkspace.steps, ['Add an account', 'Open it', 'Sign in on the game site']);
   const results = await dashboard.webContents.executeJavaScript(`(async () => {
     const a = await poolside.add({ name: 'Test receiver', role: 'receiver' });
     const b = await poolside.add({ name: 'Test sender', role: 'sender' });
