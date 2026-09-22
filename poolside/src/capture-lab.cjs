@@ -1,3 +1,4 @@
+// The Capture Lab: a private library of game screens, what the recogniser said about each, and the operator's verdict.
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');

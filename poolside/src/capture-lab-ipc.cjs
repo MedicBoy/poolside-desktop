@@ -1,3 +1,4 @@
+// The dashboard contract for the Capture Lab: reference frames, samples and evaluation.
 function registerCaptureLab({ handle, inspector, captureLab }) {
   handle('capture:list', () => ({
     samples: captureLab.list(),

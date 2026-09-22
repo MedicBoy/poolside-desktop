@@ -1,3 +1,4 @@
+// The corpus gate: cohort counts, per-label precision and recall, and the release conditions over a frozen set.
 const { cohort, durationSummary, records, sampleMatches } = require('./capture-evaluation.cjs');
 const { TABLES } = require('./table-list.cjs');
 

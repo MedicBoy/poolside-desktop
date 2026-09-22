@@ -1,3 +1,4 @@
+// What one capture pass recorded: geometry, outcome, timings, and the bounded per-stage breakdown.
 const { TABLES } = require('./table-list.cjs');
 
 const SAMPLE_STATES = ['loading', 'connecting', 'lucky-promotion', 'lucky-shot', 'lobby', 'table-selection', 'shop'];

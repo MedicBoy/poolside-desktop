@@ -1,3 +1,4 @@
+// The dashboard's Check IP action: read an address through one session, and never through the machine's own route.
 const { createSessionIpReader } = require('./session-ip.cjs');
 const { resolveProxyRoute } = require('./proxy.cjs');
 const { workspace } = require('./state.cjs');

@@ -1,3 +1,4 @@
+// Saved network locations: their grammar, their stored health, and the sentences the Settings list shows.
 const { randomUUID } = require('node:crypto');
 const { parseProxySpec, normaliseBypass } = require('./proxy.cjs');
 

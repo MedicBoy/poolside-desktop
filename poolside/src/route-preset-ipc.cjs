@@ -1,3 +1,4 @@
+// The dashboard contract for saved network locations: save, edit, tick on and off, try, and delete when unused.
 const routePresets = require('./route-presets.cjs');
 const { publicRoutePreset } = require('./proxy-public.cjs');
 const { formatMs } = require('./route-probe-format.cjs');

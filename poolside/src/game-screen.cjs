@@ -1,3 +1,4 @@
+// Reading a game screen: two OCR passes, the contrast band, the local table matcher, and the verdict they support.
 const { createWorker, PSM } = require('tesseract.js');
 const language = require('@tesseract.js-data/eng');
 const sharp = require('sharp');

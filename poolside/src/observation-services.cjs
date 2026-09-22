@@ -1,3 +1,4 @@
+// Wiring for the two observation services the composition root needs: the inspector and the screen monitor.
 const { createInspector } = require('./inspection.cjs');
 const { createScreenMonitor } = require('./screen-monitor.cjs');
 const { resolveRecovery } = require('./recovery-settings.cjs');

@@ -1,3 +1,4 @@
+// The dashboard's bridge: one named method per channel, no generic invoke, nothing else exposed.
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('poolside', {
   get: () => ipcRenderer.invoke('workspace:get'),

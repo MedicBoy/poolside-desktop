@@ -1,3 +1,4 @@
+// The workspace document: what an account and a setting may contain, and the round trip that keeps them.
 const { randomUUID } = require('node:crypto');
 const { IDENTITY_FIELDS } = require('./identity-fields.cjs');
 const { RECOVERY_FIELDS } = require('./recovery-settings.cjs');
