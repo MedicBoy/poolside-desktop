@@ -1144,6 +1144,16 @@ document.addEventListener('click', async event => {
     openDialog();
     return;
   }
+  if (button.dataset.action === 'run-report') {
+    // A record to keep or send on, written beside the diagnostics export. The reply names the file rather than
+    // its path: the renderer never learns a user-directory path.
+    const result = await call(() => poolside.saveRunReport());
+    if (result.ok)
+      toast(
+        `Run report saved locally: ${result.value.fileName} (${result.value.runs} run(s), ${result.value.standaloneMatches} standalone match(es)).`
+      );
+    return;
+  }
   if (button.dataset.bulk) {
     await runBulk(button.dataset.bulk);
     return;

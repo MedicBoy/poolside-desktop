@@ -390,3 +390,13 @@ test('a new workspace is told what to do, and the guidance yields to a problem',
   assert.match(renderer, /renderGuidance\(\);/);
   assert.match(css, /\.guidance-panel\s*\{/);
 });
+
+test('the run plan offers a report, and says what it does and does not contain', () => {
+  const html = ui('index.html');
+  const renderer = ui('renderer.js');
+  assert.match(html, /data-action="run-report"/);
+  assert.match(html, /id="run-report-note"/);
+  assert.match(html, /It contains your account names and no passwords, profiles or page text/);
+  assert.match(renderer, /poolside\.saveRunReport\(\)/);
+  assert.match(renderer, /Run report saved locally: \$\{result\.value\.fileName\}/);
+});

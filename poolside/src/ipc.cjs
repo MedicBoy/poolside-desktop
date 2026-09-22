@@ -6,7 +6,9 @@
 // stays wiring.
 
 const fs = require('node:fs');
+const path = require('node:path');
 const model = require('./model.cjs');
+const runReport = require('./run-report.cjs');
 const settingsController = require('./settings-ui-controller.cjs');
 const diagnosticsBundle = require('./diagnostics-bundle.cjs');
 const { log, snapshot, save, getAccount, clearActivityHistory } = require('./workspace.cjs');
@@ -192,7 +194,26 @@ function createIpc(deps) {
       return monitor.stop(id);
     });
     registerCaptureLab({ handle, inspector, captureLab });
-    registerMatchIpc({ handle, matches });
+    registerMatchIpc({
+      handle,
+      matches,
+      // The report lands beside the diagnostics export, so one folder holds everything the operator may want to
+      // send on, and the renderer is handed a file name rather than a path.
+      saveReport: view => {
+        const report = runReport.build(view);
+        const directory = diagnosticsBundle.directory(diagnosticsRoot);
+        const name = runReport.fileName(Date.now());
+        const target = path.join(directory, name);
+        fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+        log(`Run report written: ${report.runs.length} run(s) and ${report.standaloneMatches.length} standalone match(es).`);
+        return {
+          fileName: name,
+          runs: report.runs.length,
+          standaloneMatches: report.standaloneMatches.length,
+          bytes: fs.statSync(target).size
+        };
+      }
+    });
     registerAccountManagement({
       handle,
       model,

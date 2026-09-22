@@ -1,8 +1,8 @@
 // Dashboard surface for local match coordination. Validation lives in the engine so the message the
 // operator sees is the reason the operation was refused, not a generic rejection.
 
-/** @param {{handle: (name: string, fn: (input: any) => any) => void, matches: {start: Function, startRun: Function, stopRun: Function, pauseRun: Function, resumeRun: Function, checkPairing: Function, armRelease: Function, cancelRelease: Function, complete: Function, cancel: Function, load: Function, view: Function}}} deps */
-function registerMatchIpc({ handle, matches }) {
+/** @param {{handle: (name: string, fn: (input: any) => any) => void, matches: any, saveReport?: ((view: any) => any)|null}} deps */
+function registerMatchIpc({ handle, matches, saveReport = null }) {
   const id = value => (typeof value === 'string' ? value.trim() : '');
 
   handle('match:state', () => matches.view());
@@ -37,6 +37,9 @@ function registerMatchIpc({ handle, matches }) {
   // input to the game — the two queue clicks are the operator's.
   handle('match:arm', input => matches.armRelease({ matchId: id(input?.matchId), leadInMs: Number(input?.leadInMs) || undefined }));
   handle('match:arm-cancel', input => matches.cancelRelease({ matchId: id(input?.matchId) }));
+  // A record of the run, written where the operator can find it and send it on. It is built from the same view
+  // the dashboard shows, so it cannot describe a ledger the cards are not showing.
+  if (saveReport) handle('run:report', () => saveReport(matches.view()));
 }
 
 module.exports = { registerMatchIpc };

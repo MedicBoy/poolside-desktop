@@ -105,6 +105,31 @@ async function runRunPlanChecks(ctx, assert) {
   assert.equal(runFlow.thirdOk, true);
   assert.equal(runFlow.thirdRunId, null);
   assert.equal(runFlow.tidyOk, true);
+
+  // --- A record of the runs, written where the operator can find it ----------------------------------
+  // The point of the report is that it can be sent on: what it holds, and what it must not hold, are both part
+  // of the contract. It is written beside the diagnostics export, and the renderer learns a file name, not a path.
+  const reported = await dashboard.webContents.executeJavaScript(`(async () => {
+    const saved = await poolside.saveRunReport();
+    return { ok: saved.ok, error: String(saved.error || ''), fileName: saved.ok ? saved.value.fileName : '', runs: saved.ok ? saved.value.runs : -1 };
+  })()`);
+  assert.equal(reported.ok, true, `the run report was refused: ${reported.error}`);
+  assert.match(reported.fileName, /^poolside-run-report-.*\.json$/);
+  assert.equal(reported.fileName.includes('\\'), false, 'the renderer receives no filesystem path');
+  assert.ok(reported.runs >= 1, 'the report covers the run this check made');
+  const reportPath = require('node:path').join(ctx.app.getPath('userData'), 'diagnostics', reported.fileName);
+  const written = JSON.parse(ctx.fs.readFileSync(reportPath, 'utf8'));
+  assert.equal(written.format, 'poolside-run-report/v1');
+  assert.equal(written.runs.length >= 1, true);
+  assert.ok(
+    written.runs.some(run => (run.matches || []).length >= 2),
+    'the run carries the matches it owned'
+  );
+  // The note is a fixed sentence naming what is absent; the data is what must be free of those things.
+  const serialised = JSON.stringify({ runs: written.runs, standaloneMatches: written.standaloneMatches }).toLowerCase();
+  assert.equal(serialised.includes('test receiver'), true, 'the record names who played, or it is not a record');
+  for (const forbidden of ['password', 'proxy', 'spec'])
+    assert.equal(serialised.includes(forbidden), false, `${forbidden} must not be in a report that can be sent on`);
 }
 
 module.exports = { runRunPlanChecks };
