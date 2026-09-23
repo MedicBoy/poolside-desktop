@@ -2,7 +2,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createTableNavigationService } = require('../src/table-navigation-service.cjs');
 
-function fixture() {
+/** @param {(() => Promise<any>) | null} [inspectGame] */
+function fixture(inspectGame = null) {
   let now = Date.parse('2026-09-21T12:00:00.000Z');
   let timerId = 0;
   const timers = new Map();
@@ -18,7 +19,7 @@ function fixture() {
       if (id !== account.id) throw new Error('Account not found.');
       return account;
     },
-    inspector: { inspectGame: async () => observed },
+    inspector: { inspectGame: inspectGame || (async () => observed) },
     publish: () => {
       publishes += 1;
     },
@@ -71,6 +72,26 @@ test('the service refuses parallel plans and supports cancel then retry', () => 
   const retried = f.service.retry(f.account.id);
   assert.equal(retried.state, 'locating-lobby');
   assert.equal(retried.retryCount, 1);
+  f.service.dispose();
+});
+
+test('a screen check started before cancel cannot advance a retried plan', async () => {
+  let finishInspection;
+  const f = fixture(
+    () =>
+      new Promise(resolve => {
+        finishInspection = resolve;
+      })
+  );
+  f.service.start({ id: f.account.id, targetTable: 'Rome' });
+  const pending = f.service.observe(f.account.id);
+  f.service.cancel(f.account.id);
+  const retried = f.service.retry(f.account.id);
+  const publishCount = f.publishes();
+  finishInspection({ state: 'lobby', observedAt: '2026-09-21T12:00:00.000Z' });
+  assert.equal(await pending, retried);
+  assert.equal(f.group.tableNavigation.state, 'locating-lobby');
+  assert.equal(f.publishes(), publishCount);
   f.service.dispose();
 });
 
