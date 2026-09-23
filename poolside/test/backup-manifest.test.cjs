@@ -22,7 +22,7 @@ const document = (over = {}) => ({
   appVersion: '0.2.0',
   exportedAt: '2026-09-20T12:00:00.000Z',
   accounts: [account()],
-  files: [{ path: 'workspace.json', bytes: 12, sha256: 'abc' }],
+  files: [{ path: 'workspace.json', bytes: 12, sha256: 'a'.repeat(64) }],
   profiles: [{ path: 'profiles/poolside-11111111-1111-4111-8111-111111111111', files: 3, bytes: 90 }],
   ...over
 });
@@ -53,22 +53,14 @@ test('a manifest that names something Poolside did not issue is refused', () => 
   assert.throws(() => manifest.parse(document({ accounts: [account(), account()] })), /same account twice/);
 });
 
-test('an entry that points outside the backup folder is dropped rather than followed', () => {
-  const parsed = manifest.parse(
-    document({
-      files: [
-        { path: '../../secrets.txt', bytes: 1, sha256: 'x' },
-        { path: 'C:\\Windows\\win.ini', bytes: 1, sha256: 'x' },
-        { path: 'sessions/ok.plist', bytes: 1, sha256: 'x' }
-      ],
-      profiles: [{ path: '../..', files: 1, bytes: 1 }]
-    })
+test('an entry outside the backup or an account is refused before restore', () => {
+  for (const name of ['../../secrets.txt', 'C:\\Windows\\win.ini', 'sessions/ok.plist'])
+    assert.throws(() => manifest.parse(document({ files: [{ path: name, bytes: 1, sha256: 'a'.repeat(64) }] })), /outside/);
+  assert.throws(() => manifest.parse(document({ profiles: [{ path: '../..', files: 1, bytes: 1 }] })), /outside/);
+  assert.throws(
+    () => manifest.parse(document({ files: [{ path: 'workspace.json', bytes: 1, sha256: 'bad' }] })),
+    /invalid file size or checksum/
   );
-  assert.deepEqual(
-    parsed.files.map(entry => entry.path),
-    ['sessions/ok.plist']
-  );
-  assert.deepEqual(parsed.profiles, []);
 });
 
 test('a restore adds what is missing and reports what is already here', () => {
@@ -83,7 +75,7 @@ test('a restore adds what is missing and reports what is already here', () => {
 });
 
 test('a restored name that is already taken is renamed instead of colliding', () => {
-  const parsed = manifest.parse(document({ accounts: [account({ id: OTHER, name: 'Master', role: 'sender' })] }));
+  const parsed = manifest.parse(document({ accounts: [account({ id: OTHER, name: 'Master', role: 'sender' })], profiles: [] }));
   const decision = manifest.plan(parsed, [{ id: ID, name: 'Master', role: 'receiver' }]);
   assert.deepEqual(
     decision.importable.map(a => a.name),
@@ -92,7 +84,7 @@ test('a restored name that is already taken is renamed instead of colliding', ()
 });
 
 test('a second receiving account is reported, not quietly demoted to a different role', () => {
-  const parsed = manifest.parse(document({ accounts: [account({ id: OTHER, name: 'Spare', role: 'receiver' })] }));
+  const parsed = manifest.parse(document({ accounts: [account({ id: OTHER, name: 'Spare', role: 'receiver' })], profiles: [] }));
   const decision = manifest.plan(parsed, [{ id: ID, name: 'Master', role: 'receiver' }]);
   assert.deepEqual(decision.importable, []);
   assert.deepEqual(decision.conflicts, [{ name: 'Spare', reason: 'this workspace already has a receiving account' }]);

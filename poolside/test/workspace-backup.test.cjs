@@ -44,6 +44,7 @@ test('a backup carries the workspace file, the encrypted session, and the browse
   assert.equal(path.basename(result.folder), 'Poolside-backup-2026-09-20-120000');
   const doc = manifest.parse(JSON.parse(fs.readFileSync(path.join(result.folder, 'manifest.json'), 'utf8')));
   assert.deepEqual(doc.files.map(entry => entry.path).sort(), ['sessions/11111111-1111-4111-8111-111111111111.plist', 'workspace.json']);
+  assert.match(doc.profiles[0].sha256, /^[a-f0-9]{64}$/);
   assert.ok(fs.existsSync(path.join(result.folder, backup.PROFILES_DIR, partitionName(ID), 'Cookies', 'data')));
 });
 
@@ -102,13 +103,71 @@ test('a restore never overwrites browser storage this PC already holds', () => {
   assert.equal(fs.readFileSync(path.join(live, 'data'), 'utf8'), 'this PC’s own state');
 });
 
+test('a conflict in a later account leaves earlier accounts untouched', () => {
+  const root = sourceRoot();
+  const otherProfile = path.join(root, PARTITIONS_DIR, partitionName(OTHER), 'Cookies');
+  fs.mkdirSync(otherProfile, { recursive: true });
+  fs.writeFileSync(path.join(otherProfile, 'data'), 'other state');
+  const destination = tempRoot();
+  const second = { id: OTHER, name: 'Second', role: 'sender', archived: false, createdAt: '2026-09-01T00:00:00.000Z' };
+  const bundle = backup.create({ root, destination, accounts: [...accounts, second], appVersion: '0.2.0', at: Date.now() }).folder;
+  const target = tempRoot();
+  const conflict = path.join(target, PARTITIONS_DIR, partitionName(OTHER));
+  fs.mkdirSync(conflict, { recursive: true });
+  assert.throws(() => backup.restore({ root: target, source: bundle, existing: [] }), /already has saved browser storage/);
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+  assert.equal(fs.existsSync(path.join(target, ACCOUNTS_DIR, `${ID}.plist`)), false);
+});
+
+test('a failed workspace commit rolls back only the newly restored profile and session', () => {
+  const destination = tempRoot();
+  const bundle = backup.create({ root: sourceRoot(), destination, accounts, appVersion: '0.2.0', at: Date.now() }).folder;
+  const target = tempRoot();
+  assert.throws(
+    () =>
+      backup.restore({
+        root: target,
+        source: bundle,
+        existing: [],
+        commit: () => {
+          throw new Error('workspace save failed');
+        }
+      }),
+    /workspace save failed/
+  );
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+  assert.equal(fs.existsSync(path.join(target, ACCOUNTS_DIR, `${ID}.plist`)), false);
+});
+
 test('a damaged backup is refused before anything is written', () => {
   const source = tempRoot();
   const result = backup.create({ root: sourceRoot(), destination: source, accounts, appVersion: '0.2.0', at: Date.now() });
   const session = path.join(result.folder, backup.SESSIONS_DIR, `${ID}.plist`);
-  fs.writeFileSync(session, '<plist>tampered</plist>');
+  fs.writeFileSync(session, '<plist>corrupted</plist>');
   const target = tempRoot();
   assert.throws(() => backup.restore({ root: target, source: result.folder, existing: [] }), /does not match its recorded checksum/);
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+});
+
+test('changing a browser profile without changing its size is detected', () => {
+  const destination = tempRoot();
+  const bundle = backup.create({ root: sourceRoot(), destination, accounts, appVersion: '0.2.0', at: Date.now() }).folder;
+  const profile = path.join(bundle, backup.PROFILES_DIR, partitionName(ID), 'Cookies', 'data');
+  fs.writeFileSync(profile, 'tampered state');
+  const target = tempRoot();
+  assert.throws(() => backup.restore({ root: target, source: bundle, existing: [] }), /recorded checksum/);
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+});
+
+test('an existing session file is a conflict, even when its profile is absent', () => {
+  const destination = tempRoot();
+  const bundle = backup.create({ root: sourceRoot(), destination, accounts, appVersion: '0.2.0', at: Date.now() }).folder;
+  const target = tempRoot();
+  const session = path.join(target, ACCOUNTS_DIR, `${ID}.plist`);
+  fs.mkdirSync(path.dirname(session), { recursive: true });
+  fs.writeFileSync(session, 'existing');
+  assert.throws(() => backup.restore({ root: target, source: bundle, existing: [] }), /already has a saved session/);
+  assert.equal(fs.readFileSync(session, 'utf8'), 'existing');
   assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
 });
 

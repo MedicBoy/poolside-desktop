@@ -37,6 +37,14 @@ self-test pass locally; hosted CI and clean-VM distribution checks remain O1/O7 
 The following capabilities are not implemented in this repository. They require design, development,
 tests, and live-site validation before they can be treated as product features.
 
+### Backup portability and crash recovery
+
+Backup manifests now checksum copied browser profiles in addition to workspace and session files. Restore
+checks all destination conflicts before copying and stages files for rollback if the workspace save fails.
+Portable encryption, schema validation of the exported workspace, and recovery across a crash during
+the multi-file restore are still required for B4 and B5. Existing DPAPI session files remain bound to
+the Windows account that created them.
+
 ### Game input integration
 
 No production module sends pointer or keyboard input to the game surface. A per-session table-navigation state

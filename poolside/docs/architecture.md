@@ -82,7 +82,7 @@ sentence is reported rather than passing quietly.
 
 <!-- modules:begin -->
 
-_Generated from the source by `scripts/architecture-modules.cjs`. 152 modules, each with the
+_Generated from the source by `scripts/architecture-modules.cjs`. 154 modules, each with the
 first line of its own header comment. `npm run docs:check` fails if a module is missing, or if it has no
 description to carry._
 
@@ -97,6 +97,8 @@ description to carry._
 | `attention.cjs`                | Everything that needs the operator's attention, gathered in one place.                                               |
 | `backup-ipc.cjs`               | Backup IPC handlers. The filesystem work remains in workspace-backup.cjs.                                            |
 | `backup-manifest.cjs`          | The document that describes a Poolside backup, and the decision about what a restore may touch.                      |
+| `backup-profile-integrity.cjs` | Deterministic integrity record for a copied browser profile.                                                         |
+| `backup-restore.cjs`           | Restore a Poolside backup through preflight, staging and a bounded commit.                                           |
 | `bulk-plan.cjs`                | What a bulk account action would do, decided before anything is touched.                                             |
 | `capability-registry.cjs`      | Public product claims. Keep modes conservative: tests establish implementation,                                      |
 | `capture-evaluation.cjs`       | A local evidence summary for Capture Lab. This is deliberately descriptive rather than an accuracy claim:            |
