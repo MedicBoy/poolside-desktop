@@ -87,4 +87,33 @@ function writeWorkspace(file, next, { checkpoint = () => {} } = {}) {
   }
 }
 
-module.exports = { writeWorkspace, recoveryAvailable, stagedFiles };
+/** Explicit recovery from a primary that could not be loaded. Never discard its original bytes. */
+function restoreUnreadableWorkspace(file, next) {
+  const canonical = model.decode(next);
+  const target = path.resolve(file);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  /** @type {string|null} */
+  let preservedName = null;
+  if (fs.existsSync(target)) {
+    const original = fs.readFileSync(target);
+    let changedToValid = false;
+    try {
+      model.decode(JSON.parse(original.toString('utf8')));
+      changedToValid = true;
+    } catch {}
+    if (changedToValid) throw new Error('The workspace file has changed since startup. Restart Poolside before restoring a copy.');
+    const preserved = `${target}.unreadable-${randomUUID()}`;
+    writeFlushed(preserved, original);
+    preservedName = path.basename(preserved);
+  }
+  const temporary = `${target}.tmp-${randomUUID()}`;
+  try {
+    writeFlushed(temporary, JSON.stringify(canonical, null, 2));
+    fs.renameSync(temporary, target);
+    return { document: canonical, preservedName };
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
+
+module.exports = { writeWorkspace, restoreUnreadableWorkspace, recoveryAvailable, stagedFiles };

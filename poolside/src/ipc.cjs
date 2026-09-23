@@ -11,7 +11,7 @@ const model = require('./model.cjs');
 const runReport = require('./run-report.cjs');
 const settingsController = require('./settings-ui-controller.cjs');
 const diagnosticsBundle = require('./diagnostics-bundle.cjs');
-const { log, snapshot, save, getAccount, clearActivityHistory } = require('./workspace.cjs');
+const { log, snapshot, save, restore, getAccount, clearActivityHistory } = require('./workspace.cjs');
 const { sessions, workspace } = require('./state.cjs');
 const { messageOf } = require('./errors.cjs');
 const { registerAccountManagement } = require('./account-management-ipc.cjs');
@@ -173,7 +173,9 @@ function createIpc(deps) {
       registerRecoveryIpc({
         handle,
         recovery: createWorkspaceRecovery({ file: workspace.storeFile }),
-        save,
+        restore,
+        isReadOnly: () => workspace.readOnly,
+        hasOpenSessions: () => sessions.size > 0,
         log,
         confirmDestructive
       });

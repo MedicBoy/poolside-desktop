@@ -5,7 +5,7 @@ const { messageOf } = require('./errors.cjs');
 const { events, workspace } = require('./state.cjs');
 const { createWorkspaceHistory } = require('./workspace-history.cjs');
 const { buildSnapshot, profileView, TIMELINE_VIEW_LIMIT } = require('./workspace-snapshot.cjs');
-const { writeWorkspace, recoveryAvailable } = require('./workspace-file.cjs');
+const { writeWorkspace, restoreUnreadableWorkspace, recoveryAvailable } = require('./workspace-file.cjs');
 const workspaceVersion = require('./workspace-version.cjs');
 
 const MAX_EVENTS = 100;
@@ -51,6 +51,19 @@ function save(next) {
   workspace.data = writeWorkspace(workspace.storeFile, next);
   workspace.authoritative = true;
   publish();
+}
+
+/** Restore only after an explicit recovery choice and confirmation. */
+function restore(next) {
+  if (!workspace.storeFile) throw new Error('The workspace file is not initialised yet.');
+  const result = workspace.readOnly
+    ? restoreUnreadableWorkspace(workspace.storeFile, next)
+    : { document: writeWorkspace(workspace.storeFile, next), preservedName: null };
+  workspace.data = result.document;
+  workspace.readOnly = false;
+  workspace.authoritative = true;
+  publish();
+  return { preservedName: result.preservedName };
 }
 
 /**
@@ -161,6 +174,7 @@ module.exports = {
   snapshot,
   publish,
   save,
+  restore,
   getAccount,
   load,
   savedWindowGeometry,

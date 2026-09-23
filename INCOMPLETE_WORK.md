@@ -30,7 +30,7 @@ self-test pass locally; hosted CI and clean-VM distribution checks remain O1/O7 
 | 7   | Reproduce and characterize GPU/compositor failures on target hardware                          | Failure mode, driver/GPU details, and recovery result are recorded                                            |
 | 8   | Expand the current 108 held-out labelled frames to the 300-sample coverage gate and rerun it   | Capture Lab and `npm run validate:corpus` both pass                                                           |
 | 9   | Measure cold start, capture, classification, IPC throughput, and memory on a reference machine | Evidence replay now reports local OCR-stage timing; reference-machine results are added to the release record |
-| 10  | Add an in-app, explicitly confirmed recovery choice for a missing or corrupt workspace primary | A validated `.previous` or staged copy can be previewed and restored without auto-discarding accounts         |
+| 10  | Prove missing/corrupt workspace recovery in packaged Windows and clean-VM tests                | Local restore tests pass; packaged restore preserves the original and reopens with the chosen accounts         |
 
 ## Unfinished product capabilities
 

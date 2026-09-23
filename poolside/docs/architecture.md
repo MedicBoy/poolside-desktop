@@ -471,8 +471,11 @@ overwrites a cookie the profile already has.
 (ADR-0018). A bounded `.previous` copy supports deliberate recovery; it is never auto-loaded as
 authoritative data and is purged when removed account or route values would otherwise linger.
 A malformed document, or a missing primary with recovery material present, puts the app into
-read-only mode rather than overwriting data the user may still want. The pending B3 work is an
-in-app recovery choice and clean-VM interruption proof.
+read-only mode rather than overwriting data the user may still want. The dashboard previews and
+confirms a selected recovery copy. `workspace.cjs` uses an explicit recovery write to leave read-only
+mode, and `workspace-file.cjs` preserves an unreadable primary byte for byte before replacing it.
+Recovery refuses open account windows and a candidate changed after preview. Clean-VM interruption
+proof remains B3 work.
 
 ## 4. IPC contract
 

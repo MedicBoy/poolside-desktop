@@ -80,7 +80,7 @@
       "mode": "limited",
       "validation": "fixture-proven",
       "flag": "on",
-      "detail": "Preserves damaged primary data, lists the recovery copies it can read — when each was written, how many accounts it holds, whether it is usable — and restores one only when the operator chooses it, re-reading and re-validating the restored document. Copies are described through the same redaction as the rest of the dashboard; it shows what it found, it does not choose."
+      "detail": "Preserves damaged primary data, lists recovery copies it can read, and restores a chosen valid copy after native confirmation and closing account windows. An unreadable primary is kept byte for byte; a copy that changed after preview is refused. Copies are described through the same redaction as the rest of the dashboard."
     },
     {
       "id": "authentication-verification",

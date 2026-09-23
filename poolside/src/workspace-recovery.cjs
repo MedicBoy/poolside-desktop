@@ -10,6 +10,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const model = require('./model.cjs');
 const { stagedFiles } = require('./workspace-file.cjs');
 const { redactWorkspaceProxyCredentials } = require('./proxy-public.cjs');
@@ -43,12 +44,16 @@ function createWorkspaceRecovery({ file }) {
       if (!stat.isFile()) continue;
       /** @type {any} */
       let document = null;
+      /** @type {string|null} */
+      let revision = null;
       try {
-        document = model.decode(JSON.parse(fs.readFileSync(entry.file, 'utf8')));
+        const bytes = fs.readFileSync(entry.file);
+        revision = createHash('sha256').update(bytes).digest('hex');
+        document = model.decode(JSON.parse(bytes.toString('utf8')));
       } catch {
         document = null;
       }
-      found.push({ ...entry, stat, document });
+      found.push({ ...entry, stat, document, revision });
     }
     return found.sort((left, right) => right.stat.mtimeMs - left.stat.mtimeMs);
   }
@@ -62,6 +67,7 @@ function createWorkspaceRecovery({ file }) {
       label: entry.label,
       writtenAt: new Date(entry.stat.mtimeMs).toISOString(),
       bytes: entry.stat.size,
+      revision: entry.revision,
       usable: document !== null,
       problem: document === null ? 'This copy could not be read as a workspace document.' : null,
       accounts: document
@@ -80,14 +86,16 @@ function createWorkspaceRecovery({ file }) {
   }
 
   /**
-   * The document one named candidate holds, ready to be handed to the application's own `save` so that a
-   * restore goes through the same validation and atomic write as every other change.
+   * The document one named candidate holds, ready for the application's explicit restore path.
    * @param {string} name
+   * @param {string} [expectedRevision]
    */
-  function read(name) {
+  function read(name, expectedRevision) {
     const wanted = String(name || '');
     const entry = scan().find(candidate => path.basename(candidate.file) === wanted);
     if (!entry) throw new Error('That recovery copy is no longer there.');
+    if (expectedRevision && entry.revision !== expectedRevision)
+      throw new Error('That recovery copy changed after the preview. Review it again before restoring.');
     if (!entry.document) throw new Error('That recovery copy could not be read as a workspace document.');
     return entry.document;
   }
