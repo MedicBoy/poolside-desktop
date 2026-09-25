@@ -1,10 +1,12 @@
 // Reading a game screen: two OCR passes, the contrast band, the local table matcher, and the verdict they support.
 const { createWorker, PSM } = require('tesseract.js');
+const { createHash } = require('node:crypto');
 const language = require('@tesseract.js-data/eng');
 const sharp = require('sharp');
 const { handles } = require('./vision-pipeline.cjs');
 const { parseVisibleReadings } = require('./visible-readings.cjs');
 const { readingsFromCells, cellsFromBlocks } = require('./reading-regions.cjs');
+const { controlCandidates } = require('./control-candidates.cjs');
 const { TABLES } = require('./table-list.cjs');
 
 // Ordered rules. Order encodes precedence, not score: the first state that satisfies its gate
@@ -39,6 +41,7 @@ const RULES = [
   { state: 'connecting', all: ['connecting'], any: [], hints: [] },
   { state: 'loading', all: ['loading'], any: [], hints: [] }
 ];
+const RULE_VERSION = `ocr-rules/${createHash('sha256').update(JSON.stringify(RULES)).digest('hex').slice(0, 12)}`;
 
 function normalise(text) {
   if (Array.isArray(text)) text = text.filter(Boolean).join('\n');
@@ -240,17 +243,22 @@ async function createScreenReader({ tableMatcher, workerFactory = createWorker }
       const size = await sharp(image).metadata();
       const bounds = { width: size.width, height: size.height };
       const labelled = parseVisibleReadings(recognizedText, observedAt, Number(data.confidence) / 100);
-      const readings = { ...labelled, ...readingsFromCells(cellsFromBlocks(data.blocks), bounds, observedAt) };
+      const cells = cellsFromBlocks(data.blocks);
+      const readings = { ...labelled, ...readingsFromCells(cells, bounds, observedAt) };
+      const controls = controlCandidates(cells, bounds, result.state);
       stages.readingsMs = performance.now() - readingStarted;
       return {
         state: result.state,
         score: result.score,
+        alternatives: result.alternatives,
         evidence: result.evidence.slice(0, 4),
         visibleTables: result.visibleTables,
         tableMatch: result.state === 'table-selection' && visualTable ? { table: visualTable, method: 'local-evidence' } : null,
         source,
+        ruleVersion: RULE_VERSION,
         observedAt,
         readings,
+        controls,
         // Fixed numeric timings only. Raw OCR text and image data never leave this reader.
         stages: { ...stages, totalMs: performance.now() - started }
       };
@@ -261,4 +269,4 @@ async function createScreenReader({ tableMatcher, workerFactory = createWorker }
   };
 }
 
-module.exports = { classify, classifyText, contrastImage, createScreenReader, visibleTables, RULES };
+module.exports = { classify, classifyText, contrastImage, createScreenReader, visibleTables, RULES, RULE_VERSION };

@@ -12,6 +12,7 @@
 const FORMAT = 'poolside-backup/v1';
 const IDENTIFIER = /^[a-f0-9-]{36}$/i;
 const MAX_ACCOUNTS = 100;
+const HASH = /^[a-f0-9]{64}$/i;
 const pathModule = require('node:path');
 
 /** @param {unknown} value */
@@ -20,10 +21,8 @@ function text(value) {
 }
 
 /**
- * The manifest written next to a backup's contents. Only the two small files are hashed: a Chromium
- * profile is thousands of files that change while the app runs, so its size is recorded instead of a
- * checksum that would be slow to take and would not prove anything useful.
- * @param {{appVersion: string, exportedAt: string, accounts: any[], files: {path: string, bytes: number, sha256: string}[], profiles: {path: string, files: number, bytes: number}[]}} input
+ * The manifest written next to a backup's contents. Profile hashes cover every copied file.
+ * @param {{appVersion: string, exportedAt: string, accounts: any[], files: {path: string, bytes: number, sha256: string}[], profiles: {path: string, files: number, bytes: number, sha256?: string}[]}} input
  */
 function build(input) {
   return {
@@ -69,17 +68,38 @@ function parse(value) {
     if (clean.some(candidate => candidate.id === id)) throw new Error('This backup lists the same account twice.');
     clean.push({ id, name, role, archived: entry.archived === true, createdAt: text(entry.createdAt) });
   }
-  const files = (Array.isArray(source.files) ? source.files : []).flatMap(entry => {
-    const path = text(entry && entry.path);
-    // A path that climbs out of the backup folder is the one way a manifest could reach somewhere it
-    // should not, so anything absolute or containing a parent segment is dropped rather than followed.
-    if (!path || pathModule.win32.isAbsolute(path) || pathModule.posix.isAbsolute(path) || path.split(/[\\/]/).includes('..')) return [];
-    return [{ path, bytes: Number(entry.bytes) || 0, sha256: text(entry.sha256) }];
+  const accountIds = new Set(clean.map(account => account.id.toLowerCase()));
+  const seen = new Set();
+  /** @param {unknown} value */
+  const safePath = value => {
+    const name = text(value);
+    if (!name || pathModule.win32.isAbsolute(name) || pathModule.posix.isAbsolute(name) || name.split(/[\\/]/).includes('..'))
+      throw new Error('This backup lists a path outside its own folder.');
+    if (seen.has(name)) throw new Error('This backup lists the same path twice.');
+    seen.add(name);
+    return name;
+  };
+  const files = (Array.isArray(source.files) ? source.files : []).map(entry => {
+    const path = safePath(entry && entry.path);
+    const session = /^sessions\/([a-f0-9-]{36})\.plist$/i.exec(path);
+    if (path !== 'workspace.json' && (!session || !accountIds.has(session[1].toLowerCase())))
+      throw new Error('This backup lists a file outside its own account data.');
+    const bytes = entry.bytes;
+    const sha256 = text(entry.sha256);
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || !HASH.test(sha256))
+      throw new Error('This backup has an invalid file size or checksum.');
+    return { path, bytes, sha256 };
   });
-  const profiles = (Array.isArray(source.profiles) ? source.profiles : []).flatMap(entry => {
-    const path = text(entry && entry.path);
-    if (!path || pathModule.win32.isAbsolute(path) || pathModule.posix.isAbsolute(path) || path.split(/[\\/]/).includes('..')) return [];
-    return [{ path, files: Number(entry.files) || 0, bytes: Number(entry.bytes) || 0 }];
+  const profiles = (Array.isArray(source.profiles) ? source.profiles : []).map(entry => {
+    const path = safePath(entry && entry.path);
+    const profile = /^profiles\/poolside-([a-f0-9-]{36})$/i.exec(path);
+    if (!profile || !accountIds.has(profile[1].toLowerCase())) throw new Error('This backup lists a profile outside its own account data.');
+    const files = entry.files;
+    const bytes = entry.bytes;
+    const sha256 = text(entry.sha256);
+    if (!Number.isSafeInteger(files) || files < 0 || !Number.isSafeInteger(bytes) || bytes < 0 || (sha256 && !HASH.test(sha256)))
+      throw new Error('This backup has an invalid profile size or checksum.');
+    return { path, files, bytes, ...(sha256 ? { sha256 } : {}) };
   });
   return { format: FORMAT, appVersion: text(source.appVersion), exportedAt: text(source.exportedAt), accounts: clean, files, profiles };
 }

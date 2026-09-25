@@ -22,7 +22,7 @@ function tempRoot() {
 /** A data directory with one signed-in account: a workspace file, a carry-over file, and a profile. */
 function sourceRoot() {
   const root = tempRoot();
-  fs.writeFileSync(path.join(root, 'workspace.json'), JSON.stringify({ version: 1, accounts: [{ id: ID, name: 'Master' }] }));
+  fs.writeFileSync(path.join(root, 'workspace.json'), JSON.stringify({ version: 1, accounts, settings: { table: 'London', limit: 1 } }));
   fs.mkdirSync(path.join(root, ACCOUNTS_DIR), { recursive: true });
   fs.writeFileSync(path.join(root, ACCOUNTS_DIR, `${ID}.plist`), '<plist>encrypted</plist>');
   const profile = path.join(root, PARTITIONS_DIR, partitionName(ID), 'Cookies');
@@ -44,6 +44,7 @@ test('a backup carries the workspace file, the encrypted session, and the browse
   assert.equal(path.basename(result.folder), 'Poolside-backup-2026-09-20-120000');
   const doc = manifest.parse(JSON.parse(fs.readFileSync(path.join(result.folder, 'manifest.json'), 'utf8')));
   assert.deepEqual(doc.files.map(entry => entry.path).sort(), ['sessions/11111111-1111-4111-8111-111111111111.plist', 'workspace.json']);
+  assert.match(doc.profiles[0].sha256, /^[a-f0-9]{64}$/);
   assert.ok(fs.existsSync(path.join(result.folder, backup.PROFILES_DIR, partitionName(ID), 'Cookies', 'data')));
 });
 
@@ -53,8 +54,8 @@ test('a backup keeps proxy targets but never exports their credentials', () => {
     path.join(root, 'workspace.json'),
     JSON.stringify({
       version: 1,
-      accounts: [{ id: ID, name: 'Master', proxy: { spec: 'http://nicho:hunter2@proxy.example:3128' } }],
-      settings: { proxy: { spec: 'global:secret@127.0.0.1:8080' } },
+      accounts: [{ ...accounts[0], proxy: { spec: 'http://nicho:hunter2@proxy.example:3128' } }],
+      settings: { table: 'London', limit: 1, proxy: { spec: 'global:secret@127.0.0.1:8080' } },
       routePresets: [{ spec: 'preset:secret@10.0.0.1:9000' }]
     })
   );
@@ -65,6 +66,15 @@ test('a backup keeps proxy targets but never exports their credentials', () => {
   assert.equal(exported.includes('secret'), false);
   assert.match(exported, /http:\/\/proxy\.example:3128/);
   assert.match(exported, /127\.0\.0\.1:8080/);
+});
+
+test('an unreadable workspace is refused instead of exported as a usable backup', () => {
+  const root = sourceRoot();
+  fs.writeFileSync(path.join(root, 'workspace.json'), JSON.stringify({ version: 1, accounts, settings: { table: 'Unknown', limit: 1 } }));
+  assert.throws(
+    () => backup.create({ root, destination: tempRoot(), accounts, appVersion: '0.2.0', at: Date.now() }),
+    /workspace file could not be safely included/
+  );
 });
 
 test('a restore into an empty data directory brings the account and its profile back', () => {
@@ -102,13 +112,89 @@ test('a restore never overwrites browser storage this PC already holds', () => {
   assert.equal(fs.readFileSync(path.join(live, 'data'), 'utf8'), 'this PC’s own state');
 });
 
+test('a conflict in a later account leaves earlier accounts untouched', () => {
+  const root = sourceRoot();
+  const otherProfile = path.join(root, PARTITIONS_DIR, partitionName(OTHER), 'Cookies');
+  fs.mkdirSync(otherProfile, { recursive: true });
+  fs.writeFileSync(path.join(otherProfile, 'data'), 'other state');
+  const destination = tempRoot();
+  const second = { id: OTHER, name: 'Second', role: 'sender', archived: false, createdAt: '2026-09-01T00:00:00.000Z' };
+  const bundle = backup.create({ root, destination, accounts: [...accounts, second], appVersion: '0.2.0', at: Date.now() }).folder;
+  const target = tempRoot();
+  const conflict = path.join(target, PARTITIONS_DIR, partitionName(OTHER));
+  fs.mkdirSync(conflict, { recursive: true });
+  assert.throws(() => backup.restore({ root: target, source: bundle, existing: [] }), /already has saved browser storage/);
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+  assert.equal(fs.existsSync(path.join(target, ACCOUNTS_DIR, `${ID}.plist`)), false);
+});
+
+test('a failed workspace commit rolls back only the newly restored profile and session', () => {
+  const destination = tempRoot();
+  const bundle = backup.create({ root: sourceRoot(), destination, accounts, appVersion: '0.2.0', at: Date.now() }).folder;
+  const target = tempRoot();
+  assert.throws(
+    () =>
+      backup.restore({
+        root: target,
+        source: bundle,
+        existing: [],
+        commit: () => {
+          throw new Error('workspace save failed');
+        }
+      }),
+    /workspace save failed/
+  );
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+  assert.equal(fs.existsSync(path.join(target, ACCOUNTS_DIR, `${ID}.plist`)), false);
+});
+
 test('a damaged backup is refused before anything is written', () => {
   const source = tempRoot();
   const result = backup.create({ root: sourceRoot(), destination: source, accounts, appVersion: '0.2.0', at: Date.now() });
   const session = path.join(result.folder, backup.SESSIONS_DIR, `${ID}.plist`);
-  fs.writeFileSync(session, '<plist>tampered</plist>');
+  fs.writeFileSync(session, '<plist>corrupted</plist>');
   const target = tempRoot();
   assert.throws(() => backup.restore({ root: target, source: result.folder, existing: [] }), /does not match its recorded checksum/);
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+});
+
+test('a backup workspace with a valid checksum but invalid schema is refused before restore', () => {
+  const destination = tempRoot();
+  const bundle = backup.create({ root: sourceRoot(), destination, accounts, appVersion: '0.2.0', at: Date.now() }).folder;
+  const workspaceFile = path.join(bundle, 'workspace.json');
+  const data = JSON.parse(fs.readFileSync(workspaceFile, 'utf8'));
+  data.settings.table = 'Unknown';
+  fs.writeFileSync(workspaceFile, JSON.stringify(data));
+  const record = JSON.parse(fs.readFileSync(path.join(bundle, 'manifest.json'), 'utf8'));
+  const { createHash } = require('node:crypto');
+  const entry = record.files.find(file => file.path === 'workspace.json');
+  entry.bytes = fs.statSync(workspaceFile).size;
+  entry.sha256 = createHash('sha256').update(fs.readFileSync(workspaceFile)).digest('hex');
+  fs.writeFileSync(path.join(bundle, 'manifest.json'), JSON.stringify(record));
+  const target = tempRoot();
+  assert.throws(() => backup.restore({ root: target, source: bundle, existing: [] }), /unreadable workspace file/);
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+});
+
+test('changing a browser profile without changing its size is detected', () => {
+  const destination = tempRoot();
+  const bundle = backup.create({ root: sourceRoot(), destination, accounts, appVersion: '0.2.0', at: Date.now() }).folder;
+  const profile = path.join(bundle, backup.PROFILES_DIR, partitionName(ID), 'Cookies', 'data');
+  fs.writeFileSync(profile, 'tampered state');
+  const target = tempRoot();
+  assert.throws(() => backup.restore({ root: target, source: bundle, existing: [] }), /recorded checksum/);
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+});
+
+test('an existing session file is a conflict, even when its profile is absent', () => {
+  const destination = tempRoot();
+  const bundle = backup.create({ root: sourceRoot(), destination, accounts, appVersion: '0.2.0', at: Date.now() }).folder;
+  const target = tempRoot();
+  const session = path.join(target, ACCOUNTS_DIR, `${ID}.plist`);
+  fs.mkdirSync(path.dirname(session), { recursive: true });
+  fs.writeFileSync(session, 'existing');
+  assert.throws(() => backup.restore({ root: target, source: bundle, existing: [] }), /already has a saved session/);
+  assert.equal(fs.readFileSync(session, 'utf8'), 'existing');
   assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
 });
 

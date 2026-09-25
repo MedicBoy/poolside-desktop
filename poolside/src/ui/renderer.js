@@ -754,7 +754,7 @@ function routePresetAccounts(preset) {
 // --- Recovering earlier data ------------------------------------------------------------------
 // The copies the application keeps beside the workspace file, described rather than assumed: what each one
 // holds, when it was written, and whether it can be read at all. Restoring one is confirmed natively and the
-// copy in place is kept first, so a restore is itself undoable.
+// a damaged primary is preserved before a selected copy replaces it.
 function recoveryRow(candidate) {
   const written = candidate.writtenAt ? new Date(candidate.writtenAt).toLocaleString() : 'an unknown time';
   const accounts = candidate.accounts.length
@@ -779,7 +779,7 @@ async function loadRecovery() {
   panel.hidden = candidates.length === 0;
   $('#recovery-list').innerHTML = candidates.map(recoveryRow).join('');
   $('#recovery-status').textContent = candidates.length
-    ? 'Restoring goes through the same validation and the same write as any other change.'
+    ? 'Close all account windows before restoring. A damaged workspace file is preserved before replacement.'
     : '';
 }
 // --- Files Poolside has written -----------------------------------------------------------------
@@ -1325,10 +1325,12 @@ document.addEventListener('click', async event => {
     return;
   }
   if (button.dataset.recoveryName) {
-    // A restore replaces the account list, so the confirmation is native and the copy in place is kept first.
+    // A restore replaces the account list, so the confirmation is native.
     const result = await call(() => poolside.recoveryRestore({ name: button.dataset.recoveryName }));
     if (!result.ok) return;
-    toast(`Workspace restored from ${result.value.name}. The copy that was in place is kept as the previous copy.`);
+    toast(
+      `Workspace restored from ${result.value.name}.${result.value.preservedName ? ` The prior file was kept as ${result.value.preservedName}.` : ''}`
+    );
     await loadRecovery();
     return;
   }

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { account } = require('../src/model.cjs');
-const { writeWorkspace, recoveryAvailable, stagedFiles } = require('../src/workspace-file.cjs');
+const { writeWorkspace, restoreUnreadableWorkspace, recoveryAvailable, stagedFiles } = require('../src/workspace-file.cjs');
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'poolside-workspace-file-'));
@@ -70,4 +70,33 @@ test('removing an account or cleared proxy secret purges the old recovery copy',
   writeWorkspace(file, first);
   assert.equal(fs.existsSync(`${file}.previous`), false);
   assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /secret/);
+});
+
+test('explicit restore preserves an unreadable primary byte for byte', t => {
+  const { file, first } = fixture(t);
+  const damaged = Buffer.from('{broken workspace');
+  fs.writeFileSync(file, damaged);
+  const result = restoreUnreadableWorkspace(file, first);
+  assert.deepEqual(result.document, first);
+  assert.ok(result.preservedName);
+  assert.match(result.preservedName, /^workspace\.json\.unreadable-/);
+  assert.deepEqual(fs.readFileSync(path.join(path.dirname(file), result.preservedName)), damaged);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), first);
+  assert.deepEqual(stagedFiles(file), []);
+});
+
+test('explicit restore works when the primary is missing and leaves an existing copy alone', t => {
+  const { file, first, second } = fixture(t);
+  fs.writeFileSync(`${file}.previous`, JSON.stringify(first));
+  const result = restoreUnreadableWorkspace(file, second);
+  assert.equal(result.preservedName, null);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), second);
+  assert.deepEqual(JSON.parse(fs.readFileSync(`${file}.previous`, 'utf8')), first);
+});
+
+test('explicit restore refuses a primary made valid since the app loaded it', t => {
+  const { file, first, second } = fixture(t);
+  fs.writeFileSync(file, JSON.stringify(first));
+  assert.throws(() => restoreUnreadableWorkspace(file, second), /changed since startup/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), first);
 });

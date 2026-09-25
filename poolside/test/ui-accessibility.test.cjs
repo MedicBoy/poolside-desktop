@@ -334,12 +334,12 @@ test('a paused run still offers Resume and Stop, because paused is not finished'
   assert.match(renderer, /class="match-card run-card \$\{escapeHtml\(run\.state\)\}"/);
 });
 
-test('settings offers the recovery copies, and says a restore can itself be undone', () => {
+test('settings offers recovery copies and explains preservation of the damaged file', () => {
   const html = ui('index.html');
   const renderer = ui('renderer.js');
   assert.match(html, /id="recovery-panel" hidden/);
   assert.match(html, /id="recovery-list"/);
-  assert.match(html, /the copy in place now is kept first/);
+  assert.match(html, /A damaged file is preserved separately/);
   assert.match(renderer, /function loadRecovery\(\)/);
   assert.match(renderer, /function recoveryRow\(candidate\)/);
   assert.match(renderer, /poolside\.recoveryPreview\(\)/);

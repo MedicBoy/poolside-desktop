@@ -13,8 +13,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const manifest = require('./backup-manifest.cjs');
+const model = require('./model.cjs');
+const { restore } = require('./backup-restore.cjs');
 const { ACCOUNTS_DIR, PARTITIONS_DIR, isInside, partitionName } = require('./profile-paths.cjs');
 const { redactWorkspaceProxyCredentials } = require('./proxy-public.cjs');
+const { scanProfile } = require('./backup-profile-integrity.cjs');
 
 const WORKSPACE_FILE = 'workspace.json';
 const MANIFEST_FILE = 'manifest.json';
@@ -63,7 +66,7 @@ function create(input) {
   fs.mkdirSync(folder, { recursive: true });
   /** @type {{path: string, bytes: number, sha256: string}[]} */
   const files = [];
-  /** @type {{path: string, files: number, bytes: number}[]} */
+  /** @type {{path: string, files: number, bytes: number, sha256: string}[]} */
   const profiles = [];
   const copyFile = (from, relative) => {
     const to = path.join(folder, relative);
@@ -77,7 +80,7 @@ function create(input) {
     const to = path.join(folder, WORKSPACE_FILE);
     let document;
     try {
-      document = redactWorkspaceProxyCredentials(JSON.parse(fs.readFileSync(workspaceFile, 'utf8')));
+      document = model.decode(redactWorkspaceProxyCredentials(JSON.parse(fs.readFileSync(workspaceFile, 'utf8'))));
     } catch {
       throw new Error('The workspace file could not be safely included in the backup.');
     }
@@ -102,7 +105,7 @@ function create(input) {
       const to = path.join(folder, PROFILES_DIR, name);
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.cpSync(profile, to, { recursive: true });
-      profiles.push({ path: `${PROFILES_DIR}/${name}`, ...measureDirectory(to) });
+      profiles.push({ path: `${PROFILES_DIR}/${name}`, ...scanProfile(to) });
     }
   }
 
@@ -199,52 +202,6 @@ function preflight({ root, destination, accounts = [], openAccounts = [] }, deps
     accountCount: accounts.length,
     openAccounts: open,
     folder: usable ? uniqueFolder(destination, stamp(Date.now())) : null
-  };
-}
-
-/**
- * Read a backup folder and copy in whatever it carries that this workspace does not already have.
- * @param {{root: string, source: string, existing: any[]}} input
- */
-function restore(input) {
-  const { root, source, existing } = input;
-  const manifestFile = path.join(source, MANIFEST_FILE);
-  if (!fs.existsSync(manifestFile)) throw new Error('This folder is not a Poolside backup.');
-  const document = manifest.parse(JSON.parse(fs.readFileSync(manifestFile, 'utf8')));
-  // Verify before writing anything: a truncated or edited backup is refused while the workspace is still
-  // untouched, rather than half-restored.
-  for (const entry of document.files) {
-    const file = path.join(source, entry.path);
-    if (!isInside(source, file)) throw new Error('This backup lists a file outside its own folder.');
-    if (!fs.existsSync(file)) throw new Error(`This backup is incomplete: ${entry.path} is missing.`);
-    if (entry.sha256 && sha256(file) !== entry.sha256)
-      throw new Error(`This backup is damaged: ${entry.path} does not match its recorded checksum.`);
-  }
-  const decision = manifest.plan(document, existing);
-  /** @type {any[]} */
-  const restored = [];
-  for (const account of decision.importable) {
-    const name = partitionName(account.id);
-    const targetProfile = path.join(root, PARTITIONS_DIR, name);
-    if (!isInside(root, targetProfile)) throw new Error('Refusing to write outside the Poolside data directory.');
-    if (fs.existsSync(targetProfile))
-      throw new Error(`This PC already has saved browser storage for ${account.name}. Restore was stopped.`);
-    const sourceProfile = path.join(source, PROFILES_DIR, name);
-    if (fs.existsSync(sourceProfile)) fs.cpSync(sourceProfile, targetProfile, { recursive: true });
-    const sourceSession = path.join(source, SESSIONS_DIR, `${account.id}.plist`);
-    if (fs.existsSync(sourceSession)) {
-      const targetSession = path.join(root, ACCOUNTS_DIR, `${account.id}.plist`);
-      fs.mkdirSync(path.dirname(targetSession), { recursive: true });
-      fs.copyFileSync(sourceSession, targetSession);
-    }
-    restored.push(account);
-  }
-  return {
-    restored,
-    present: decision.present,
-    conflicts: decision.conflicts,
-    exportedAt: document.exportedAt,
-    appVersion: document.appVersion
   };
 }
 

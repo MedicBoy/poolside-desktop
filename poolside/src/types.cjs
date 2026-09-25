@@ -20,6 +20,21 @@
 /** @typedef {{label: string, value: number, confidence: number, observedAt: string, source: string, status?: 'current'|'uncertain'|'stale', statusLabel?: string}} VisibleReading */
 
 /**
+ * @typedef {object} TypedObservation
+ * @property {{state: string, confidence: number}} screen
+ * @property {string[]} visibleTables
+ * @property {{name: string, source: string, confidence: null}|null} tableTarget
+ * @property {object[]} controls
+ * @property {Record<string, VisibleReading>} readings
+ * @property {string[]} contradictions
+ * @property {{sha256: string, generation: number|null, width: number|null, height: number|null}} capture
+ * @property {Record<string, number>} timings
+ * @property {string} ruleVersion
+ * @property {string} observedAt
+ * @property {false} inputReady
+ */
+
+/**
  * One account's open browser session and everything observed about it.
  * @typedef {object} SessionGroup
  * @property {import('electron').BrowserWindow} window
@@ -31,7 +46,7 @@
  * @property {Footprint} footprint
  * @property {{used: boolean, reset: () => void, observe: (url: string, shop: boolean, now: number) => boolean}} [shopGate]
  * @property {number} [observationGeneration]
- * @property {{state: string, score?: number, evidence?: string[], visibleTables?: string[], tableMatch?: {table: string, method: string}|null, observedAt?: string, readings?: Record<string, VisibleReading>}|null} [gameScreen]
+ * @property {{state: string, score?: number, evidence?: string[], visibleTables?: string[], tableMatch?: {table: string, method: string}|null, observedAt?: string, readings?: Record<string, VisibleReading>, observation?: TypedObservation}|null} [gameScreen]
  * @property {Record<string, VisibleReading>} [visibleReadings]
  * @property {{status: 'checking'|'checked'|'error', ip?: string, checkedAt?: string}} [network]
  * @property {boolean} [inspecting]

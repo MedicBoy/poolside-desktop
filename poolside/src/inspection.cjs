@@ -9,6 +9,7 @@ const { officialPage } = require('./shop-recovery.cjs');
 const { sessions } = require('./state.cjs');
 const { append } = require('./screen-history.cjs');
 const { observe: observeAttention } = require('./screen-attention.cjs');
+const { buildObservation } = require('./observation-contract.cjs');
 
 const INSPECTION_TIMEOUT_MS = 30000;
 const CAPTURE_WIDTH = 1200;
@@ -137,7 +138,8 @@ function createInspector(deps) {
           if (expired) throw new Error('Screen inspection timed out.');
           if (!stillCurrent()) throw new Error('The game window changed during inspection.');
           const timing = { surfaceMs, recognitionMs: now() - recognitionStartedAt, totalMs: now() - startedAt };
-          if (!capture) return { ...result, sampleId: recordNewState(captureLab, { png, result, frame, timing }) };
+          const observation = buildObservation(result, { png, generation, frame, timing });
+          if (!capture) return { ...result, observation, sampleId: recordNewState(captureLab, { png, result, frame, timing }) };
           if (!captureLab) throw new Error('The local capture lab is unavailable.');
           const sample = captureLab.record({
             png,
@@ -148,7 +150,7 @@ function createInspector(deps) {
             cohort: capture.cohort,
             timing
           });
-          return { ...result, sampleId: sample.id };
+          return { ...result, observation, sampleId: sample.id };
         } finally {
           screenReaders.release(entry);
         }

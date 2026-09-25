@@ -30,12 +30,21 @@ self-test pass locally; hosted CI and clean-VM distribution checks remain O1/O7 
 | 7   | Reproduce and characterize GPU/compositor failures on target hardware                          | Failure mode, driver/GPU details, and recovery result are recorded                                            |
 | 8   | Expand the current 108 held-out labelled frames to the 300-sample coverage gate and rerun it   | Capture Lab and `npm run validate:corpus` both pass                                                           |
 | 9   | Measure cold start, capture, classification, IPC throughput, and memory on a reference machine | Evidence replay now reports local OCR-stage timing; reference-machine results are added to the release record |
-| 10  | Add an in-app, explicitly confirmed recovery choice for a missing or corrupt workspace primary | A validated `.previous` or staged copy can be previewed and restored without auto-discarding accounts         |
+| 10  | Prove missing/corrupt workspace recovery in packaged Windows and clean-VM tests                | Local restore tests pass; packaged restore preserves the original and reopens with the chosen accounts         |
 
 ## Unfinished product capabilities
 
 The following capabilities are not implemented in this repository. They require design, development,
 tests, and live-site validation before they can be treated as product features.
+
+### Backup portability and crash recovery
+
+Backup manifests now checksum copied browser profiles in addition to workspace and session files. Restore
+checks all destination conflicts before copying and stages files for rollback if the workspace save fails.
+Portable encryption, account-list consistency checks, and recovery across a crash during
+the multi-file restore are still required for B4 and B5. The workspace document is schema-validated on
+both export and restore. Existing DPAPI session files remain bound to
+the Windows account that created them.
 
 ### Game input integration
 
@@ -43,6 +52,10 @@ No production module sends pointer or keyboard input to the game surface. A per-
 machine, timeout/cancel/retry policy, bounded transition journal, and deliberately no-click dry-run adapter now
 define the integration boundary. Completing live input still requires coordinate translation, focus and lifecycle
 handling, capture-backed target evidence, and fixture-backed input tests before live validation.
+
+Successful inspections now include a typed observation bound to a frame hash and the current session generation.
+It reports screen candidates and numeric readings while leaving controls empty and input unavailable. Live
+control detection, confidence calibration, and the full input gate remain open G/H work.
 
 ### Multi-account matchmaking coordination
 

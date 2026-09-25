@@ -94,8 +94,12 @@ function createTableNavigationService(deps) {
   async function observe(id) {
     const { account, group } = active(id);
     if (!group.tableNavigation) throw new Error('Start a table-navigation dry run first.');
+    const inspectedPlan = group.tableNavigation;
     const screen = await inspector.inspectGame(id);
-    return commit(id, account, group, navigation.observe(group.tableNavigation, screen, now()));
+    if (sessions.get(id) !== group || group.window?.isDestroyed?.())
+      throw new Error('The account window closed while its screen was being checked.');
+    if (group.tableNavigation !== inspectedPlan) return group.tableNavigation;
+    return commit(id, account, group, navigation.observe(inspectedPlan, screen, now()));
   }
 
   function advance(id) {

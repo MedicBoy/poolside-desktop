@@ -34,11 +34,13 @@ function registerBackupIpc({ handle, backup, dataRoot, chooseDirectory, workspac
   handle('backup:import', async () => {
     const source = await chooseDirectory('Choose the Poolside backup folder to restore', false);
     if (!source) throw new Error('The restore was cancelled.');
-    const result = backup.restore({ root: dataRoot, source, existing: workspace.data.accounts });
-    if (result.restored.length) {
-      save({ ...workspace.data, accounts: [...workspace.data.accounts, ...result.restored] });
-      log(`Backup restored: ${result.restored.length} account slot(s) added to this workspace.`);
-    }
+    const result = backup.restore({
+      root: dataRoot,
+      source,
+      existing: workspace.data.accounts,
+      commit: restored => save({ ...workspace.data, accounts: [...workspace.data.accounts, ...restored] })
+    });
+    if (result.restored.length) log(`Backup restored: ${result.restored.length} account slot(s) added to this workspace.`);
     return result;
   });
 }
