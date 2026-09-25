@@ -33,14 +33,16 @@ function buildObservation(result, { png, generation, frame, timing }) {
       result?.tableMatch?.method === 'local-evidence' && visibleTables.includes(result.tableMatch.table)
         ? { name: result.tableMatch.table, source: 'local-evidence', confidence: null }
         : null,
-    controls: [],
+    controls: Array.isArray(result?.controls) ? result.controls.filter(control => control && typeof control.name === 'string') : [],
     readings,
     contradictions,
     capture: {
       sha256: createHash('sha256').update(png).digest('hex'),
       generation: typeof generation === 'number' && Number.isSafeInteger(generation) && generation >= 0 ? generation : null,
       width: Number.isFinite(frame?.width) ? frame.width : null,
-      height: Number.isFinite(frame?.height) ? frame.height : null
+      height: Number.isFinite(frame?.height) ? frame.height : null,
+      pageRect: frame?.pageRect ? { ...frame.pageRect } : null,
+      matched: frame?.matched === true
     },
     timings,
     ruleVersion: typeof result?.ruleVersion === 'string' ? result.ruleVersion : 'unknown',

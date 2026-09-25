@@ -6,6 +6,7 @@ const sharp = require('sharp');
 const { handles } = require('./vision-pipeline.cjs');
 const { parseVisibleReadings } = require('./visible-readings.cjs');
 const { readingsFromCells, cellsFromBlocks } = require('./reading-regions.cjs');
+const { controlCandidates } = require('./control-candidates.cjs');
 const { TABLES } = require('./table-list.cjs');
 
 // Ordered rules. Order encodes precedence, not score: the first state that satisfies its gate
@@ -242,7 +243,9 @@ async function createScreenReader({ tableMatcher, workerFactory = createWorker }
       const size = await sharp(image).metadata();
       const bounds = { width: size.width, height: size.height };
       const labelled = parseVisibleReadings(recognizedText, observedAt, Number(data.confidence) / 100);
-      const readings = { ...labelled, ...readingsFromCells(cellsFromBlocks(data.blocks), bounds, observedAt) };
+      const cells = cellsFromBlocks(data.blocks);
+      const readings = { ...labelled, ...readingsFromCells(cells, bounds, observedAt) };
+      const controls = controlCandidates(cells, bounds, result.state);
       stages.readingsMs = performance.now() - readingStarted;
       return {
         state: result.state,
@@ -255,6 +258,7 @@ async function createScreenReader({ tableMatcher, workerFactory = createWorker }
         ruleVersion: RULE_VERSION,
         observedAt,
         readings,
+        controls,
         // Fixed numeric timings only. Raw OCR text and image data never leave this reader.
         stages: { ...stages, totalMs: performance.now() - started }
       };

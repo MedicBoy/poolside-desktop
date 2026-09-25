@@ -82,7 +82,7 @@ sentence is reported rather than passing quietly.
 
 <!-- modules:begin -->
 
-_Generated from the source by `scripts/architecture-modules.cjs`. 155 modules, each with the
+_Generated from the source by `scripts/architecture-modules.cjs`. 157 modules, each with the
 first line of its own header comment. `npm run docs:check` fails if a module is missing, or if it has no
 description to carry._
 
@@ -109,6 +109,8 @@ description to carry._
 | `config-schema.cjs`            | The configuration surface, declared once.                                                                            |
 | `config-validator.cjs`         | The configuration boundary: which declarations a session is made of, and what its problems mean.                     |
 | `config-walk.cjs`              | Walking a declared configuration specification, generically.                                                         |
+| `control-candidates.cjs`       | OCR anchors for visible navigation controls. An anchor is text geometry, not a verified button.                      |
+| `control-input-gate.cjs`       | Pure decision and coordinate transform for a future input adapter; never dispatches input.                           |
 | `dashboard-telemetry.cjs`      | The dashboard's metrics, collated into layers.                                                                       |
 | `diagnostics-bundle.cjs`       | Local, share-safe diagnostics export.                                                                                |
 | `diagnostics-state.cjs`        | What the machine was doing when a support bundle was written.                                                        |
