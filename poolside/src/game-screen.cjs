@@ -1,5 +1,6 @@
 // Reading a game screen: two OCR passes, the contrast band, the local table matcher, and the verdict they support.
 const { createWorker, PSM } = require('tesseract.js');
+const { createHash } = require('node:crypto');
 const language = require('@tesseract.js-data/eng');
 const sharp = require('sharp');
 const { handles } = require('./vision-pipeline.cjs');
@@ -39,6 +40,7 @@ const RULES = [
   { state: 'connecting', all: ['connecting'], any: [], hints: [] },
   { state: 'loading', all: ['loading'], any: [], hints: [] }
 ];
+const RULE_VERSION = `ocr-rules/${createHash('sha256').update(JSON.stringify(RULES)).digest('hex').slice(0, 12)}`;
 
 function normalise(text) {
   if (Array.isArray(text)) text = text.filter(Boolean).join('\n');
@@ -245,10 +247,12 @@ async function createScreenReader({ tableMatcher, workerFactory = createWorker }
       return {
         state: result.state,
         score: result.score,
+        alternatives: result.alternatives,
         evidence: result.evidence.slice(0, 4),
         visibleTables: result.visibleTables,
         tableMatch: result.state === 'table-selection' && visualTable ? { table: visualTable, method: 'local-evidence' } : null,
         source,
+        ruleVersion: RULE_VERSION,
         observedAt,
         readings,
         // Fixed numeric timings only. Raw OCR text and image data never leave this reader.
@@ -261,4 +265,4 @@ async function createScreenReader({ tableMatcher, workerFactory = createWorker }
   };
 }
 
-module.exports = { classify, classifyText, contrastImage, createScreenReader, visibleTables, RULES };
+module.exports = { classify, classifyText, contrastImage, createScreenReader, visibleTables, RULES, RULE_VERSION };

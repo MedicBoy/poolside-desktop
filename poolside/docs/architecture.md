@@ -82,7 +82,7 @@ sentence is reported rather than passing quietly.
 
 <!-- modules:begin -->
 
-_Generated from the source by `scripts/architecture-modules.cjs`. 154 modules, each with the
+_Generated from the source by `scripts/architecture-modules.cjs`. 155 modules, each with the
 first line of its own header comment. `npm run docs:check` fails if a module is missing, or if it has no
 description to carry._
 
@@ -148,6 +148,7 @@ description to carry._
 | `native-dialogs.cjs`           | Native confirmation and folder-selection dialogs kept outside the composition root.                                  |
 | `network-ipc.cjs`              | The dashboard's Check IP action: read an address through one session, and never through the machine's own route.     |
 | `network.cjs`                  | The rules of reading a session's public address, and why the transport is not part of them.                          |
+| `observation-contract.cjs`     | A single, bounded account observation. Missing control evidence stays unavailable for live input.                    |
 | `observation-services.cjs`     | Wiring for the two observation services the composition root needs: the inspector and the screen monitor.            |
 | `outcome-evidence.cjs`         | What a match did to the balances, recorded from the sessions' own readings.                                          |
 | `output-inventory.cjs`         | What Poolside itself has written, and the one erasure control that may touch it.                                     |
@@ -550,17 +551,17 @@ it saw (ADR-0009).
 
 ## 7. Security posture
 
-| Control                                                                                       | Where                |
-| --------------------------------------------------------------------------------------------- | -------------------- |
-| Game windows: sandboxed, no preload, no Node, context isolated                                | `windows.cjs`        |
-| HTTPS-only navigation; popups inherit the account session and are re-hardened recursively     | `hardening.cjs`      |
-| Downloads blocked; all permission requests and checks denied                                  | `hardening.cjs`      |
-| Dashboard: CSP `default-src 'self'`, `connect-src 'none'`, no external requests               | `src/ui/index.html`  |
-| IPC trust guard on every handler                                                              | `ipc.cjs`            |
-| Workspace validated and staged with a flushed, bounded recovery copy; read-only on corruption | `workspace-file.cjs` |
-| Session file id-validated (no traversal), `0600`, encrypted via DPAPI                         | `saved-session.cjs`  |
-| Recognition returns a label, a score and matched phrases only                                 | `game-screen.cjs`    |
-| No telemetry, no remote config, no updater                                                    | ADR-0010             |
+| Control                                                                                                                     | Where                                         |
+| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Game windows: sandboxed, no preload, no Node, context isolated                                                              | `windows.cjs`                                 |
+| HTTPS-only navigation; popups inherit the account session and are re-hardened recursively                                   | `hardening.cjs`                               |
+| Downloads blocked; all permission requests and checks denied                                                                | `hardening.cjs`                               |
+| Dashboard: CSP `default-src 'self'`, `connect-src 'none'`, no external requests                                             | `src/ui/index.html`                           |
+| IPC trust guard on every handler                                                                                            | `ipc.cjs`                                     |
+| Workspace validated and staged with a flushed, bounded recovery copy; read-only on corruption                               | `workspace-file.cjs`                          |
+| Session file id-validated (no traversal), `0600`, encrypted via DPAPI                                                       | `saved-session.cjs`                           |
+| Recognition returns bounded labels, numeric readings, rule identity and capture hash; raw OCR and images stay in the reader | `game-screen.cjs`, `observation-contract.cjs` |
+| No telemetry, no remote config, no updater                                                                                  | ADR-0010                                      |
 
 ## 8. Observability
 
@@ -710,13 +711,19 @@ Four coordinate systems meet in a single capture, and `vision-frame.cjs` owns ev
 (ADR-0015): the probe's **page CSS pixels**, the **DIPs** `capturePage` takes, the **captured image's pixels** at
 the display's scale factor, and the **resized image** the recogniser reads.
 
-| Module                | Question it answers                                                              |
-| --------------------- | -------------------------------------------------------------------------------- |
-| `vision-frame.cjs`    | coordinates: convert, clip, and report the density that actually arrived         |
-| `vision-grid.cjs`     | text: recognised lines into cells with positions, rows, confidence and telemetry |
-| `vision-pipeline.cjs` | the seam: one capture in, frame + transform handles + grid parsing out           |
-| `inspection.cjs`      | drives the capture and reports what it found                                     |
-| `game-screen.cjs`     | the rule engine and the OCR worker; takes its band geometry from the handles     |
+| Module                     | Question it answers                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `vision-frame.cjs`         | coordinates: convert, clip, and report the density that actually arrived                      |
+| `vision-grid.cjs`          | text: recognised lines into cells with positions, rows, confidence and telemetry              |
+| `vision-pipeline.cjs`      | the seam: one capture in, frame + transform handles + grid parsing out                        |
+| `inspection.cjs`           | drives the capture and reports what it found                                                  |
+| `game-screen.cjs`          | the rule engine and the OCR worker; takes its band geometry from the handles                  |
+| `observation-contract.cjs` | binds a reader result to its capture hash and session generation; controls remain unavailable |
+
+Each successful inspection also carries a typed observation with the screen confidence, visible tables,
+numeric readings, alternative screen candidates, timing, rule version, and hash of the resized capture.
+Table-target confidence remains unknown until calibrated against the held-out corpus. No control bounds
+are produced yet, so this record cannot authorize game input.
 
 The rules that matter, all arithmetic rather than claims about a window:
 

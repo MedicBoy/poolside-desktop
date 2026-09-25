@@ -53,6 +53,10 @@ machine, timeout/cancel/retry policy, bounded transition journal, and deliberate
 define the integration boundary. Completing live input still requires coordinate translation, focus and lifecycle
 handling, capture-backed target evidence, and fixture-backed input tests before live validation.
 
+Successful inspections now include a typed observation bound to a frame hash and the current session generation.
+It reports screen candidates and numeric readings while leaving controls empty and input unavailable. Live
+control detection, confidence calibration, and the full input gate remain open G/H work.
+
 ### Multi-account matchmaking coordination
 
 There is no scheduler or shared matchmaking state for coordinating several accounts into the same
