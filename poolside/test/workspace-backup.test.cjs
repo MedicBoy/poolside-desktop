@@ -22,7 +22,7 @@ function tempRoot() {
 /** A data directory with one signed-in account: a workspace file, a carry-over file, and a profile. */
 function sourceRoot() {
   const root = tempRoot();
-  fs.writeFileSync(path.join(root, 'workspace.json'), JSON.stringify({ version: 1, accounts: [{ id: ID, name: 'Master' }] }));
+  fs.writeFileSync(path.join(root, 'workspace.json'), JSON.stringify({ version: 1, accounts, settings: { table: 'London', limit: 1 } }));
   fs.mkdirSync(path.join(root, ACCOUNTS_DIR), { recursive: true });
   fs.writeFileSync(path.join(root, ACCOUNTS_DIR, `${ID}.plist`), '<plist>encrypted</plist>');
   const profile = path.join(root, PARTITIONS_DIR, partitionName(ID), 'Cookies');
@@ -54,8 +54,8 @@ test('a backup keeps proxy targets but never exports their credentials', () => {
     path.join(root, 'workspace.json'),
     JSON.stringify({
       version: 1,
-      accounts: [{ id: ID, name: 'Master', proxy: { spec: 'http://nicho:hunter2@proxy.example:3128' } }],
-      settings: { proxy: { spec: 'global:secret@127.0.0.1:8080' } },
+      accounts: [{ ...accounts[0], proxy: { spec: 'http://nicho:hunter2@proxy.example:3128' } }],
+      settings: { table: 'London', limit: 1, proxy: { spec: 'global:secret@127.0.0.1:8080' } },
       routePresets: [{ spec: 'preset:secret@10.0.0.1:9000' }]
     })
   );
@@ -66,6 +66,15 @@ test('a backup keeps proxy targets but never exports their credentials', () => {
   assert.equal(exported.includes('secret'), false);
   assert.match(exported, /http:\/\/proxy\.example:3128/);
   assert.match(exported, /127\.0\.0\.1:8080/);
+});
+
+test('an unreadable workspace is refused instead of exported as a usable backup', () => {
+  const root = sourceRoot();
+  fs.writeFileSync(path.join(root, 'workspace.json'), JSON.stringify({ version: 1, accounts, settings: { table: 'Unknown', limit: 1 } }));
+  assert.throws(
+    () => backup.create({ root, destination: tempRoot(), accounts, appVersion: '0.2.0', at: Date.now() }),
+    /workspace file could not be safely included/
+  );
 });
 
 test('a restore into an empty data directory brings the account and its profile back', () => {
@@ -146,6 +155,24 @@ test('a damaged backup is refused before anything is written', () => {
   fs.writeFileSync(session, '<plist>corrupted</plist>');
   const target = tempRoot();
   assert.throws(() => backup.restore({ root: target, source: result.folder, existing: [] }), /does not match its recorded checksum/);
+  assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
+});
+
+test('a backup workspace with a valid checksum but invalid schema is refused before restore', () => {
+  const destination = tempRoot();
+  const bundle = backup.create({ root: sourceRoot(), destination, accounts, appVersion: '0.2.0', at: Date.now() }).folder;
+  const workspaceFile = path.join(bundle, 'workspace.json');
+  const data = JSON.parse(fs.readFileSync(workspaceFile, 'utf8'));
+  data.settings.table = 'Unknown';
+  fs.writeFileSync(workspaceFile, JSON.stringify(data));
+  const record = JSON.parse(fs.readFileSync(path.join(bundle, 'manifest.json'), 'utf8'));
+  const { createHash } = require('node:crypto');
+  const entry = record.files.find(file => file.path === 'workspace.json');
+  entry.bytes = fs.statSync(workspaceFile).size;
+  entry.sha256 = createHash('sha256').update(fs.readFileSync(workspaceFile)).digest('hex');
+  fs.writeFileSync(path.join(bundle, 'manifest.json'), JSON.stringify(record));
+  const target = tempRoot();
+  assert.throws(() => backup.restore({ root: target, source: bundle, existing: [] }), /unreadable workspace file/);
   assert.equal(fs.existsSync(path.join(target, PARTITIONS_DIR, partitionName(ID))), false);
 });
 

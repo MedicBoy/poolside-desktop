@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const manifest = require('./backup-manifest.cjs');
+const model = require('./model.cjs');
 const { restore } = require('./backup-restore.cjs');
 const { ACCOUNTS_DIR, PARTITIONS_DIR, isInside, partitionName } = require('./profile-paths.cjs');
 const { redactWorkspaceProxyCredentials } = require('./proxy-public.cjs');
@@ -79,7 +80,7 @@ function create(input) {
     const to = path.join(folder, WORKSPACE_FILE);
     let document;
     try {
-      document = redactWorkspaceProxyCredentials(JSON.parse(fs.readFileSync(workspaceFile, 'utf8')));
+      document = model.decode(redactWorkspaceProxyCredentials(JSON.parse(fs.readFileSync(workspaceFile, 'utf8'))));
     } catch {
       throw new Error('The workspace file could not be safely included in the backup.');
     }

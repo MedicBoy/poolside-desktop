@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
 const manifest = require('./backup-manifest.cjs');
+const model = require('./model.cjs');
 const { ACCOUNTS_DIR, PARTITIONS_DIR, isInside, partitionName } = require('./profile-paths.cjs');
 const { scanProfile } = require('./backup-profile-integrity.cjs');
 
@@ -35,6 +36,14 @@ function restore({ root, source, existing, commit = () => {} }) {
       throw new Error(`This backup is damaged: ${entry.path} does not match its recorded size.`);
     if (entry.sha256 && actual.sha256 !== entry.sha256)
       throw new Error(`This backup is damaged: ${entry.path} does not match its recorded checksum.`);
+  }
+
+  if (document.files.some(entry => entry.path === 'workspace.json')) {
+    try {
+      model.decode(JSON.parse(fs.readFileSync(path.join(source, 'workspace.json'), 'utf8')));
+    } catch {
+      throw new Error('This backup contains an unreadable workspace file. Restore was stopped.');
+    }
   }
 
   const decision = manifest.plan(document, existing);

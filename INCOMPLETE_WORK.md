@@ -41,8 +41,9 @@ tests, and live-site validation before they can be treated as product features.
 
 Backup manifests now checksum copied browser profiles in addition to workspace and session files. Restore
 checks all destination conflicts before copying and stages files for rollback if the workspace save fails.
-Portable encryption, schema validation of the exported workspace, and recovery across a crash during
-the multi-file restore are still required for B4 and B5. Existing DPAPI session files remain bound to
+Portable encryption, account-list consistency checks, and recovery across a crash during
+the multi-file restore are still required for B4 and B5. The workspace document is schema-validated on
+both export and restore. Existing DPAPI session files remain bound to
 the Windows account that created them.
 
 ### Game input integration
